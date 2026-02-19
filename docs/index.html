@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DT Scanner Support</title>
+    <link rel="stylesheet" href="assets/styles.css">
+  </head>
+  <body>
+    <div class="wrapper">
+      <header class="hero">
+        <div class="hero-top">
+          <img class="hero-logo" src="assets/lion_icon.png" alt="DT Scanner Lion Icon">
+          <div>
+            <h1>DT Scanner Support Center</h1>
+            <p>
+              DT Scanner (Detect Treat) is currently free to use. Donations are optional
+              support only and do not unlock digital app features.
+            </p>
+          </div>
+        </div>
+        <nav class="nav">
+          <a href="index.html">Support + Donations</a>
+          <a href="privacy.html">Privacy Policy</a>
+          <a href="terms.html">Terms of Use</a>
+          <a href="patreon-startup.html">Patreon Setup Guide</a>
+        </nav>
+      </header>
+
+      <section class="section">
+        <h2>Support Contact</h2>
+        <div class="policy-banner">
+          Support email: <a href="mailto:danieldenmark71@gmail.com">danieldenmark71@gmail.com</a><br>
+          Product owner: Danicous Technologies<br>
+          Product: DT Scanner (Detect Treat)
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Donation Channels</h2>
+        <p class="small-note">
+          Each channel includes a direct link and QR code. Replace placeholder links with your real account links
+          as you activate each provider.
+        </p>
+        <div class="channel-list" id="channelList"></div>
+      </section>
+
+      <section class="section legal">
+        <h2>Monetization Policy (Current)</h2>
+        <ul>
+          <li>Version 1: App is free. Donations are optional support only.</li>
+          <li>No feature unlocks from donations in version 1.</li>
+          <li>Future paid features (version 2+) will use official in-app purchase channels.</li>
+        </ul>
+      </section>
+
+      <section class="section legal">
+        <h2>How To Activate Real Links</h2>
+        <ol>
+          <li>Replace placeholder URLs in this page data block.</li>
+          <li>Commit and push to <code>https://github.com/denmarkd1/Detect-Threat</code>.</li>
+          <li>Enable GitHub Pages in repo settings (deploy from <code>/docs</code> on main branch).</li>
+          <li>Open your published page: <code>https://denmarkd1.github.io/Detect-Threat/</code>.</li>
+        </ol>
+      </section>
+
+      <footer class="footer">
+        Solution created by Danicous Technologies. Foundation of the D_T System. Trademark pending.
+      </footer>
+    </div>
+
+    <script>
+      const channels = [
+        {
+          name: "PayPal",
+          status: "pending",
+          statusLabel: "Pending Link Replacement",
+          description: "Replace with your PayPal.Me donation URL.",
+          url: "https://www.paypal.com/paypalme/REPLACE_WITH_PAYPAL_HANDLE",
+          qrMode: "url"
+        },
+        {
+          name: "Patreon",
+          status: "pending",
+          statusLabel: "Pending Account Setup",
+          description: "Replace after your Patreon creator page is published.",
+          url: "https://www.patreon.com/REPLACE_WITH_PATREON_HANDLE",
+          qrMode: "url"
+        },
+        {
+          name: "Wise",
+          status: "active",
+          statusLabel: "Link Added",
+          description: "Wise payment link provided and active.",
+          url: "https://wise.com/pay/me/danieldenmarkd",
+          qrMode: "url"
+        },
+        {
+          name: "PromptPay (Thailand)",
+          status: "active",
+          statusLabel: "QR Added",
+          description: "PromptPay QR is now embedded from your provided TY QR asset.",
+          url: "https://example.com/replace-with-promptpay-link-or-qr-landing-page",
+          qrImage: "assets/TyQrc.jpeg"
+        },
+        {
+          name: "Philippines (BOC)",
+          status: "active",
+          statusLabel: "QR Added",
+          description: "BOC QR is now embedded from your provided Philippines QR asset.",
+          url: "https://example.com/replace-with-boc-link-or-landing-page",
+          qrImage: "assets/BOC QR.png"
+        },
+        {
+          name: "GCash",
+          status: "pending",
+          statusLabel: "Pending Link/QR",
+          description: "Add your direct GCash payment link when ready.",
+          url: "https://example.com/replace-with-gcash-link-or-qr-landing-page",
+          qrMode: "url"
+        },
+        {
+          name: "Google Pay",
+          status: "pending",
+          statusLabel: "Pending Receiver Link/QR",
+          description: "Use your personal Google Pay payment link where available in your region.",
+          url: "https://example.com/replace-with-google-pay-link-or-qr-landing-page",
+          qrMode: "url"
+        }
+      ];
+
+      function qrUrl(value) {
+        return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(value)}`;
+      }
+
+      function resolveQrImage(channel) {
+        if (channel.qrImage) {
+          return encodeURI(channel.qrImage);
+        }
+        return qrUrl(channel.url);
+      }
+
+      function qrCaption(channel) {
+        if (channel.qrImage) {
+          return "Scan payment QR";
+        }
+        return "Scan to open link";
+      }
+
+      const channelList = document.getElementById("channelList");
+
+      channels.forEach((channel) => {
+        const card = document.createElement("article");
+        card.className = "channel-card";
+
+        const statusClass = channel.status === "active" ? "status-pill status-active" : "status-pill";
+
+        card.innerHTML = `
+          <div>
+            <h3>${channel.name}</h3>
+            <p>${channel.description}</p>
+            <span class="${statusClass}">${channel.statusLabel}</span><br>
+            <a class="channel-cta" href="${channel.url}" target="_blank" rel="noopener noreferrer">Open ${channel.name} link</a>
+            <p class="small-note">URL: <code>${channel.url}</code></p>
+          </div>
+          <div class="qr-box">
+            <img src="${resolveQrImage(channel)}" alt="${channel.name} QR code">
+            <div class="qr-caption">${qrCaption(channel)}</div>
+          </div>
+        `;
+
+        channelList.appendChild(card);
+      });
+    </script>
+  </body>
+</html>
