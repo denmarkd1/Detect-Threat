@@ -43,6 +43,23 @@ data class FeatureAccessTier(
     val aiHotlineEnabled: Boolean
 )
 
+data class FamilyAgeBand(
+    val code: String,
+    val label: String,
+    val minAge: Int,
+    val maxAge: Int,
+    val allowStoredCredentialCopy: Boolean,
+    val allowOverlayAssistant: Boolean,
+    val requireGuardianApprovalForSensitiveActions: Boolean
+)
+
+data class FamilyAgeProtocolPolicy(
+    val enabled: Boolean,
+    val graduationAge: Int,
+    val parentControlsPlanOptOut: Boolean,
+    val bands: List<FamilyAgeBand>
+)
+
 data class PricingPolicyModel(
     val baseCurrencyCode: String,
     val freeTrialDays: Int,
@@ -53,12 +70,16 @@ data class PricingPolicyModel(
     val referralRequiresRecommendation: Boolean,
     val weeklyUsd: Double,
     val monthlyUsd: Double,
+    val familyMonthlyUsd: Double,
     val yearlyUsd: Double,
     val yearlyMonthsCharged: Int,
     val competitorReferences: List<CompetitorPricePoint>,
     val regionalRules: List<RegionalPricingRule>,
     val freeTierAccess: FeatureAccessTier,
-    val paidTierAccess: FeatureAccessTier
+    val paidTierAccess: FeatureAccessTier,
+    val familyParentTierAccess: FeatureAccessTier,
+    val familyChildTierAccess: FeatureAccessTier,
+    val familyAgePolicy: FamilyAgeProtocolPolicy
 )
 
 data class ResolvedRegionalPricing(
@@ -77,6 +98,12 @@ data class TrialStatus(
     val daysElapsed: Int,
     val daysRemaining: Int,
     val inTrial: Boolean
+)
+
+data class NextPaymentDueStatus(
+    val statusCode: String,
+    val planId: String,
+    val dueAtEpochMs: Long
 )
 
 data class FeedbackStatus(
@@ -99,6 +126,29 @@ data class ResolvedFeatureAccess(
     val features: FeatureAccessTier
 )
 
+data class ProfileControlPolicy(
+    val roleCode: String,
+    val ageYears: Int,
+    val ageBandCode: String,
+    val ageBandLabel: String,
+    val familyPlanUmbrella: Boolean,
+    val parentControlsPlanOptOut: Boolean,
+    val graduatedToFamilySingle: Boolean,
+    val canViewGuardianFeed: Boolean,
+    val canManagePlan: Boolean,
+    val canCopyStoredCredentials: Boolean,
+    val canUseOverlayAssistant: Boolean,
+    val requiresGuardianApprovalForSensitiveActions: Boolean
+)
+
+private data class FamilyRoleContext(
+    val roleCode: String,
+    val ageYears: Int,
+    val ageBand: FamilyAgeBand?,
+    val familyPlanUmbrella: Boolean,
+    val graduatedToFamilySingle: Boolean
+)
+
 data class DailyQuotaStatus(
     val limitPerDay: Int,
     val unlimited: Boolean,
@@ -114,6 +164,7 @@ object PricingPolicy {
     private const val SETTINGS_FILE_NAME = "workspace_settings.json"
     private const val KEY_TRIAL_STARTED_AT = "pricing_trial_started_at_epoch_ms"
     private const val KEY_SELECTED_PLAN = "pricing_selected_plan"
+    private const val KEY_SELECTED_PLAN_AT = "pricing_selected_plan_at_epoch_ms"
     private const val KEY_LIFETIME_PRO = "pricing_lifetime_pro_enabled"
     private const val KEY_LIFETIME_PRO_SOURCE = "pricing_lifetime_pro_source"
     private const val KEY_FEEDBACK_PERFORMANCE_RATING = "pricing_feedback_performance_rating"
@@ -124,6 +175,9 @@ object PricingPolicy {
     private const val LIFETIME_SOURCE_NONE = "none"
     private const val LIFETIME_SOURCE_MANUAL = "manual"
     private const val LIFETIME_SOURCE_ALLOWLIST = "device_allowlist"
+    private const val ROLE_PARENT = "parent"
+    private const val ROLE_CHILD = "child"
+    private const val ROLE_FAMILY_SINGLE = "family_single"
     private const val DAY_MS = 24L * 60L * 60L * 1000L
 
     private val defaultCompetitors = listOf(
@@ -238,6 +292,70 @@ object PricingPolicy {
         aiHotlineEnabled = true
     )
 
+    private val defaultFamilyParentTierAccess = FeatureAccessTier(
+        credentialRecordsLimit = -1,
+        queueActionsLimit = -1,
+        breachScansPerDay = -1,
+        continuousScanEnabled = true,
+        overlayAssistantEnabled = true,
+        rotationQueueEnabled = true,
+        aiHotlineEnabled = true
+    )
+
+    private val defaultFamilyChildTierAccess = FeatureAccessTier(
+        credentialRecordsLimit = 80,
+        queueActionsLimit = 8,
+        breachScansPerDay = 5,
+        continuousScanEnabled = false,
+        overlayAssistantEnabled = false,
+        rotationQueueEnabled = true,
+        aiHotlineEnabled = false
+    )
+
+    private val defaultFamilyAgePolicy = FamilyAgeProtocolPolicy(
+        enabled = true,
+        graduationAge = 18,
+        parentControlsPlanOptOut = true,
+        bands = listOf(
+            FamilyAgeBand(
+                code = "foundation_0_12",
+                label = "Foundation 0-12",
+                minAge = 0,
+                maxAge = 12,
+                allowStoredCredentialCopy = false,
+                allowOverlayAssistant = false,
+                requireGuardianApprovalForSensitiveActions = true
+            ),
+            FamilyAgeBand(
+                code = "guided_13_15",
+                label = "Guided 13-15",
+                minAge = 13,
+                maxAge = 15,
+                allowStoredCredentialCopy = false,
+                allowOverlayAssistant = false,
+                requireGuardianApprovalForSensitiveActions = true
+            ),
+            FamilyAgeBand(
+                code = "transition_16_17",
+                label = "Transition 16-17",
+                minAge = 16,
+                maxAge = 17,
+                allowStoredCredentialCopy = true,
+                allowOverlayAssistant = true,
+                requireGuardianApprovalForSensitiveActions = true
+            ),
+            FamilyAgeBand(
+                code = "family_single_18_plus",
+                label = "Family single 18+",
+                minAge = 18,
+                maxAge = 130,
+                allowStoredCredentialCopy = true,
+                allowOverlayAssistant = true,
+                requireGuardianApprovalForSensitiveActions = false
+            )
+        )
+    )
+
     private val defaultModel = PricingPolicyModel(
         baseCurrencyCode = "USD",
         freeTrialDays = 7,
@@ -248,12 +366,16 @@ object PricingPolicy {
         referralRequiresRecommendation = true,
         weeklyUsd = 0.63,
         monthlyUsd = 2.73,
+        familyMonthlyUsd = 4.39,
         yearlyUsd = 27.30,
         yearlyMonthsCharged = 10,
         competitorReferences = defaultCompetitors,
         regionalRules = defaultRegionalRules,
         freeTierAccess = defaultFreeTierAccess,
-        paidTierAccess = defaultPaidTierAccess
+        paidTierAccess = defaultPaidTierAccess,
+        familyParentTierAccess = defaultFamilyParentTierAccess,
+        familyChildTierAccess = defaultFamilyChildTierAccess,
+        familyAgePolicy = defaultFamilyAgePolicy
     )
 
     fun load(context: Context): PricingPolicyModel {
@@ -263,6 +385,7 @@ object PricingPolicy {
         val plans = pricing.optJSONObject("plans") ?: JSONObject()
         val referralOffer = pricing.optJSONObject("referral_offer") ?: JSONObject()
         val featureAccess = pricing.optJSONObject("feature_access") ?: JSONObject()
+        val familyAgeProtocols = pricing.optJSONObject("family_age_protocols")
         val competitors = parseCompetitors(pricing.optJSONArray("competitor_reference"))
         val regionalRules = parseRegionalRules(pricing.optJSONArray("regional_pricing"))
         val freeTier = parseFeatureAccessTier(
@@ -273,6 +396,15 @@ object PricingPolicy {
             featureAccess.optJSONObject("paid"),
             defaultPaidTierAccess
         )
+        val familyParentTier = parseFeatureAccessTier(
+            featureAccess.optJSONObject("family_parent"),
+            defaultFamilyParentTierAccess
+        )
+        val familyChildTier = parseFeatureAccessTier(
+            featureAccess.optJSONObject("family_child"),
+            defaultFamilyChildTierAccess
+        )
+        val familyAgePolicy = parseFamilyAgeProtocolPolicy(familyAgeProtocols)
 
         return PricingPolicyModel(
             baseCurrencyCode = pricing.optString("currency", defaultModel.baseCurrencyCode),
@@ -296,12 +428,16 @@ object PricingPolicy {
             ),
             weeklyUsd = plans.optDouble("weekly_usd", defaultModel.weeklyUsd),
             monthlyUsd = plans.optDouble("monthly_usd", defaultModel.monthlyUsd),
+            familyMonthlyUsd = plans.optDouble("family_monthly_usd", defaultModel.familyMonthlyUsd),
             yearlyUsd = plans.optDouble("yearly_usd", defaultModel.yearlyUsd),
             yearlyMonthsCharged = plans.optInt("yearly_months_charged", defaultModel.yearlyMonthsCharged),
             competitorReferences = if (competitors.isEmpty()) defaultCompetitors else competitors,
             regionalRules = if (regionalRules.isEmpty()) defaultRegionalRules else regionalRules,
             freeTierAccess = freeTier,
-            paidTierAccess = paidTier
+            paidTierAccess = paidTier,
+            familyParentTierAccess = familyParentTier,
+            familyChildTierAccess = familyChildTier,
+            familyAgePolicy = familyAgePolicy
         )
     }
 
@@ -329,6 +465,17 @@ object PricingPolicy {
             monthly = monthly,
             yearly = yearly,
             yearlyMonthsCharged = model.yearlyMonthsCharged
+        )
+    }
+
+    fun resolveFamilyMonthlyPrice(
+        context: Context,
+        model: PricingPolicyModel = load(context),
+        regional: ResolvedRegionalPricing = resolveForCurrentRegion(context, model)
+    ): Double {
+        return roundForCurrency(
+            regional.currencyCode,
+            model.familyMonthlyUsd * regional.multiplier
         )
     }
 
@@ -453,6 +600,28 @@ object PricingPolicy {
             )
         }
 
+        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
+        if (selectedPlan == "family") {
+            val familyRole = resolveFamilyRoleContext(context, model)
+            return when (familyRole.roleCode) {
+                ROLE_CHILD -> ResolvedFeatureAccess(
+                    tierCode = "family_child",
+                    paidAccess = true,
+                    features = model.familyChildTierAccess
+                )
+                ROLE_FAMILY_SINGLE -> ResolvedFeatureAccess(
+                    tierCode = "family_single",
+                    paidAccess = true,
+                    features = model.familyParentTierAccess
+                )
+                else -> ResolvedFeatureAccess(
+                    tierCode = "family_parent",
+                    paidAccess = true,
+                    features = model.familyParentTierAccess
+                )
+            }
+        }
+
         if (hasPaidPlanSelected(context)) {
             return ResolvedFeatureAccess(
                 tierCode = "paid",
@@ -465,6 +634,64 @@ object PricingPolicy {
             tierCode = "free",
             paidAccess = false,
             features = model.freeTierAccess
+        )
+    }
+
+    fun resolveProfileControl(
+        context: Context,
+        access: ResolvedFeatureAccess = resolveFeatureAccess(context),
+        model: PricingPolicyModel = load(context)
+    ): ProfileControlPolicy {
+        val familyRole = resolveFamilyRoleContext(context, model)
+        if (familyRole.roleCode == ROLE_CHILD) {
+            val band = familyRole.ageBand
+            return ProfileControlPolicy(
+                roleCode = ROLE_CHILD,
+                ageYears = familyRole.ageYears,
+                ageBandCode = band?.code ?: "unknown",
+                ageBandLabel = band?.label ?: "Child",
+                familyPlanUmbrella = familyRole.familyPlanUmbrella,
+                parentControlsPlanOptOut = model.familyAgePolicy.parentControlsPlanOptOut,
+                graduatedToFamilySingle = false,
+                canViewGuardianFeed = false,
+                canManagePlan = false,
+                canCopyStoredCredentials = band?.allowStoredCredentialCopy == true,
+                canUseOverlayAssistant = band?.allowOverlayAssistant == true && access.features.overlayAssistantEnabled,
+                requiresGuardianApprovalForSensitiveActions = band?.requireGuardianApprovalForSensitiveActions != false
+            )
+        }
+
+        if (familyRole.roleCode == ROLE_FAMILY_SINGLE) {
+            val band = familyRole.ageBand
+            return ProfileControlPolicy(
+                roleCode = ROLE_FAMILY_SINGLE,
+                ageYears = familyRole.ageYears,
+                ageBandCode = band?.code ?: "family_single",
+                ageBandLabel = band?.label ?: "Family single 18+",
+                familyPlanUmbrella = familyRole.familyPlanUmbrella,
+                parentControlsPlanOptOut = model.familyAgePolicy.parentControlsPlanOptOut,
+                graduatedToFamilySingle = familyRole.graduatedToFamilySingle,
+                canViewGuardianFeed = false,
+                canManagePlan = false,
+                canCopyStoredCredentials = true,
+                canUseOverlayAssistant = access.features.overlayAssistantEnabled,
+                requiresGuardianApprovalForSensitiveActions = false
+            )
+        }
+
+        return ProfileControlPolicy(
+            roleCode = ROLE_PARENT,
+            ageYears = -1,
+            ageBandCode = "adult_parent",
+            ageBandLabel = "Parent",
+            familyPlanUmbrella = familyRole.familyPlanUmbrella,
+            parentControlsPlanOptOut = model.familyAgePolicy.parentControlsPlanOptOut,
+            graduatedToFamilySingle = false,
+            canViewGuardianFeed = true,
+            canManagePlan = true,
+            canCopyStoredCredentials = true,
+            canUseOverlayAssistant = access.features.overlayAssistantEnabled,
+            requiresGuardianApprovalForSensitiveActions = false
         )
     }
 
@@ -563,11 +790,71 @@ object PricingPolicy {
             return
         }
         val normalized = when (planId.lowercase(Locale.US)) {
-            "weekly", "monthly", "yearly", "none" -> planId.lowercase(Locale.US)
+            "weekly", "monthly", "yearly", "family", "none" -> planId.lowercase(Locale.US)
             else -> "none"
         }
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_SELECTED_PLAN, normalized).apply()
+        val editor = prefs.edit().putString(KEY_SELECTED_PLAN, normalized)
+        if (normalized == "none") {
+            editor.remove(KEY_SELECTED_PLAN_AT)
+        } else {
+            editor.putLong(KEY_SELECTED_PLAN_AT, System.currentTimeMillis())
+        }
+        editor.apply()
+    }
+
+    fun planSelectedAtEpochMs(context: Context): Long {
+        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
+        return prefs.getLong(KEY_SELECTED_PLAN_AT, 0L).coerceAtLeast(0L)
+    }
+
+    fun nextPaymentDue(
+        context: Context,
+        model: PricingPolicyModel = load(context),
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): NextPaymentDueStatus {
+        val entitlement = entitlement(context)
+        if (entitlement.isLifetimePro) {
+            return NextPaymentDueStatus(
+                statusCode = "lifetime",
+                planId = "lifetime",
+                dueAtEpochMs = 0L
+            )
+        }
+
+        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
+        if (selectedPlan == "weekly" || selectedPlan == "monthly" || selectedPlan == "yearly" || selectedPlan == "family") {
+            val selectedAt = planSelectedAtEpochMs(context).let { stored ->
+                if (stored > 0L && stored <= nowEpochMs) stored else nowEpochMs
+            }
+            val interval = when (selectedPlan) {
+                "weekly" -> 7L * DAY_MS
+                "monthly" -> 30L * DAY_MS
+                "yearly" -> 365L * DAY_MS
+                "family" -> 30L * DAY_MS
+                else -> 0L
+            }
+            return NextPaymentDueStatus(
+                statusCode = "scheduled",
+                planId = selectedPlan,
+                dueAtEpochMs = selectedAt + interval
+            )
+        }
+
+        val trial = ensureTrial(context)
+        if (trial.inTrial) {
+            return NextPaymentDueStatus(
+                statusCode = "trial",
+                planId = "none",
+                dueAtEpochMs = trial.startedAtEpochMs + (model.freeTrialDays * DAY_MS)
+            )
+        }
+
+        return NextPaymentDueStatus(
+            statusCode = "none",
+            planId = "none",
+            dueAtEpochMs = 0L
+        )
     }
 
     fun formatMoney(currencyCode: String, amount: Double): String {
@@ -681,6 +968,55 @@ object PricingPolicy {
         )
     }
 
+    private fun parseFamilyAgeProtocolPolicy(item: JSONObject?): FamilyAgeProtocolPolicy {
+        if (item == null) {
+            return defaultFamilyAgePolicy
+        }
+        val bands = parseFamilyAgeBands(item.optJSONArray("groups"))
+        return FamilyAgeProtocolPolicy(
+            enabled = item.optBoolean("enabled", defaultFamilyAgePolicy.enabled),
+            graduationAge = item.optInt(
+                "graduation_age",
+                defaultFamilyAgePolicy.graduationAge
+            ).coerceIn(16, 25),
+            parentControlsPlanOptOut = item.optBoolean(
+                "parent_controls_plan_opt_out",
+                defaultFamilyAgePolicy.parentControlsPlanOptOut
+            ),
+            bands = if (bands.isEmpty()) defaultFamilyAgePolicy.bands else bands
+        )
+    }
+
+    private fun parseFamilyAgeBands(array: JSONArray?): List<FamilyAgeBand> {
+        if (array == null) {
+            return emptyList()
+        }
+        val rows = mutableListOf<FamilyAgeBand>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val code = item.optString("code").trim().ifBlank { "band_$index" }
+            val label = item.optString("label").trim().ifBlank { code }
+            val minAge = item.optInt("min_age", -1).coerceAtLeast(0)
+            val maxAge = item.optInt("max_age", -1).coerceAtLeast(0)
+            if (minAge > maxAge) {
+                continue
+            }
+            rows += FamilyAgeBand(
+                code = code,
+                label = label,
+                minAge = minAge,
+                maxAge = maxAge,
+                allowStoredCredentialCopy = item.optBoolean("allow_stored_credential_copy", false),
+                allowOverlayAssistant = item.optBoolean("allow_overlay_assistant", false),
+                requireGuardianApprovalForSensitiveActions = item.optBoolean(
+                    "require_guardian_approval_for_sensitive_actions",
+                    true
+                )
+            )
+        }
+        return rows.sortedBy { it.minAge }
+    }
+
     private fun parseCountries(array: JSONArray?): Set<String> {
         if (array == null) {
             return emptySet()
@@ -709,6 +1045,58 @@ object PricingPolicy {
         return rows
     }
 
+    private fun resolveFamilyRoleContext(
+        context: Context,
+        model: PricingPolicyModel
+    ): FamilyRoleContext {
+        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
+        val profile = PrimaryIdentityStore.readProfile(context)
+        val baseRole = normalizeProfileRole(profile.familyRole)
+        val inFamilyPlan = selectedPlan == "family"
+        if (baseRole == ROLE_PARENT) {
+            return FamilyRoleContext(
+                roleCode = ROLE_PARENT,
+                ageYears = -1,
+                ageBand = null,
+                familyPlanUmbrella = inFamilyPlan,
+                graduatedToFamilySingle = false
+            )
+        }
+
+        val ageYears = PrimaryIdentityStore.resolveAgeYears(profile)
+        val band = resolveAgeBand(model.familyAgePolicy, ageYears)
+        val graduated = model.familyAgePolicy.enabled &&
+            inFamilyPlan &&
+            ageYears >= model.familyAgePolicy.graduationAge
+        val roleCode = if (graduated) ROLE_FAMILY_SINGLE else ROLE_CHILD
+        return FamilyRoleContext(
+            roleCode = roleCode,
+            ageYears = ageYears,
+            ageBand = band,
+            familyPlanUmbrella = inFamilyPlan,
+            graduatedToFamilySingle = graduated
+        )
+    }
+
+    private fun resolveAgeBand(policy: FamilyAgeProtocolPolicy, ageYears: Int): FamilyAgeBand? {
+        if (ageYears < 0) {
+            return null
+        }
+        if (!policy.enabled) {
+            return defaultFamilyAgePolicy.bands.firstOrNull { ageYears in it.minAge..it.maxAge }
+        }
+        return policy.bands.firstOrNull { ageYears in it.minAge..it.maxAge }
+            ?: policy.bands.lastOrNull()
+    }
+
+    private fun normalizeProfileRole(raw: String): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            "son", "kid", ROLE_CHILD -> ROLE_CHILD
+            ROLE_FAMILY_SINGLE -> ROLE_CHILD
+            else -> ROLE_PARENT
+        }
+    }
+
     private fun rawSelectedPlan(context: Context): String {
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
         return prefs.getString(KEY_SELECTED_PLAN, "none").orEmpty()
@@ -716,7 +1104,7 @@ object PricingPolicy {
 
     private fun hasPaidPlanSelected(context: Context): Boolean {
         val plan = rawSelectedPlan(context).trim().lowercase(Locale.US)
-        return plan == "weekly" || plan == "monthly" || plan == "yearly"
+        return plan == "weekly" || plan == "monthly" || plan == "yearly" || plan == "family"
     }
 
     private fun utcDayKey(epochMs: Long): String {

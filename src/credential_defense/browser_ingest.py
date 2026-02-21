@@ -7,7 +7,7 @@ from typing import Any
 
 from .models import CredentialRecord
 from .platform_watchdog import KNOWN_BROWSERS, build_runtime_status
-from .utils import classify_category, domain_from_url, stable_record_id, utc_now_iso
+from .utils import canonical_owner_id, classify_category, domain_from_url, stable_record_id, utc_now_iso
 
 
 FIELD_ALIASES = {
@@ -50,12 +50,12 @@ def _owner_for_username(username: str, settings: dict[str, Any]) -> str:
     value = (username or "").lower()
     owners = settings.get("owners", [])
     for owner in owners:
-        owner_id = owner.get("id")
+        owner_id = canonical_owner_id(owner.get("id"))
         for pattern in owner.get("email_patterns", []):
             pattern_l = str(pattern).lower()
             if pattern_l and pattern_l in value:
                 return owner_id
-    return owners[0]["id"] if owners else "parent"
+    return canonical_owner_id(owners[0]["id"]) if owners else "parent"
 
 
 def _source_from_file(path: Path) -> str:

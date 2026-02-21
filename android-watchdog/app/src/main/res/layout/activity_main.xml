@@ -30,7 +30,7 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/brand_panel"
+                app:cardBackgroundColor="@android:color/transparent"
                 app:cardCornerRadius="20dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/brand_stroke"
@@ -39,6 +39,7 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:background="@drawable/bg_security_hero"
                     android:orientation="vertical"
                     android:padding="16dp">
 
@@ -49,13 +50,42 @@
                         android:src="@drawable/lion_icon" />
 
                     <TextView
-                        android:id="@+id/statusLabel"
+                        android:id="@+id/securityHeroTitleLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
+                        android:text="@string/security_hero_title"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/securityScoreLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/security_score_loading"
+                        android:textColor="@color/brand_accent"
+                        android:textSize="28sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/securityTierLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/security_tier_loading"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/statusLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
                         android:text="@string/status_ready"
                         android:textColor="@color/text_primary"
-                        android:textSize="18sp"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -65,7 +95,40 @@
                         android:layout_marginTop="6dp"
                         android:text="@string/substatus_default"
                         android:textColor="@color/text_secondary"
-                        android:textSize="14sp" />
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/securityUrgentActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/security_urgent_actions_loading"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/securityTopActionButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/security_action_loading" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/securityActionDetailsButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:textAlignment="center"
+                            android:text="@string/action_view_details" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/updateStatusLabel"
@@ -75,6 +138,218 @@
                         android:text="@string/update_status_idle"
                         android:textColor="@color/text_muted"
                         android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/wifiPostureCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/wifiPostureTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/wifi_posture_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/wifiSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/wifi_posture_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/wifiActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/wifi_posture_actions_placeholder"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/wifiScanButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_run_wifi_posture_scan" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/wifiFindingsButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_view_wifi_findings" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/mediaVaultCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/mediaVaultTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/media_vault_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mediaVaultSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/media_vault_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/mediaVaultActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/media_vault_actions_placeholder"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mediaVaultImportButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_add_to_vault" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mediaVaultOpenButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_open_vault" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/translationTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/translation_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/translationSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/translation_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/translationMetricLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/translation_metric_loading"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/translationGuidanceLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/translation_guidance_loading"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/translationSettingsButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_open_language_settings" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/translationFeedbackButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_report_translation_issue" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -112,20 +387,13 @@
                         android:textSize="13sp" />
 
                     <TextView
-                        android:id="@+id/pricingMarketLabel"
+                        android:id="@+id/pricingNextDueLabel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
+                        android:text="@string/pricing_next_due_loading"
                         android:textColor="@color/text_muted"
                         android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/pricingCompetitorLabel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textColor="@color/text_muted"
-                        android:textSize="11sp" />
 
                     <TextView
                         android:id="@+id/pricingFeatureAccessLabel"
@@ -145,6 +413,15 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
+                    <TextView
+                        android:id="@+id/pricingUpgradeReasonLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/pricing_upgrade_reason_loading"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -153,20 +430,258 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/pricingManageButton"
-                            style="@style/Widget.Material3.Button.TextButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/action_manage_plan"
-                            android:textColor="@color/brand_accent" />
+                            android:text="@string/action_manage_plan" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/pricingFeedbackButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_rate_and_refer" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/scamShieldCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/hygieneTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/hygiene_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/hygieneSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/hygiene_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/hygieneActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/hygiene_actions_placeholder"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/hygieneAuditButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_hygiene_audit" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/hygieneCleanupButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_hygiene_cleanup" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/advancedControlsToggleButton"
+                style="@style/Widget.RealynWatchdog.Button.RaisedAction"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/action_show_advanced_controls" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/readinessCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/copilotTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/copilot_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/copilotSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/copilot_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/copilotModeLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/copilot_mode_local_default"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/copilotActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/copilot_actions_placeholder"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/copilotRefreshButton"
                             style="@style/Widget.Material3.Button.TextButton"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/action_rate_and_refer"
+                            android:text="@string/action_copilot_refresh"
+                            android:textColor="@color/brand_accent" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/copilotPlaybookButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_copilot_playbook"
+                            android:textColor="@color/brand_accent" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/copilotConnectButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/action_copilot_manage_connection"
+                            android:textColor="@color/brand_accent" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/incidentCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/brand_panel_alt"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/brand_stroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/scamShieldTitleLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/scam_shield_title"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/scamSummaryLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/scam_shield_loading"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/scamActionsLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/scam_shield_actions_placeholder"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/scamRefreshButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_run_scam_triage"
+                            android:textColor="@color/brand_accent" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/guardianFeedButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/action_view_guardian_feed"
                             android:textColor="@color/brand_accent" />
                     </LinearLayout>
                 </LinearLayout>
@@ -213,19 +728,19 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/fixNotificationButton"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="@string/action_fix_notifications"
-                            android:textColor="@color/brand_accent" />
+                            android:layout_weight="1"
+                            android:text="@string/action_fix_notifications" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/fixOverlayButton"
-                            style="@style/Widget.Material3.Button.TextButton"
-                            android:layout_width="wrap_content"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="@string/action_fix_overlay"
-                            android:textColor="@color/brand_accent" />
+                            android:layout_weight="1"
+                            android:text="@string/action_fix_overlay" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -280,30 +795,27 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/incidentStartButton"
-                            style="@style/Widget.Material3.Button.TextButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/action_incident_start"
-                            android:textColor="@color/brand_accent" />
+                            android:text="@string/action_incident_start" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/incidentResolveButton"
-                            style="@style/Widget.Material3.Button.TextButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/action_incident_resolve"
-                            android:textColor="@color/brand_accent" />
+                            android:text="@string/action_incident_resolve" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/incidentReopenButton"
-                        style="@style/Widget.Material3.Button.TextButton"
+                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/action_incident_reopen"
-                        android:textColor="@color/brand_accent" />
+                        android:text="@string/action_incident_reopen" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -356,6 +868,7 @@
                 app:strokeColor="@color/brand_stroke" />
 
             <LinearLayout
+                android:id="@+id/refreshSupportRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -379,6 +892,7 @@
             </LinearLayout>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/resultCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"

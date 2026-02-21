@@ -36,7 +36,8 @@ data class WatchdogSnapshot(
     val deviceAdminPackages: Set<String>,
     val highRiskPermissions: Map<String, Set<String>>,
     val suspiciousPackageNames: Set<String>,
-    val securitySignals: Map<String, String>
+    val securitySignals: Map<String, String>,
+    val rootPosture: RootPosture
 ) {
     fun toJson(): JSONObject {
         val root = JSONObject()
@@ -58,6 +59,7 @@ data class WatchdogSnapshot(
             signalsJson.put(key, securitySignals[key])
         }
         root.put("securitySignals", signalsJson)
+        root.put("rootPosture", rootPosture.toJson())
         return root
     }
 
@@ -87,7 +89,12 @@ data class WatchdogSnapshot(
                 deviceAdminPackages = arrayToSet(root.optJSONArray("deviceAdminPackages")),
                 highRiskPermissions = highRisk,
                 suspiciousPackageNames = arrayToSet(root.optJSONArray("suspiciousPackageNames")),
-                securitySignals = signals
+                securitySignals = signals,
+                rootPosture = root.optJSONObject("rootPosture")
+                    ?.let { RootPosture.fromJson(it) }
+                    ?: RootPosture.trustedFallback(
+                        root.optLong("scannedAtEpochMs", System.currentTimeMillis())
+                    )
             )
         }
 
@@ -107,7 +114,8 @@ data class WatchdogSnapshot(
 data class ScanResult(
     val snapshot: WatchdogSnapshot,
     val alerts: List<WatchdogAlert>,
-    val baselineCreated: Boolean
+    val baselineCreated: Boolean,
+    val scamTriage: ScamTriageSnapshot
 )
 
 object SecurityScanner {
@@ -146,46 +154,59 @@ object SecurityScanner {
 
     fun runScan(context: Context, createBaselineIfMissing: Boolean = true): ScanResult {
         val snapshot = collectSnapshot(context)
+        val scamTriage = ScamShield.analyze(context, snapshot.thirdPartyPackages)
         val baseline = loadBaseline(context)
 
         val result = if (baseline == null) {
             if (createBaselineIfMissing) {
                 saveBaseline(context, snapshot)
             }
-            val info = if (createBaselineIfMissing) {
-                listOf(
-                    WatchdogAlert(
-                        severity = Severity.INFO,
-                        title = "Baseline initialized",
-                        details = "First trusted state was saved. Future scans compare against this baseline."
-                    )
+            val info = mutableListOf<WatchdogAlert>()
+            if (createBaselineIfMissing) {
+                info += WatchdogAlert(
+                    severity = Severity.INFO,
+                    title = "Baseline initialized",
+                    details = "First trusted state was saved. Future scans compare against this baseline."
                 )
-            } else {
-                emptyList()
             }
-            ScanResult(snapshot = snapshot, alerts = info, baselineCreated = createBaselineIfMissing)
+            info += initialRootAlerts(snapshot.rootPosture)
+            info += scamAlertsFromTriage(scamTriage)
+            ScanResult(
+                snapshot = snapshot,
+                alerts = info,
+                baselineCreated = createBaselineIfMissing,
+                scamTriage = scamTriage
+            )
         } else {
-            val alerts = compareSnapshots(baseline, snapshot)
-            ScanResult(snapshot = snapshot, alerts = alerts, baselineCreated = false)
+            val alerts = compareSnapshots(baseline, snapshot) + scamAlertsFromTriage(scamTriage)
+            ScanResult(
+                snapshot = snapshot,
+                alerts = alerts,
+                baselineCreated = false,
+                scamTriage = scamTriage
+            )
         }
 
         appendHistory(context, result)
         IncidentStore.syncFromScan(context, result)
+        GuardianAlertStore.syncFromScan(context, result)
         return result
     }
 
     fun summaryLine(result: ScanResult): String {
+        val scamSummary = result.scamTriage.summaryLine()
         if (result.baselineCreated) {
-            return "Baseline created on this device."
+            return "Baseline created on this device. $scamSummary"
         }
         val high = result.alerts.count { it.severity == Severity.HIGH }
         val medium = result.alerts.count { it.severity == Severity.MEDIUM }
         val low = result.alerts.count { it.severity == Severity.LOW }
-        return if (result.alerts.isEmpty()) {
+        val baseSummary = if (result.alerts.isEmpty()) {
             "No suspicious changes detected against baseline."
         } else {
             "Alerts: high=$high, medium=$medium, low=$low"
         }
+        return "$baseSummary $scamSummary"
     }
 
     fun formatReport(result: ScanResult): String {
@@ -196,6 +217,15 @@ object SecurityScanner {
         sb.appendLine("Accessibility services: ${result.snapshot.accessibilityServices.size}")
         sb.appendLine("Device-admin apps: ${result.snapshot.deviceAdminPackages.size}")
         sb.appendLine("Suspicious package names: ${result.snapshot.suspiciousPackageNames.size}")
+        sb.appendLine("Root defense tier: ${result.snapshot.rootPosture.riskTier.raw}")
+        sb.appendLine("Scam Shield: ${result.scamTriage.summaryLine()}")
+        val urgentActions = result.scamTriage.urgentActions()
+        if (urgentActions.isNotEmpty()) {
+            sb.appendLine("Scam Shield urgent actions:")
+            urgentActions.forEachIndexed { index, action ->
+                sb.appendLine("- ${index + 1}. $action")
+            }
+        }
         sb.appendLine()
 
         if (result.alerts.isEmpty()) {
@@ -256,9 +286,38 @@ object SecurityScanner {
         }
     }
 
+    fun readLastScamTriage(context: Context): ScamTriageSnapshot {
+        val file = File(context.filesDir, WatchdogConfig.HISTORY_FILE)
+        if (!file.exists()) {
+            return ScamTriageSnapshot.empty()
+        }
+        val lastLine = runCatching {
+            file.useLines { lines ->
+                lines.lastOrNull { it.isNotBlank() }
+            }
+        }.getOrNull() ?: return ScamTriageSnapshot.empty()
+
+        return runCatching {
+            val payload = JSONObject(lastLine)
+            val triageJson = payload.optJSONObject("scamTriage")
+            if (triageJson != null) {
+                ScamTriageSnapshot.fromJson(triageJson)
+            } else {
+                ScamTriageSnapshot.empty(payload.optLong("scannedAtEpochMs", System.currentTimeMillis()))
+            }
+        }.getOrElse {
+            ScamTriageSnapshot.empty()
+        }
+    }
+
     fun writeLastAlertFingerprint(context: Context, fingerprint: String) {
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
         prefs.edit().putString(WatchdogConfig.KEY_LAST_ALERT_FINGERPRINT, fingerprint).apply()
+    }
+
+    fun currentRootPosture(context: Context): RootPosture {
+        val packages = collectThirdPartyPackages(context)
+        return RootDefense.evaluate(context, packages)
     }
 
     private fun collectSnapshot(context: Context): WatchdogSnapshot {
@@ -267,6 +326,8 @@ object SecurityScanner {
         val admins = collectDeviceAdmins(context)
         val risky = collectHighRiskPermissions(context, packages)
         val suspicious = packages.filter { pkg -> suspiciousKeywords.any { it in pkg.lowercase(Locale.US) } }.toSet()
+        val signals = collectSecuritySignals(context)
+        val rootPosture = RootDefense.evaluate(context, packages)
 
         return WatchdogSnapshot(
             scannedAtEpochMs = System.currentTimeMillis(),
@@ -275,7 +336,8 @@ object SecurityScanner {
             deviceAdminPackages = admins,
             highRiskPermissions = risky,
             suspiciousPackageNames = suspicious,
-            securitySignals = collectSecuritySignals(context)
+            securitySignals = signals,
+            rootPosture = rootPosture
         )
     }
 
@@ -350,7 +412,113 @@ object SecurityScanner {
             }
         }
 
+        alerts += compareRootPosture(base.rootPosture, current.rootPosture)
+
         return alerts
+    }
+
+    private fun compareRootPosture(base: RootPosture, current: RootPosture): List<WatchdogAlert> {
+        val alerts = mutableListOf<WatchdogAlert>()
+        if (current.riskTier == RootRiskTier.COMPROMISED) {
+            alerts += WatchdogAlert(
+                severity = Severity.HIGH,
+                title = "Root defense posture is compromised",
+                details = current.reasonCodes.sorted().joinToString("\n") { "- $it" }
+            )
+        }
+
+        if (base.riskTier != current.riskTier) {
+            val severity = if (tierRank(current.riskTier) > tierRank(base.riskTier)) {
+                if (current.riskTier == RootRiskTier.COMPROMISED) Severity.HIGH else Severity.MEDIUM
+            } else {
+                Severity.LOW
+            }
+            alerts += WatchdogAlert(
+                severity = severity,
+                title = "Root defense tier changed: ${base.riskTier.raw} -> ${current.riskTier.raw}",
+                details = listOf(
+                    "Previous reasons: ${base.reasonCodes.sorted().joinToString(", ")}",
+                    "Current reasons: ${current.reasonCodes.sorted().joinToString(", ")}"
+                ).joinToString("\n")
+            )
+        }
+
+        val newRootManagers = (current.rootManagerPackages - base.rootManagerPackages).sorted()
+        if (newRootManagers.isNotEmpty()) {
+            alerts += WatchdogAlert(
+                severity = Severity.HIGH,
+                title = "Root manager apps detected",
+                details = newRootManagers.joinToString("\n") { "- $it" }
+            )
+        }
+
+        return alerts
+    }
+
+    private fun initialRootAlerts(posture: RootPosture): List<WatchdogAlert> {
+        return when (posture.riskTier) {
+            RootRiskTier.COMPROMISED -> listOf(
+                WatchdogAlert(
+                    severity = Severity.HIGH,
+                    title = "Root defense posture is compromised",
+                    details = posture.reasonCodes.sorted().joinToString("\n") { "- $it" }
+                )
+            )
+
+            RootRiskTier.ELEVATED -> listOf(
+                WatchdogAlert(
+                    severity = Severity.MEDIUM,
+                    title = "Root defense posture is elevated",
+                    details = posture.reasonCodes.sorted().joinToString("\n") { "- $it" }
+                )
+            )
+
+            RootRiskTier.TRUSTED -> emptyList()
+        }
+    }
+
+    private fun scamAlertsFromTriage(triage: ScamTriageSnapshot): List<WatchdogAlert> {
+        return triage.actionableFindings()
+            .sortedWith(
+                compareByDescending<ScamFinding> { severityRank(it.severity) }
+                    .thenByDescending { it.score }
+            )
+            .take(12)
+            .map { finding ->
+                val reasons = if (finding.reasonCodes.isEmpty()) {
+                    "none"
+                } else {
+                    finding.reasonCodes.sorted().joinToString(", ")
+                }
+                val sourceRef = finding.sourceRef.replace("\n", " ").trim()
+                WatchdogAlert(
+                    severity = finding.severity,
+                    title = "Scam Shield: ${finding.title}",
+                    details = listOf(
+                        "Source: ${finding.sourceType.uppercase(Locale.US)} $sourceRef",
+                        "Score: ${finding.score}",
+                        "Reason codes: $reasons",
+                        "Remediation: ${finding.remediation}"
+                    ).joinToString("\n")
+                )
+            }
+    }
+
+    private fun severityRank(severity: Severity): Int {
+        return when (severity) {
+            Severity.HIGH -> 3
+            Severity.MEDIUM -> 2
+            Severity.LOW -> 1
+            Severity.INFO -> 0
+        }
+    }
+
+    private fun tierRank(tier: RootRiskTier): Int {
+        return when (tier) {
+            RootRiskTier.TRUSTED -> 0
+            RootRiskTier.ELEVATED -> 1
+            RootRiskTier.COMPROMISED -> 2
+        }
     }
 
     private fun collectThirdPartyPackages(context: Context): Set<String> {
@@ -502,6 +670,12 @@ object SecurityScanner {
         row.put("scannedAtIso", scannedAtIso)
         row.put("baselineCreated", result.baselineCreated)
         row.put("summary", summaryLine(result))
+        row.put("scamTriage", result.scamTriage.toJson())
+        row.put("scamSummary", result.scamTriage.summaryLine())
+        row.put("scamHighCount", result.scamTriage.highCount)
+        row.put("scamMediumCount", result.scamTriage.mediumCount)
+        row.put("scamLowCount", result.scamTriage.lowCount)
+        row.put("scamUrgentActions", JSONArray(result.scamTriage.urgentActions()))
 
         val alerts = JSONArray()
         result.alerts.forEach { alert ->
@@ -523,8 +697,20 @@ object SecurityScanner {
         val medium = result.alerts.count { it.severity == Severity.MEDIUM }
         val low = result.alerts.count { it.severity == Severity.LOW }
         val sanitizedSummary = summaryLine(result).replace("\n", " ").replace("\"", "'")
-        val line = "$scannedAtIso summary=\"$sanitizedSummary\" alerts_total=${result.alerts.size} high=$high medium=$medium low=$low baseline_created=${result.baselineCreated}"
+        val rootTier = result.snapshot.rootPosture.riskTier.raw
+        val rootReasons = result.snapshot.rootPosture.reasonCodes.sorted().joinToString("+")
+        val scamHigh = result.scamTriage.highCount
+        val scamMedium = result.scamTriage.mediumCount
+        val scamLow = result.scamTriage.lowCount
+        val scamActionable = result.scamTriage.actionableFindings().size
+        val line = "$scannedAtIso summary=\"$sanitizedSummary\" alerts_total=${result.alerts.size} high=$high medium=$medium low=$low baseline_created=${result.baselineCreated} root_tier=$rootTier root_reasons=\"$rootReasons\" scam_high=$scamHigh scam_medium=$scamMedium scam_low=$scamLow scam_actionable=$scamActionable"
         file.appendText(line + "\n")
+        RootDefense.appendRootAuditEntry(
+            context = context,
+            posture = result.snapshot.rootPosture,
+            scannedAtIso = scannedAtIso,
+            baselineCreated = result.baselineCreated
+        )
     }
 
     private fun formatDisplayTime(epochMs: Long): String {

@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DT Guardian</string>
+    <string name="screen_title">DT Guardian</string>
+    <string name="status_ready">Vigilancia local lista</string>
+    <string name="substatus_default">El motor de escaneo está inactivo. Elige escaneo único o modo activo.</string>
+    <string name="scan_completed_substatus">Escaneo único completado en este dispositivo.</string>
+    <string name="continuous_stopping">Deteniendo modo activo...</string>
+    <string name="continuous_starting">Iniciando modo activo...</string>
+    <string name="active_mode_on">El modo de escaneo activo está ENCENDIDO</string>
+    <string name="active_mode_substatus">El servicio de vigilancia en primer plano escanea continuamente cada 5 minutos.</string>
+
+    <string name="security_hero_title">Puntuación de seguridad y acciones urgentes</string>
+    <string name="security_score_loading">Puntuación de seguridad: calculando...</string>
+    <string name="security_score_template">Puntuación de seguridad: %1$d/100</string>
+    <string name="security_tier_loading">Nivel: calculando...</string>
+    <string name="security_tier_stable">Nivel: defensa estable</string>
+    <string name="security_tier_guarded">Nivel: protegido</string>
+    <string name="security_tier_at_risk">Nivel: en riesgo</string>
+    <string name="security_urgent_actions_loading">Acciones urgentes: evaluando...</string>
+    <string name="security_urgent_actions_none">Acciones urgentes: no se detectaron bloqueos inmediatos.</string>
+    <string name="security_urgent_actions_title">Acciones urgentes</string>
+    <string name="security_action_loading">Cargando acción...</string>
+    <string name="security_action_details_title">Detalles de la puntuación de seguridad</string>
+    <string name="action_view_details">Ver detalles</string>
+    <string name="action_show_advanced_controls">Mostrar controles avanzados</string>
+    <string name="action_hide_advanced_controls">Ocultar controles avanzados</string>
+    <string name="security_action_run_scan">Ejecutar escaneo único</string>
+    <string name="security_action_fix_notifications">Activar notificaciones</string>
+    <string name="security_action_fix_overlay">Activar permiso de superposición</string>
+    <string name="security_action_run_scam_triage">Ejecutar triaje de estafas</string>
+    <string name="security_action_start_incident">Iniciar trabajo de incidente</string>
+    <string name="security_action_open_support">Abrir guía de soporte</string>
+    <string name="security_action_open_credentials">Abrir centro de credenciales</string>
+
+    <string name="action_one_time_scan">Ejecutar escaneo único</string>
+    <string name="action_start_continuous">Iniciar modo de escaneo activo</string>
+    <string name="action_start_continuous_paid">Iniciar modo activo (de pago)</string>
+    <string name="action_stop_continuous">Detener modo activo</string>
+    <string name="action_refresh">Actualizar</string>
+    <string name="action_support">Planes + Soporte</string>
+    <string name="action_open_credential_center">Abrir Centro de Defensa de Credenciales</string>
+    <string name="action_check_updates">Buscar actualizaciones de la app</string>
+    <string name="action_fix_notifications">Arreglar notificaciones</string>
+    <string name="action_fix_overlay">Arreglar superposición</string>
+    <string name="action_incident_start">Iniciar trabajo de incidente</string>
+    <string name="action_incident_resolve">Resolver siguiente</string>
+    <string name="action_incident_reopen">Reabrir última</string>
+
+    <string name="translation_title">Idioma y preparación de traducción</string>
+    <string name="translation_loading">Comprobando perfil de idioma...</string>
+    <string name="translation_metric_loading">Métrica de traducción: calculando...</string>
+    <string name="translation_guidance_loading">Guía de traducción: cargando...</string>
+    <string name="translation_summary_template">Idioma del dispositivo: %1$s (%2$s)</string>
+    <string name="translation_metric_template">Métrica de traducción: %1$d%% de cobertura | Paquete: %2$s</string>
+    <string name="translation_pack_full">completo</string>
+    <string name="translation_pack_core">núcleo</string>
+    <string name="translation_pack_fallback">respaldo</string>
+    <string name="translation_guidance_full">Tu paquete de idioma está totalmente compatible para la superficie actual de la app.</string>
+    <string name="translation_guidance_core">Las pantallas principales están localizadas. Algunos diálogos avanzados pueden seguir en inglés.</string>
+    <string name="translation_guidance_fallback">Este idioma usa respaldo guiado en inglés. Cambia el idioma de la app o reporta traducciones faltantes.</string>
+    <string name="action_open_language_settings">Abrir configuración de idioma</string>
+    <string name="action_report_translation_issue">Reportar problema de traducción</string>
+    <string name="translation_issue_reported_status">Se abrió el flujo de comentarios de traducción para soporte.</string>
+    <string name="translation_settings_open_failed">No se pudo abrir la configuración de idioma.</string>
+
+    <string name="pricing_title">Estado de suscripción y prueba</string>
+    <string name="pricing_loading">Cargando modelo de precios...</string>
+    <string name="pricing_feature_access_loading">Cargando funciones incluidas...</string>
+    <string name="pricing_next_due_loading">Próximo pago: calculando...</string>
+    <string name="pricing_feedback_missing">Aún no se envió calificación de rendimiento ni recomendación.</string>
+    <string name="pricing_upgrade_reason_loading">Motivo de actualización: evaluando...</string>
+    <string name="pricing_upgrade_reason_lifetime">Motivo de actualización: Pro Lifetime activo. La protección continua y el endurecimiento sensible a root ya están desbloqueados.</string>
+    <string name="pricing_upgrade_reason_trial">Motivo de actualización: la prueba incluye protección completa ahora. Convierte para mantener protección continua, profundidad de Scam Shield y cobertura de IA conectada.</string>
+    <string name="pricing_upgrade_reason_paid">Motivo de actualización: la protección de pago está activa. Mantén reportes de tutor y endurecimiento root-aware al día manteniendo el plan.</string>
+    <string name="pricing_upgrade_reason_free">Motivo de actualización: desbloquea protección continua, mayor endurecimiento root-aware, más volumen de triaje Scam Shield y copiloto de IA conectada.</string>
+    <string name="action_manage_plan">Elegir plan</string>
+    <string name="action_rate_and_refer">Calificar + Recomendar</string>
+
+    <string name="hygiene_title">Kit de higiene segura</string>
+    <string name="hygiene_loading">Evaluando postura de mantenimiento...</string>
+    <string name="hygiene_actions_placeholder">Ejecuta auditoría de higiene para generar acciones seguras de remediación.</string>
+    <string name="action_hygiene_audit">Ejecutar auditoría de higiene</string>
+    <string name="action_hygiene_cleanup">Aplicar limpieza segura</string>
+    <string name="hygiene_actions_title">Acciones principales de remediación</string>
+    <string name="hygiene_refreshed_status">Auditoría de higiene segura actualizada.</string>
+    <string name="hygiene_cleanup_confirm_title">Aplicar limpieza de higiene segura</string>
+    <string name="hygiene_cleanup_no_changes">Limpieza segura completada. No se encontró residuo de higiene removible.</string>
+
+    <string name="incident_title">Ciclo de vida de incidentes</string>
+    <string name="incident_loading">Cargando incidentes...</string>
+    <string name="incident_summary_template">Abiertos: %1$d | En progreso: %2$d | Resueltos: %3$d</string>
+    <string name="incident_no_open">No hay incidentes abiertos para iniciar.</string>
+    <string name="incident_no_active">No hay incidentes abiertos o en progreso para resolver.</string>
+    <string name="incident_no_resolved">No hay incidentes resueltos para reabrir.</string>
+
+    <string name="scam_shield_title">Scam Shield + Triaje de Riesgo</string>
+    <string name="scam_shield_loading">Cargando estado de Scam Shield...</string>
+    <string name="scam_shield_actions_title">Acciones urgentes</string>
+    <string name="scam_shield_actions_none">No hay acciones urgentes de Scam Shield por ahora.</string>
+    <string name="scam_shield_actions_placeholder">Ejecuta triaje para ver guía de remediación.</string>
+    <string name="scam_shield_no_snapshot">Aún no se registró ningún triaje de Scam Shield.</string>
+    <string name="scam_shield_triage_running">Ejecutando triaje de Scam Shield...</string>
+    <string name="scam_shield_triage_completed">Triaje de Scam Shield completado.</string>
+    <string name="action_run_scam_triage">Ejecutar triaje de estafas</string>
+    <string name="action_view_guardian_feed">Ver feed del tutor</string>
+    <string name="guardian_feed_title">Feed de alertas del tutor</string>
+    <string name="guardian_feed_empty">Aún no se registraron alertas del tutor.</string>
+    <string name="guardian_feed_restricted_title">Feed del tutor restringido</string>
+    <string name="guardian_feed_restricted_message">El feed del tutor solo está disponible para perfil padre/tutor.</string>
+
+    <string name="copilot_title">Copiloto IA integrado</string>
+    <string name="copilot_loading">Generando triaje guiado...</string>
+    <string name="copilot_mode_local_default">Modo: local primero (protegido por política)</string>
+    <string name="copilot_actions_placeholder">Ejecuta actualizar para generar acciones locales recomendadas.</string>
+    <string name="action_copilot_refresh">Actualizar copiloto</string>
+    <string name="action_copilot_playbook">Abrir guía</string>
+    <string name="action_copilot_manage_connection">Gestionar conexión</string>
+    <string name="copilot_refreshed_status">Guía del copiloto IA actualizada desde el contexto local de escaneo.</string>
+
+    <string name="readiness_title">Preparación de seguridad</string>
+    <string name="readiness_loading">Comprobando preparación de la app...</string>
+    <string name="readiness_state_ok">ok</string>
+    <string name="readiness_state_action_needed">acción necesaria</string>
+    <string name="readiness_state_not_required">no requerido</string>
+    <string name="readiness_state_on">encendido</string>
+    <string name="readiness_state_off">apagado</string>
+    <string name="root_tier_trusted">confiable</string>
+    <string name="root_tier_elevated">elevado</string>
+    <string name="root_tier_compromised">comprometido</string>
+
+    <string name="update_status_idle">Aún no se ejecutó una revisión de actualización.</string>
+    <string name="update_check_running">Buscando actualizaciones...</string>
+    <string name="update_available_title">Actualización disponible</string>
+    <string name="update_open_download">Abrir página de descarga</string>
+    <string name="update_release_notes_default">No hay notas de versión en el manifiesto de actualización.</string>
+
+    <string name="result_placeholder">Aún no se ha ejecutado ningún escaneo.</string>
+    <string name="attribution">Creado por Danicous Technologies. Identidad Lionhead y flujos defensivos D_T integrados para seguridad local-first.</string>
+    <string name="lion_icon_description">Icono de león DT</string>
+</resources>

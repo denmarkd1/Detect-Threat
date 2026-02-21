@@ -32,7 +32,7 @@ data class CredentialAction(
         fun fromJson(item: JSONObject): CredentialAction {
             return CredentialAction(
                 actionId = item.optString("actionId"),
-                owner = item.optString("owner"),
+                owner = CredentialPolicy.canonicalOwnerId(item.optString("owner")),
                 category = item.optString("category"),
                 service = item.optString("service"),
                 username = item.optString("username"),

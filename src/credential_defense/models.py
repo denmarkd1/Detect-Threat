@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .utils import utc_now_iso
+from .utils import canonical_owner_id, utc_now_iso
 
 
 @dataclass
@@ -34,6 +34,8 @@ class CredentialRecord:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "CredentialRecord":
+        payload = dict(payload)
+        payload["owner"] = canonical_owner_id(payload.get("owner", "parent"))
         return cls(**payload)
 
 
@@ -55,4 +57,6 @@ class ActionTask:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "ActionTask":
+        payload = dict(payload)
+        payload["owner"] = canonical_owner_id(payload.get("owner", "parent"))
         return cls(**payload)

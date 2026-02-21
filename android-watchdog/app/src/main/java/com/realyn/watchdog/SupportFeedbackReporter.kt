@@ -32,6 +32,8 @@ object SupportFeedbackReporter {
         recommendToFriends: Boolean,
         tier: String,
         selectedPlan: String,
+        profileRole: String,
+        ageBandCode: String,
         createTicket: Boolean
     ): FeedbackSyncResult {
         val queue = loadQueue(context).toMutableList()
@@ -45,6 +47,8 @@ object SupportFeedbackReporter {
                     .put("recommend_to_friends", recommendToFriends)
                     .put("tier", tier.trim().ifBlank { "unknown" })
                     .put("selected_plan", selectedPlan.trim().ifBlank { "none" })
+                    .put("profile_role", profileRole.trim().ifBlank { "parent" })
+                    .put("age_band", ageBandCode.trim().ifBlank { "unknown" })
                     .put("create_ticket", createTicket)
                     .put("source", "android_app")
                     .put("platform", "android")

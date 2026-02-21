@@ -5,7 +5,7 @@ Update these placeholders in `docs/index.html` when each channel is active.
 - PayPal:
   - Replace `https://www.paypal.com/paypalme/REPLACE_WITH_PAYPAL_HANDLE`
 - Patreon:
-  - Replace `https://www.patreon.com/REPLACE_WITH_PATREON_HANDLE`
+  - Active link set to `https://www.patreon.com/c/Danicous`
 - Wise:
   - Active link set to `https://wise.com/pay/me/danieldenmarkd`
 - PromptPay (Thailand):

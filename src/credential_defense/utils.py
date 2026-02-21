@@ -12,8 +12,22 @@ def utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def canonical_owner_id(owner: str) -> str:
+    normalized = (owner or "").strip().lower()
+    if normalized in {"son", "kid", "child"}:
+        return "child"
+    if normalized == "parent":
+        return "parent"
+    return normalized or "parent"
+
+
+def owner_hash_key(owner: str) -> str:
+    canonical = canonical_owner_id(owner)
+    return "son" if canonical == "child" else canonical
+
+
 def stable_record_id(owner: str, service: str, username: str) -> str:
-    digest = hashlib.sha256(f"{owner}|{service}|{username}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{owner_hash_key(owner)}|{service}|{username}".encode("utf-8")).hexdigest()
     return digest[:24]
 
 
@@ -44,4 +58,3 @@ def classify_category(domain: str, service: str = "") -> str:
     if any(token in label for token in ["github", "gitlab", "bitbucket", "aws", "azure", "cloudflare"]):
         return "developer"
     return "other"
-

@@ -36,6 +36,14 @@ SECRET_PATTERN = re.compile(
 )
 DECLARED_PASSWORD_PATTERN = re.compile(r"(?i)\b(my password is|password is)\s+([^\s,;]+)")
 LONG_TOKEN_PATTERN = re.compile(r"\b[A-Za-z0-9_\-]{28,}\b")
+COPILOT_ALLOWED_ROUTES = {
+    "RUN_ONE_TIME_SCAN",
+    "RUN_SCAM_TRIAGE",
+    "OPEN_CREDENTIAL_CENTER",
+    "OPEN_SUPPORT",
+}
+DEFAULT_CONNECTED_AI_PROVIDERS = ["openai"]
+DEFAULT_CONNECTED_AI_MODELS = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1"]
 
 
 def now_iso() -> str:
@@ -64,6 +72,36 @@ def parse_bool(value: Any, default: bool = False) -> bool:
         if normalized in {"0", "false", "no", "n", "off"}:
             return False
     return default
+
+
+def parse_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def extract_first_json_object(raw: str) -> dict[str, Any] | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    # Model responses may include markdown wrappers, so extract the first JSON object.
+    if text.startswith("{") and text.endswith("}"):
+        candidate = text
+    else:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        candidate = text[start : end + 1]
+    try:
+        payload = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
 
 
 def load_json(path: Path, fallback: Any) -> Any:
@@ -149,16 +187,36 @@ class SupportAiResponder:
         return self.config.provider == "openai" and bool(self.config.api_key)
 
     def _openai_reply(self, system_prompt: str, user_prompt: str) -> str:
+        return self._openai_reply_with_credentials(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            api_key=self.config.api_key,
+            model=self.config.model,
+            max_tokens=350,
+            temperature=0.2,
+        )
+
+    def _openai_reply_with_credentials(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        api_key: str,
+        model: str,
+        max_tokens: int = 350,
+        temperature: float = 0.2,
+    ) -> str:
+        if not api_key.strip():
+            return ""
         try:
             url = f"{self.config.base_url}/chat/completions"
             headers = {
-                "Authorization": f"Bearer {self.config.api_key}",
+                "Authorization": f"Bearer {api_key.strip()}",
                 "Content-Type": "application/json",
             }
             payload = {
-                "model": self.config.model,
-                "temperature": 0.2,
-                "max_tokens": 350,
+                "model": model.strip(),
+                "temperature": max(0.0, min(1.0, float(temperature))),
+                "max_tokens": parse_int(max_tokens, default=350, minimum=50, maximum=800),
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -175,6 +233,104 @@ class SupportAiResponder:
             return sanitize_text(content, max_chars=2000)
         except Exception:
             return ""
+
+    def connected_copilot_brief(
+        self,
+        *,
+        provider: str,
+        model: str,
+        api_key: str,
+        max_actions: int,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if provider.strip().lower() != "openai":
+            return None
+        if not api_key.strip() or not model.strip():
+            return None
+
+        summary = sanitize_text(context.get("local_summary", ""), max_chars=240)
+        rationale = sanitize_text(context.get("local_rationale", ""), max_chars=700)
+        role = sanitize_text(context.get("profile_role", ""), max_chars=24)
+        age_band = sanitize_text(context.get("age_band", ""), max_chars=40)
+        root_risk = sanitize_text(context.get("root_risk", ""), max_chars=24)
+        scam_high = parse_int(context.get("scam_high"), default=0, minimum=0, maximum=999)
+        scam_medium = parse_int(context.get("scam_medium"), default=0, minimum=0, maximum=999)
+        incident_open = parse_int(context.get("incident_open"), default=0, minimum=0, maximum=999)
+        incident_in_progress = parse_int(context.get("incident_in_progress"), default=0, minimum=0, maximum=999)
+        guardian_required = parse_bool(context.get("requires_guardian_approval"), default=False)
+
+        system_prompt = (
+            "You are DT Guardian Connected Copilot. Defensive security only. "
+            "Never provide bypass, anti-tamper evasion, or core APK mutation guidance. "
+            "Output strict JSON object only with keys: summary, rationale, actions. "
+            "Each action item must contain title, rationale, route. "
+            "Allowed route values: RUN_ONE_TIME_SCAN, RUN_SCAM_TRIAGE, OPEN_CREDENTIAL_CENTER, OPEN_SUPPORT. "
+            f"Return at most {max_actions} actions."
+        )
+        user_prompt = (
+            f"Local summary: {summary}\n"
+            f"Local rationale: {rationale}\n"
+            f"Role: {role}\n"
+            f"Age band: {age_band}\n"
+            f"Guardian approval required: {guardian_required}\n"
+            f"Root risk: {root_risk}\n"
+            f"Scam high: {scam_high}\n"
+            f"Scam medium: {scam_medium}\n"
+            f"Incident open: {incident_open}\n"
+            f"Incident in_progress: {incident_in_progress}\n"
+            "Produce policy-safe next best actions."
+        )
+        raw = self._openai_reply_with_credentials(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            api_key=api_key,
+            model=model,
+            max_tokens=500,
+            temperature=0.1,
+        )
+        parsed = extract_first_json_object(raw)
+        if not parsed:
+            return None
+        return self._sanitize_copilot_brief_payload(parsed, max_actions=max_actions)
+
+    def _sanitize_copilot_brief_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        max_actions: int,
+    ) -> dict[str, Any]:
+        summary = sanitize_text(payload.get("summary", ""), max_chars=240)
+        rationale = sanitize_text(payload.get("rationale", ""), max_chars=700)
+        actions_raw = payload.get("actions", [])
+        if not isinstance(actions_raw, list):
+            actions_raw = []
+
+        actions: list[dict[str, str]] = []
+        for item in actions_raw:
+            if not isinstance(item, dict):
+                continue
+            route = sanitize_text(str(item.get("route", "")), max_chars=40).upper()
+            if route not in COPILOT_ALLOWED_ROUTES:
+                continue
+            title = sanitize_text(item.get("title", ""), max_chars=100)
+            action_rationale = sanitize_text(item.get("rationale", ""), max_chars=240)
+            if not title or not action_rationale:
+                continue
+            actions.append(
+                {
+                    "title": title,
+                    "rationale": action_rationale,
+                    "route": route,
+                }
+            )
+            if len(actions) >= max(1, min(max_actions, 6)):
+                break
+
+        return {
+            "summary": summary,
+            "rationale": rationale,
+            "actions": actions,
+        }
 
     def _build_chat_prompt(self, prompt: str, context: dict[str, Any]) -> str:
         region = context.get("region", "unknown")
@@ -539,6 +695,7 @@ class SupportHub:
 
     def health(self) -> dict[str, Any]:
         summary = load_json(SUPPORT_SUMMARY_PATH, {})
+        connected_policy = self._connected_ai_policy()
         return {
             "status": "ok",
             "timestamp": now_iso(),
@@ -547,6 +704,7 @@ class SupportHub:
             "ai_provider": self.ai.config.provider,
             "ai_model": self.ai.config.model,
             "ai_enabled": bool(self.ai.config.api_key),
+            "connected_ai_supported": connected_policy["enabled"] and connected_policy["allow_user_subscription_link"],
         }
 
     def handle_feedback(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -610,6 +768,174 @@ class SupportHub:
             "ticket_id": ticket_id,
             "logged": True,
         }
+
+    def handle_copilot_brief(self, payload: dict[str, Any], auth_token: str = "") -> dict[str, Any]:
+        policy = self._connected_ai_policy()
+        context = payload.get("context", {})
+        if not isinstance(context, dict):
+            context = {}
+
+        local_summary = sanitize_text(context.get("local_summary", ""), max_chars=240)
+        local_rationale = sanitize_text(context.get("local_rationale", ""), max_chars=700)
+        max_actions = parse_int(
+            payload.get("max_actions"),
+            default=policy["max_actions"],
+            minimum=1,
+            maximum=policy["max_actions"],
+        )
+        local_actions = self._sanitize_copilot_actions(
+            payload.get("local_actions", []),
+            max_actions=max_actions,
+        )
+
+        local_response = {
+            "mode": "local",
+            "provider": "",
+            "model": "",
+            "summary": local_summary or "AI Copilot: local-first policy guidance active.",
+            "rationale": local_rationale or "Connected AI unavailable; using local triage evidence only.",
+            "actions": local_actions,
+            "policy_enforced": True,
+            "warning": "",
+        }
+
+        if not policy["enabled"]:
+            local_response["warning"] = "Connected AI is disabled by workspace policy."
+            return local_response
+
+        requested = parse_bool(payload.get("connected_ai_enabled"), default=False)
+        if not requested:
+            local_response["warning"] = "Connected AI not requested; local mode remains active."
+            return local_response
+
+        if not policy["allow_user_subscription_link"]:
+            local_response["warning"] = "User-linked AI subscriptions are disabled by workspace policy."
+            return local_response
+
+        provider = sanitize_text(payload.get("provider", ""), max_chars=40).lower()
+        model = sanitize_text(payload.get("model", ""), max_chars=100)
+        if provider not in policy["provider_allowlist"]:
+            local_response["warning"] = "Connected AI provider is not on the allowlist."
+            return local_response
+        if model not in policy["model_allowlist"]:
+            local_response["warning"] = "Connected AI model is not on the allowlist."
+            return local_response
+        if not auth_token.strip():
+            local_response["warning"] = "Connected AI authorization token is missing."
+            return local_response
+
+        connected = self.ai.connected_copilot_brief(
+            provider=provider,
+            model=model,
+            api_key=auth_token.strip(),
+            max_actions=max_actions,
+            context=context,
+        )
+        if not connected:
+            local_response["warning"] = "Connected AI broker did not return a valid policy-safe brief."
+            return local_response
+
+        connected_actions = self._sanitize_copilot_actions(
+            connected.get("actions", []),
+            max_actions=max_actions,
+        )
+        return {
+            "mode": "connected",
+            "provider": provider,
+            "model": model,
+            "summary": connected.get("summary") or local_response["summary"],
+            "rationale": connected.get("rationale") or local_response["rationale"],
+            "actions": connected_actions or local_actions,
+            "policy_enforced": True,
+            "warning": "",
+        }
+
+    def _connected_ai_policy(self) -> dict[str, Any]:
+        settings = load_json(SETTINGS_PATH, {})
+        copilot = settings.get("copilot", {}) if isinstance(settings, dict) else {}
+        connected = copilot.get("connected_ai", {}) if isinstance(copilot, dict) else {}
+
+        providers_raw = connected.get("provider_allowlist", DEFAULT_CONNECTED_AI_PROVIDERS)
+        models_raw = connected.get("model_allowlist", DEFAULT_CONNECTED_AI_MODELS)
+        providers = self._sanitize_allowlist(providers_raw, DEFAULT_CONNECTED_AI_PROVIDERS, lowercase=True)
+        models = self._sanitize_allowlist(models_raw, DEFAULT_CONNECTED_AI_MODELS, lowercase=False)
+
+        return {
+            "enabled": parse_bool(connected.get("enabled"), default=True),
+            "allow_user_subscription_link": parse_bool(
+                connected.get("allow_user_subscription_link"),
+                default=True,
+            ),
+            "require_explicit_action_confirmation": parse_bool(
+                connected.get("require_explicit_action_confirmation"),
+                default=True,
+            ),
+            "provider_allowlist": providers,
+            "model_allowlist": models,
+            "max_actions": parse_int(connected.get("max_actions"), default=4, minimum=1, maximum=6),
+            "block_core_mutation_intents": parse_bool(
+                connected.get("block_core_mutation_intents"),
+                default=True,
+            ),
+            "defensive_scope_only": parse_bool(
+                connected.get("defensive_scope_only"),
+                default=True,
+            ),
+        }
+
+    def _sanitize_allowlist(
+        self,
+        raw_values: Any,
+        defaults: list[str],
+        *,
+        lowercase: bool,
+    ) -> list[str]:
+        if not isinstance(raw_values, list):
+            return defaults
+        values: list[str] = []
+        for item in raw_values:
+            if not isinstance(item, str):
+                continue
+            sanitized = sanitize_text(item, max_chars=100)
+            if not sanitized:
+                continue
+            if lowercase:
+                sanitized = sanitized.lower()
+            values.append(sanitized)
+        deduped = list(dict.fromkeys(values))
+        return deduped or defaults
+
+    def _sanitize_copilot_actions(self, raw_actions: Any, max_actions: int) -> list[dict[str, str]]:
+        actions: list[dict[str, str]] = []
+        if isinstance(raw_actions, list):
+            for item in raw_actions:
+                if not isinstance(item, dict):
+                    continue
+                route = sanitize_text(item.get("route", ""), max_chars=40).upper()
+                if route not in COPILOT_ALLOWED_ROUTES:
+                    continue
+                title = sanitize_text(item.get("title", ""), max_chars=100)
+                rationale = sanitize_text(item.get("rationale", ""), max_chars=240)
+                if not title or not rationale:
+                    continue
+                actions.append(
+                    {
+                        "title": title,
+                        "rationale": rationale,
+                        "route": route,
+                    }
+                )
+                if len(actions) >= max(1, min(max_actions, 6)):
+                    break
+        if actions:
+            return actions
+        return [
+            {
+                "title": "Run one-time scan now",
+                "rationale": "Refresh local evidence before additional sensitive actions.",
+                "route": "RUN_ONE_TIME_SCAN",
+            }
+        ]
 
     def _worker_loop(self) -> None:
         # Backlog worker: process queued tickets in strict FIFO order.
@@ -696,6 +1022,11 @@ class SupportHttpHandler(BaseHTTPRequestHandler):
             result = self.hub.handle_chat(payload)
             self._send_json(HTTPStatus.OK, result)
             return
+        if parsed.path == "/api/support/copilot/brief":
+            auth_token = self._read_bearer_token()
+            result = self.hub.handle_copilot_brief(payload, auth_token=auth_token)
+            self._send_json(HTTPStatus.OK, result)
+            return
         if parsed.path == "/api/support/feedback":
             result = self.hub.handle_feedback(payload)
             if result.get("error"):
@@ -763,6 +1094,15 @@ class SupportHttpHandler(BaseHTTPRequestHandler):
         if not isinstance(payload, dict):
             return None
         return payload
+
+    def _read_bearer_token(self) -> str:
+        raw = self.headers.get("Authorization", "")
+        if not isinstance(raw, str):
+            return ""
+        prefix = "bearer "
+        if not raw.lower().startswith(prefix):
+            return ""
+        return raw[len(prefix) :].strip()
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

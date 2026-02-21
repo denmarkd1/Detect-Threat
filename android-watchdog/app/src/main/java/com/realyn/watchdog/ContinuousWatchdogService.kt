@@ -46,6 +46,14 @@ class ContinuousWatchdogService : Service() {
             return START_NOT_STICKY
         }
 
+        val posture = SecurityScanner.currentRootPosture(this)
+        val hardening = RootDefense.resolveHardeningPolicy(posture)
+        if (!hardening.allowContinuousMode) {
+            SecurityScanner.setContinuousModeEnabled(this, false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         SecurityScanner.setContinuousModeEnabled(this, true)
         startForeground(
             WatchdogConfig.FOREGROUND_NOTIFICATION_ID,

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -12,11 +13,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
+import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
+import com.realyn.watchdog.databinding.DialogServiceActionBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -24,7 +28,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCredentialDefenseBinding
     private lateinit var policy: WorkspacePolicy
-    private var generatedPassword: String = ""
+
+    private var pendingEmailLink: String? = null
+    private var serviceDraft = ServiceDraft()
+    private var accessGateBootstrapped: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,70 +45,377 @@ class CredentialDefenseActivity : AppCompatActivity() {
         policy = CredentialPolicy.loadPolicy(this)
 
         binding.toolbar.setNavigationOnClickListener { finish() }
-        binding.savePrimaryEmailButton.setOnClickListener { savePrimaryEmail() }
+        binding.editIdentityButton.setOnClickListener { showIdentityDialog(isOnboarding = false) }
+        binding.linkEmailButton.setOnClickListener { startEmailLinkFlow() }
         binding.runPrimaryBreachScanButton.setOnClickListener { runPrimaryBreachScan() }
-        binding.saveCredentialButton.setOnClickListener { saveCurrentCredential() }
-        binding.generatePasswordButton.setOnClickListener { generatePassword() }
-        binding.copyPasswordButton.setOnClickListener { copyGeneratedPassword() }
-        binding.copyPendingPasswordButton.setOnClickListener { copyPendingPassword() }
-        binding.confirmRotationAppliedButton.setOnClickListener { confirmRotationApplied() }
-        binding.copyStoredCurrentButton.setOnClickListener { copyStoredCurrentPassword() }
-        binding.copyStoredPreviousButton.setOnClickListener { copyStoredPreviousPassword() }
-        binding.openTargetUrlButton.setOnClickListener { openTargetUrl() }
-        binding.queueRotationButton.setOnClickListener { queueRotationAction() }
-        binding.startOverlayButton.setOnClickListener { startOverlayAssist() }
+        binding.openServiceActionButton.setOnClickListener { openServiceActionDialog() }
         binding.refreshQueueButton.setOnClickListener { renderQueue() }
 
-        binding.serviceInput.doAfterTextChanged { refreshUiForFormChanges() }
-        binding.usernameInput.doAfterTextChanged { refreshUiForFormChanges() }
-        binding.urlInput.doAfterTextChanged { refreshUiForFormChanges() }
-
-        loadPrimaryIdentityUi()
-        refreshUiForFormChanges()
-        renderQueue()
+        enforceAccessGateAndRefresh()
     }
 
     override fun onResume() {
         super.onResume()
-        renderQueue()
-        renderVaultSummary()
+        enforceAccessGateAndRefresh()
     }
 
-    private fun loadPrimaryIdentityUi() {
-        val email = PrimaryIdentityStore.readPrimaryEmail(this)
-        if (email.isNotBlank()) {
-            binding.primaryEmailInput.setText(email)
-            if (binding.usernameInput.text.isNullOrBlank()) {
-                binding.usernameInput.setText(email)
-            }
-            binding.primaryEmailStatusLabel.text = getString(R.string.primary_email_saved_template, email)
-        } else {
-            binding.primaryEmailStatusLabel.text = getString(R.string.primary_email_not_set)
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            AppAccessGate.onAppBackgrounded()
         }
-        binding.breachSummaryLabel.text = getString(R.string.breach_summary_idle)
     }
 
-    private fun refreshUiForFormChanges() {
-        refreshClassifications()
-        renderPasswordPolicyPreview()
-        renderVaultSummary()
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        AppAccessGate.onUserInteraction()
     }
 
-    private fun savePrimaryEmail() {
-        val email = binding.primaryEmailInput.text?.toString().orEmpty().trim().lowercase(Locale.US)
-        if (!email.contains("@") || email.length < 5) {
-            Toast.makeText(this, R.string.primary_email_invalid, Toast.LENGTH_SHORT).show()
+    private fun enforceAccessGateAndRefresh() {
+        AppAccessGate.ensureUnlocked(
+            activity = this,
+            onUnlocked = {
+                if (!accessGateBootstrapped) {
+                    accessGateBootstrapped = true
+                    binding.breachSummaryLabel.text = getString(R.string.breach_summary_idle)
+                }
+                refreshIdentityCard()
+                renderQueue()
+                renderVaultSummaryForCurrentDraft()
+                maybeShowIdentityOnboarding()
+                pendingEmailLink?.let { email ->
+                    pendingEmailLink = null
+                    showEmailLinkCompletionPrompt(email)
+                }
+            },
+            onDenied = {
+                finish()
+            }
+        )
+    }
+
+    private fun maybeShowIdentityOnboarding() {
+        if (!PrimaryIdentityStore.hasCompletedOnboarding(this)) {
+            showIdentityDialog(isOnboarding = true)
+        }
+    }
+
+    private fun refreshIdentityCard() {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val profileControl = PricingPolicy.resolveProfileControl(this)
+        val identityLabel = profile.identityLabel.ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+        val roleLabel = when (profileControl.roleCode) {
+            "child" -> getString(R.string.profile_role_child)
+            "family_single" -> getString(R.string.profile_role_family_single)
+            else -> getString(R.string.profile_role_parent)
+        }
+        val guardianLabel = if (profileControl.roleCode == "parent") {
+            getString(R.string.identity_guardian_not_required)
+        } else {
+            if (profile.guardianEmail.isBlank()) {
+                getString(R.string.identity_guardian_not_set)
+            } else {
+                profile.guardianEmail
+            }
+        }
+        val ageYearsLabel = if (profileControl.ageYears >= 0) {
+            profileControl.ageYears.toString()
+        } else {
+            getString(R.string.profile_age_unknown)
+        }
+        val ageProtocolLabel = getString(
+            R.string.identity_age_protocol_template,
+            profileControl.ageBandLabel,
+            ageYearsLabel
+        )
+        binding.identitySummaryLabel.text = getString(
+            R.string.identity_summary_template,
+            identityLabel,
+            if (profile.primaryEmail.isBlank()) {
+                getString(R.string.identity_email_missing)
+            } else {
+                profile.primaryEmail
+            },
+            roleLabel,
+            ageProtocolLabel,
+            guardianLabel
+        )
+
+        val twoFactorRoute = when (profile.twoFactorMethod) {
+            "sms" -> getString(
+                R.string.two_factor_route_sms_template,
+                maskPhone(profile.twoFactorPhone)
+            )
+            "auth_app" -> getString(
+                R.string.two_factor_route_auth_app_template,
+                profile.twoFactorAuthApp.ifBlank { getString(R.string.two_factor_auth_app_default) }
+            )
+            else -> getString(
+                R.string.two_factor_route_email_template,
+                if (profile.primaryEmail.isBlank()) {
+                    getString(R.string.identity_email_missing)
+                } else {
+                    maskEmail(profile.primaryEmail)
+                }
+            )
+        }
+        binding.twoFactorSummaryLabel.text = getString(R.string.two_factor_summary_template, twoFactorRoute)
+
+        val baseStatus = when {
+            profile.primaryEmail.isBlank() -> getString(R.string.identity_status_email_missing)
+            profile.emailLinkedAtEpochMs <= 0L -> getString(R.string.identity_status_link_required)
+            else -> getString(
+                R.string.identity_status_linked_template,
+                formatDateTime(profile.emailLinkedAtEpochMs)
+            )
+        }
+        binding.identityStatusLabel.text = if (profileControl.graduatedToFamilySingle) {
+            "$baseStatus\n${getString(R.string.identity_family_graduation_status)}"
+        } else {
+            baseStatus
+        }
+    }
+
+    private fun showIdentityDialog(isOnboarding: Boolean) {
+        val existing = PrimaryIdentityStore.readProfile(this)
+        val dialogBinding = DialogIdentityProfileBinding.inflate(layoutInflater)
+
+        dialogBinding.identityLabelInput.setText(
+            existing.identityLabel.ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+        )
+        dialogBinding.primaryEmailInput.setText(existing.primaryEmail)
+        dialogBinding.guardianEmailInput.setText(existing.guardianEmail)
+        dialogBinding.childBirthYearInput.setText(
+            if (existing.childBirthYear > 0) existing.childBirthYear.toString() else ""
+        )
+        dialogBinding.twoFactorPhoneInput.setText(existing.twoFactorPhone)
+        dialogBinding.twoFactorAuthAppInput.setText(existing.twoFactorAuthApp)
+
+        val checkedMethodId = when (existing.twoFactorMethod) {
+            "sms" -> R.id.twoFactorSmsRadio
+            "auth_app" -> R.id.twoFactorAuthAppRadio
+            else -> R.id.twoFactorEmailRadio
+        }
+        dialogBinding.twoFactorMethodGroup.check(checkedMethodId)
+
+        val checkedRoleId = when (PrimaryIdentityStore.normalizeFamilyRole(existing.familyRole)) {
+            "child" -> R.id.familyRoleChildRadio
+            else -> R.id.familyRoleParentRadio
+        }
+        dialogBinding.familyRoleGroup.check(checkedRoleId)
+
+        fun refreshTwoFactorInputs() {
+            val checkedId = dialogBinding.twoFactorMethodGroup.checkedRadioButtonId
+            dialogBinding.twoFactorPhoneLayout.visibility =
+                if (checkedId == R.id.twoFactorSmsRadio) View.VISIBLE else View.GONE
+            dialogBinding.twoFactorAuthAppLayout.visibility =
+                if (checkedId == R.id.twoFactorAuthAppRadio) View.VISIBLE else View.GONE
+        }
+
+        fun refreshFamilyInputs() {
+            val isChild = dialogBinding.familyRoleGroup.checkedRadioButtonId == R.id.familyRoleChildRadio
+            dialogBinding.guardianEmailLayout.visibility = if (isChild) View.VISIBLE else View.GONE
+            dialogBinding.childBirthYearLayout.visibility = if (isChild) View.VISIBLE else View.GONE
+        }
+
+        dialogBinding.twoFactorMethodGroup.setOnCheckedChangeListener { _, _ -> refreshTwoFactorInputs() }
+        dialogBinding.familyRoleGroup.setOnCheckedChangeListener { _, _ -> refreshFamilyInputs() }
+        refreshTwoFactorInputs()
+        refreshFamilyInputs()
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (isOnboarding) R.string.identity_onboarding_title else R.string.identity_dialog_title)
+            .setMessage(if (isOnboarding) getString(R.string.identity_onboarding_message) else null)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.action_save, null)
+            .setNegativeButton(
+                if (isOnboarding) R.string.action_skip else android.R.string.cancel,
+                { _, _ ->
+                    if (isOnboarding) {
+                        val fallbackLabel = existing.identityLabel.ifBlank {
+                            PrimaryIdentityStore.defaultIdentityLabel()
+                        }
+                        PrimaryIdentityStore.writeProfile(
+                            context = this,
+                            identityLabel = fallbackLabel,
+                            primaryEmail = existing.primaryEmail,
+                            twoFactorMethod = existing.twoFactorMethod,
+                            twoFactorPhone = existing.twoFactorPhone,
+                            twoFactorAuthApp = existing.twoFactorAuthApp,
+                            familyRole = existing.familyRole,
+                            guardianEmail = existing.guardianEmail,
+                            childBirthYear = existing.childBirthYear,
+                            onboardingComplete = true
+                        )
+                        refreshIdentityCard()
+                    }
+                }
+            )
+            .create()
+
+        dialog.setCancelable(!isOnboarding)
+        dialog.setCanceledOnTouchOutside(!isOnboarding)
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val identityLabel = dialogBinding.identityLabelInput.text?.toString().orEmpty().trim()
+                    .ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+                val primaryEmail = dialogBinding.primaryEmailInput.text?.toString().orEmpty()
+                    .trim().lowercase(Locale.US)
+                val twoFactorMethod = when (dialogBinding.twoFactorMethodGroup.checkedRadioButtonId) {
+                    R.id.twoFactorSmsRadio -> "sms"
+                    R.id.twoFactorAuthAppRadio -> "auth_app"
+                    else -> "email"
+                }
+                val twoFactorPhone = dialogBinding.twoFactorPhoneInput.text?.toString().orEmpty().trim()
+                val twoFactorAuthApp = dialogBinding.twoFactorAuthAppInput.text?.toString().orEmpty().trim()
+                val familyRole = when (dialogBinding.familyRoleGroup.checkedRadioButtonId) {
+                    R.id.familyRoleChildRadio -> "child"
+                    else -> "parent"
+                }
+                val guardianEmail = dialogBinding.guardianEmailInput.text?.toString().orEmpty()
+                    .trim().lowercase(Locale.US)
+                val childBirthYear = dialogBinding.childBirthYearInput.text?.toString()
+                    .orEmpty()
+                    .trim()
+                    .toIntOrNull()
+                    ?: 0
+                val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+
+                if (primaryEmail.isNotBlank() && (!primaryEmail.contains("@") || primaryEmail.length < 5)) {
+                    Toast.makeText(this, R.string.primary_email_invalid, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (familyRole == "child" && guardianEmail.isBlank()) {
+                    Toast.makeText(this, R.string.guardian_email_required, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (guardianEmail.isNotBlank() && (!guardianEmail.contains("@") || guardianEmail.length < 5)) {
+                    Toast.makeText(this, R.string.guardian_email_invalid, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (familyRole == "child" && childBirthYear == 0) {
+                    Toast.makeText(this, R.string.child_birth_year_required, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (childBirthYear != 0 && (childBirthYear < 1900 || childBirthYear > currentYear)) {
+                    Toast.makeText(this, R.string.child_birth_year_invalid, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (twoFactorMethod == "email" && primaryEmail.isBlank()) {
+                    Toast.makeText(this, R.string.two_factor_requires_email, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (twoFactorMethod == "sms" && twoFactorPhone.isBlank()) {
+                    Toast.makeText(this, R.string.two_factor_requires_phone, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                val normalizedAuthApp = if (twoFactorMethod == "auth_app") {
+                    twoFactorAuthApp.ifBlank { getString(R.string.two_factor_auth_app_default) }
+                } else {
+                    ""
+                }
+
+                val emailChanged = primaryEmail != existing.primaryEmail
+                PrimaryIdentityStore.writeProfile(
+                    context = this,
+                    identityLabel = identityLabel,
+                    primaryEmail = primaryEmail,
+                    twoFactorMethod = twoFactorMethod,
+                    twoFactorPhone = twoFactorPhone,
+                    twoFactorAuthApp = normalizedAuthApp,
+                    familyRole = familyRole,
+                    guardianEmail = guardianEmail,
+                    childBirthYear = childBirthYear,
+                    onboardingComplete = true
+                )
+                if (emailChanged) {
+                    PrimaryIdentityStore.clearEmailLinkedAt(this)
+                }
+
+                refreshIdentityCard()
+                Toast.makeText(this, R.string.identity_saved, Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+
+                if (primaryEmail.isNotBlank() && (isOnboarding || emailChanged || existing.emailLinkedAtEpochMs <= 0L)) {
+                    promptLinkEmailNow(primaryEmail)
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun promptLinkEmailNow(email: String) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.link_email_prompt_title)
+            .setMessage(getString(R.string.link_email_prompt_message_template, email))
+            .setPositiveButton(R.string.action_link_now) { _, _ ->
+                startEmailLinkFlow(email)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startEmailLinkFlow() {
+        val email = PrimaryIdentityStore.readProfile(this).primaryEmail
+        if (email.isBlank()) {
+            Toast.makeText(this, R.string.link_email_requires_primary, Toast.LENGTH_SHORT).show()
             return
         }
+        startEmailLinkFlow(email)
+    }
 
-        PrimaryIdentityStore.writePrimaryEmail(this, email)
-        if (binding.usernameInput.text.isNullOrBlank()) {
-            binding.usernameInput.setText(email)
+    private fun startEmailLinkFlow(email: String) {
+        val loginUrl = providerLoginUrl(email)
+        pendingEmailLink = email
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(loginUrl))
+        runCatching { startActivity(intent) }
+            .onFailure {
+                pendingEmailLink = null
+                Toast.makeText(this, R.string.link_email_open_failed, Toast.LENGTH_SHORT).show()
+            }
+        if (pendingEmailLink != null) {
+            Toast.makeText(this, R.string.link_email_opening, Toast.LENGTH_SHORT).show()
         }
+    }
 
-        binding.primaryEmailStatusLabel.text = getString(R.string.primary_email_saved_template, email)
-        refreshClassifications()
-        Toast.makeText(this, R.string.primary_email_saved, Toast.LENGTH_SHORT).show()
+    private fun showEmailLinkCompletionPrompt(email: String) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.link_email_complete_title)
+            .setMessage(getString(R.string.link_email_complete_message_template, email))
+            .setPositiveButton(R.string.action_mark_linked) { _, _ ->
+                PrimaryIdentityStore.markEmailLinkedNow(this, email)
+                refreshIdentityCard()
+                binding.identityStatusLabel.text = getString(
+                    R.string.identity_status_linked_template,
+                    formatDateTime(System.currentTimeMillis())
+                )
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.breach_scan_prompt_title)
+                    .setMessage(R.string.breach_scan_prompt_message)
+                    .setPositiveButton(R.string.action_run_primary_breach_scan) { _, _ -> runPrimaryBreachScan() }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun providerLoginUrl(email: String): String {
+        val domain = email.substringAfter("@", "").lowercase(Locale.US)
+        return when {
+            domain.endsWith("gmail.com") || domain.endsWith("googlemail.com") ->
+                "https://accounts.google.com/ServiceLogin?Email=${Uri.encode(email)}"
+            domain.endsWith("outlook.com") || domain.endsWith("hotmail.com") || domain.endsWith("live.com") ||
+                domain.endsWith("msn.com") -> "https://login.live.com/"
+            domain.endsWith("yahoo.com") || domain.endsWith("ymail.com") -> "https://login.yahoo.com/"
+            domain.endsWith("icloud.com") || domain.endsWith("me.com") -> "https://www.icloud.com/mail"
+            domain.endsWith("proton.me") || domain.endsWith("protonmail.com") -> "https://account.proton.me/login"
+            domain.isNotBlank() -> "https://$domain"
+            else -> "https://accounts.google.com/"
+        }
     }
 
     private fun runPrimaryBreachScan() {
@@ -115,22 +429,25 @@ class CredentialDefenseActivity : AppCompatActivity() {
             return
         }
         if (!quota.allowed) {
-            val tierLabel = featureTierLabel(access.tierCode)
             Toast.makeText(
                 this,
                 getString(
                     R.string.feature_limit_breach_exhausted_template,
                     quota.limitPerDay,
-                    tierLabel
+                    access.tierCode
                 ),
                 Toast.LENGTH_LONG
             ).show()
             return
         }
 
-        val primaryEmail = PrimaryIdentityStore.readPrimaryEmail(this)
-        if (primaryEmail.isBlank()) {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        if (profile.primaryEmail.isBlank()) {
             Toast.makeText(this, R.string.breach_scan_requires_primary_email, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (profile.emailLinkedAtEpochMs <= 0L) {
+            Toast.makeText(this, R.string.identity_status_link_required, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -140,7 +457,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val records = withContext(Dispatchers.IO) {
                 CredentialVaultStore.loadRecords(this@CredentialDefenseActivity)
-                    .filter { it.username.equals(primaryEmail, ignoreCase = true) }
+                    .filter { it.username.equals(profile.primaryEmail, ignoreCase = true) }
             }
 
             if (records.isEmpty()) {
@@ -179,320 +496,422 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 errors
             )
 
-            if (compromised > 0) {
-                binding.vaultSummaryLabel.text = getString(R.string.breach_summary_action_needed)
-            }
-
             PricingPolicy.recordBreachScanUsage(this@CredentialDefenseActivity)
             setCredentialBusy(false)
-            renderVaultSummary()
             Toast.makeText(this@CredentialDefenseActivity, R.string.breach_scan_completed, Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun generatePassword() {
-        val service = binding.serviceInput.text?.toString().orEmpty()
-        val url = binding.urlInput.text?.toString().orEmpty()
-        val category = CredentialPolicy.classifyCategory(url, service)
-        val result = PasswordToolkit.generateAdaptivePassword(
-            context = this,
-            service = service,
-            url = url,
-            category = category
+    private fun openServiceActionDialog() {
+        val dialogBinding = DialogServiceActionBinding.inflate(layoutInflater)
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val profileControl = PricingPolicy.resolveProfileControl(this)
+
+        dialogBinding.serviceInput.setText(serviceDraft.service)
+        dialogBinding.usernameInput.setText(
+            serviceDraft.username.ifBlank { if (profile.primaryEmail.isNotBlank()) profile.primaryEmail else "" }
         )
+        dialogBinding.urlInput.setText(serviceDraft.url)
+        dialogBinding.currentPasswordInput.setText(serviceDraft.currentPassword)
+        dialogBinding.manualNextPasswordInput.setText(serviceDraft.manualNextPassword)
 
-        generatedPassword = result.password
-        binding.generatedPasswordLabel.text = generatedPassword
-        binding.generatedPasswordLabel.contentDescription = getString(R.string.generated_password_content_description)
-        binding.passwordPolicyLabel.text = result.policy.summary()
-        Toast.makeText(this, R.string.generated_password_ready, Toast.LENGTH_SHORT).show()
-    }
+        var generatedPassword = serviceDraft.generatedPassword
 
-    private fun copyGeneratedPassword() {
-        if (generatedPassword.isBlank()) {
-            Toast.makeText(this, R.string.generated_password_missing, Toast.LENGTH_SHORT).show()
-            return
+        fun selectedNextPassword(): String {
+            val manual = dialogBinding.manualNextPasswordInput.text?.toString().orEmpty()
+            return if (manual.isNotBlank()) manual else generatedPassword
         }
 
-        copyToClipboard("DT generated password", generatedPassword)
-        Toast.makeText(this, R.string.generated_password_copied, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun copyPendingPassword() {
-        val form = normalizedForm(allowMissingPassword = true, requireUrl = false) ?: return
-        val record = CredentialVaultStore.findRecord(this, form.service, form.username)
-        val pending = record?.pendingPassword?.takeIf { it.isNotBlank() }
-        if (pending.isNullOrBlank()) {
-            Toast.makeText(this, R.string.pending_password_missing, Toast.LENGTH_SHORT).show()
-            return
+        fun currentForm(
+            requirePassword: Boolean = false,
+            requireUrl: Boolean = true
+        ): CredentialForm? {
+            val service = dialogBinding.serviceInput.text?.toString().orEmpty().trim()
+            val username = dialogBinding.usernameInput.text?.toString().orEmpty().trim()
+            val url = CredentialPolicy.normalizeUrl(dialogBinding.urlInput.text?.toString().orEmpty())
+            val currentPassword = dialogBinding.currentPasswordInput.text?.toString().orEmpty()
+            if (service.isBlank() || username.isBlank() || (requireUrl && url.isBlank())) {
+                Toast.makeText(this, R.string.queue_fields_required, Toast.LENGTH_SHORT).show()
+                return null
+            }
+            if (requirePassword && currentPassword.isBlank()) {
+                Toast.makeText(this, R.string.current_password_required, Toast.LENGTH_SHORT).show()
+                return null
+            }
+            return CredentialForm(service, username, url, currentPassword)
         }
 
-        copyToClipboard("DT pending next password", pending)
-        Toast.makeText(this, R.string.pending_password_copied, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun copyStoredCurrentPassword() {
-        val form = normalizedForm(allowMissingPassword = true, requireUrl = false) ?: return
-        val record = CredentialVaultStore.findRecord(this, form.service, form.username)
-        if (record == null || record.currentPassword.isBlank()) {
-            Toast.makeText(this, R.string.stored_current_password_missing, Toast.LENGTH_SHORT).show()
-            return
+        fun findCurrentRecord(): StoredCredential? {
+            val service = dialogBinding.serviceInput.text?.toString().orEmpty().trim()
+            val username = dialogBinding.usernameInput.text?.toString().orEmpty().trim()
+            if (service.isBlank() || username.isBlank()) {
+                return null
+            }
+            return CredentialVaultStore.findRecord(this, service, username)
         }
 
-        copyToClipboard("DT current stored password", record.currentPassword)
-        Toast.makeText(this, R.string.stored_current_password_copied, Toast.LENGTH_SHORT).show()
-    }
+        fun refreshDialogState() {
+            val service = dialogBinding.serviceInput.text?.toString().orEmpty()
+            val username = dialogBinding.usernameInput.text?.toString().orEmpty()
+            val url = dialogBinding.urlInput.text?.toString().orEmpty()
+            val normalizedUrl = CredentialPolicy.normalizeUrl(url)
 
-    private fun copyStoredPreviousPassword() {
-        val form = normalizedForm(allowMissingPassword = true, requireUrl = false) ?: return
-        val record = CredentialVaultStore.findRecord(this, form.service, form.username)
-        if (record == null) {
-            Toast.makeText(this, R.string.stored_previous_password_missing, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val previous = CredentialVaultStore.latestDistinctPreviousPassword(record)
-        if (previous.isNullOrBlank()) {
-            Toast.makeText(this, R.string.stored_previous_password_missing, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        copyToClipboard("DT previous stored password", previous)
-        Toast.makeText(this, R.string.stored_previous_password_copied, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun confirmRotationApplied() {
-        val form = normalizedForm(allowMissingPassword = true, requireUrl = false) ?: return
-        val promoted = CredentialVaultStore.promotePendingToCurrent(this, form.service, form.username)
-        if (promoted == null) {
-            Toast.makeText(this, R.string.rotation_applied_missing, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val owner = promoted.owner
-        val actionType = "rotate_password"
-        val actionId = stableActionId(owner, promoted.service, promoted.username, actionType)
-        CredentialActionStore.updateActionStatus(this, actionId, "completed")
-
-        renderVaultSummary()
-        renderQueue()
-        Toast.makeText(this, R.string.rotation_applied_confirmed, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun saveCurrentCredential() {
-        val form = normalizedForm(requirePassword = true) ?: return
-        val model = PricingPolicy.load(this)
-        val access = PricingPolicy.resolveFeatureAccess(this, model)
-        val existing = CredentialVaultStore.findRecord(this, form.service, form.username)
-        val records = if (existing == null) CredentialVaultStore.loadRecords(this) else emptyList()
-        val recordLimit = access.features.credentialRecordsLimit
-        if (existing == null && recordLimit >= 0 && records.size >= recordLimit) {
-            showLockedFeatureDialog(
-                getString(R.string.feature_locked_records_title),
-                getString(R.string.feature_locked_records_message, recordLimit)
+            val category = CredentialPolicy.classifyCategory(normalizedUrl, service)
+            val policyPreview = PasswordToolkit.resolvePolicyPreview(
+                context = this,
+                service = service,
+                url = normalizedUrl,
+                category = category
             )
-            return
+            dialogBinding.passwordPolicyLabel.text = policyPreview.summary()
+
+            dialogBinding.generatedPasswordLabel.text = if (generatedPassword.isBlank()) {
+                getString(R.string.generated_password_placeholder)
+            } else {
+                generatedPassword
+            }
+
+            val selectedPassword = selectedNextPassword()
+            dialogBinding.copySelectedPasswordButton.isEnabled = selectedPassword.isNotBlank()
+            dialogBinding.copyAndOpenChangeButton.isEnabled = selectedPassword.isNotBlank() && normalizedUrl.isNotBlank()
+            dialogBinding.startOverlayButton.visibility = if (
+                selectedPassword.isNotBlank() && profileControl.canUseOverlayAssistant
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+            val record = findCurrentRecord()
+            val hasStoredCurrent = record?.currentPassword?.isNotBlank() == true
+            val hasStoredPrevious = record?.let { CredentialVaultStore.latestDistinctPreviousPassword(it).isNullOrBlank().not() } == true
+            val hasPending = record?.pendingPassword?.isNotBlank() == true
+
+            dialogBinding.copyStoredCurrentButton.visibility = if (
+                hasStoredCurrent && profileControl.canCopyStoredCredentials
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            dialogBinding.copyStoredPreviousButton.visibility = if (
+                hasStoredPrevious && profileControl.canCopyStoredCredentials
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            dialogBinding.confirmRotationAppliedButton.visibility = if (hasPending) View.VISIBLE else View.GONE
+
+            val queueReady = selectedPassword.isNotBlank() &&
+                dialogBinding.currentPasswordInput.text?.toString().orEmpty().isNotBlank() &&
+                service.isNotBlank() && username.isNotBlank() && normalizedUrl.isNotBlank()
+            dialogBinding.queueRotationButton.isEnabled = queueReady
+
+            dialogBinding.dialogStatusLabel.text = if (record == null) {
+                getString(R.string.vault_summary_not_found)
+            } else {
+                CredentialVaultStore.formatRecordSummary(record)
+            }
         }
 
-        val owner = CredentialPolicy.detectOwner(form.username, policy)
-        val category = CredentialPolicy.classifyCategory(form.url, form.service)
+        dialogBinding.serviceInput.doAfterTextChanged { refreshDialogState() }
+        dialogBinding.usernameInput.doAfterTextChanged { refreshDialogState() }
+        dialogBinding.urlInput.doAfterTextChanged { refreshDialogState() }
+        dialogBinding.currentPasswordInput.doAfterTextChanged { refreshDialogState() }
+        dialogBinding.manualNextPasswordInput.doAfterTextChanged { refreshDialogState() }
 
-        CredentialVaultStore.saveCurrentCredential(
-            context = this,
-            owner = owner,
-            category = category,
-            service = form.service,
-            username = form.username,
-            url = form.url,
-            currentPassword = form.currentPassword
-        )
-
-        renderVaultSummary()
-        Toast.makeText(this, R.string.current_password_saved, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun openTargetUrl() {
-        val normalized = CredentialPolicy.normalizeUrl(binding.urlInput.text?.toString().orEmpty())
-        if (normalized.isBlank()) {
-            Toast.makeText(this, R.string.url_required, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalized))
-        runCatching { startActivity(intent) }
-            .onFailure { Toast.makeText(this, R.string.overlay_open_site_failed, Toast.LENGTH_SHORT).show() }
-    }
-
-    private fun queueRotationAction() {
-        val model = PricingPolicy.load(this)
-        val access = PricingPolicy.resolveFeatureAccess(this, model)
-        if (!access.features.rotationQueueEnabled) {
-            showLockedFeatureDialog(
-                getString(R.string.feature_locked_queue_title),
-                getString(R.string.feature_locked_queue_message)
+        dialogBinding.generatePasswordButton.setOnClickListener {
+            val service = dialogBinding.serviceInput.text?.toString().orEmpty()
+            val url = CredentialPolicy.normalizeUrl(dialogBinding.urlInput.text?.toString().orEmpty())
+            val category = CredentialPolicy.classifyCategory(url, service)
+            val result = PasswordToolkit.generateAdaptivePassword(
+                context = this,
+                service = service,
+                url = url,
+                category = category
             )
-            return
+            generatedPassword = result.password
+            refreshDialogState()
+            Toast.makeText(this, R.string.generated_password_ready, Toast.LENGTH_SHORT).show()
         }
 
-        val form = normalizedForm(requirePassword = true) ?: return
-
-        if (generatedPassword.isBlank()) {
-            Toast.makeText(this, R.string.queue_requires_generated_password, Toast.LENGTH_SHORT).show()
-            return
+        dialogBinding.copySelectedPasswordButton.setOnClickListener {
+            val selected = selectedNextPassword()
+            if (selected.isBlank()) {
+                Toast.makeText(this, R.string.generated_password_missing, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            withClipboardRootHardening(getString(R.string.overlay_copy_password)) {
+                copyToClipboard("DT selected password", selected)
+                Toast.makeText(this, R.string.generated_password_copied, Toast.LENGTH_SHORT).show()
+            }
         }
 
-        val owner = CredentialPolicy.detectOwner(form.username, policy)
-        val category = CredentialPolicy.classifyCategory(form.url, form.service)
-        val actionType = "rotate_password"
-        val actionId = stableActionId(owner, form.service, form.username, actionType)
+        dialogBinding.copyAndOpenChangeButton.setOnClickListener {
+            val selected = selectedNextPassword()
+            val targetUrl = CredentialPolicy.normalizeUrl(dialogBinding.urlInput.text?.toString().orEmpty())
+            if (selected.isBlank()) {
+                Toast.makeText(this, R.string.generated_password_missing, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (targetUrl.isBlank()) {
+                Toast.makeText(this, R.string.url_required, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            withClipboardRootHardening(getString(R.string.overlay_copy_password)) {
+                copyToClipboard("DT selected password", selected)
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                runCatching { startActivity(intent) }
+                    .onFailure { Toast.makeText(this, R.string.overlay_open_site_failed, Toast.LENGTH_SHORT).show() }
+            }
+        }
 
-        val existing = CredentialActionStore.loadQueue(this)
-        val pendingCount = existing.count { !it.status.equals("completed", ignoreCase = true) }
-        val queueLimit = access.features.queueActionsLimit
-        if (queueLimit >= 0 && pendingCount >= queueLimit) {
-            showLockedFeatureDialog(
-                getString(R.string.feature_locked_queue_title),
-                getString(R.string.feature_locked_queue_limit_message, queueLimit)
+        dialogBinding.saveCurrentButton.setOnClickListener {
+            withSensitiveRootHardening(getString(R.string.two_factor_action_save_current)) {
+                val form = currentForm(requirePassword = true) ?: return@withSensitiveRootHardening
+                runWithSecondFactorConfirmation(
+                    actionLabel = getString(R.string.two_factor_action_save_current),
+                    protectedAction = GuardianProtectedAction.CREDENTIAL_SAVE_CURRENT
+                ) {
+                    val model = PricingPolicy.load(this)
+                    val access = PricingPolicy.resolveFeatureAccess(this, model)
+                    val existing = CredentialVaultStore.findRecord(this, form.service, form.username)
+                    val records = if (existing == null) CredentialVaultStore.loadRecords(this) else emptyList()
+                    val recordLimit = access.features.credentialRecordsLimit
+                    if (existing == null && recordLimit >= 0 && records.size >= recordLimit) {
+                        showLockedFeatureDialog(
+                            getString(R.string.feature_locked_records_title),
+                            getString(R.string.feature_locked_records_message, recordLimit)
+                        )
+                        return@runWithSecondFactorConfirmation
+                    }
+
+                    val owner = CredentialPolicy.detectOwner(form.username, policy)
+                    val category = CredentialPolicy.classifyCategory(form.url, form.service)
+                    val saved = CredentialVaultStore.saveCurrentCredential(
+                        context = this,
+                        owner = owner,
+                        category = category,
+                        service = form.service,
+                        username = form.username,
+                        url = form.url,
+                        currentPassword = form.currentPassword
+                    )
+                    binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(saved)
+                    dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(saved)
+                    Toast.makeText(this, R.string.current_password_saved, Toast.LENGTH_SHORT).show()
+                    refreshDialogState()
+                }
+            }
+        }
+
+        dialogBinding.queueRotationButton.setOnClickListener {
+            val model = PricingPolicy.load(this)
+            val access = PricingPolicy.resolveFeatureAccess(this, model)
+            if (!access.features.rotationQueueEnabled) {
+                showLockedFeatureDialog(
+                    getString(R.string.feature_locked_queue_title),
+                    getString(R.string.feature_locked_queue_message)
+                )
+                return@setOnClickListener
+            }
+
+            withSensitiveRootHardening(getString(R.string.two_factor_action_queue_rotation)) {
+                val form = currentForm(requirePassword = true) ?: return@withSensitiveRootHardening
+                val nextPassword = selectedNextPassword()
+                if (nextPassword.isBlank()) {
+                    Toast.makeText(this, R.string.queue_requires_next_password, Toast.LENGTH_SHORT).show()
+                    return@withSensitiveRootHardening
+                }
+
+                runWithSecondFactorConfirmation(
+                    actionLabel = getString(R.string.two_factor_action_queue_rotation),
+                    protectedAction = GuardianProtectedAction.CREDENTIAL_QUEUE_ROTATION
+                ) {
+                    val owner = CredentialPolicy.detectOwner(form.username, policy)
+                    val category = CredentialPolicy.classifyCategory(form.url, form.service)
+                    val actionType = "rotate_password"
+                    val actionId = stableActionId(owner, form.service, form.username, actionType)
+
+                    val existingQueue = CredentialActionStore.loadQueue(this)
+                    val pendingCount = existingQueue.count { !it.status.equals("completed", ignoreCase = true) }
+                    val queueLimit = access.features.queueActionsLimit
+                    if (queueLimit >= 0 && pendingCount >= queueLimit) {
+                        showLockedFeatureDialog(
+                            getString(R.string.feature_locked_queue_title),
+                            getString(R.string.feature_locked_queue_limit_message, queueLimit)
+                        )
+                        return@runWithSecondFactorConfirmation
+                    }
+                    if (existingQueue.any { it.actionId == actionId }) {
+                        Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
+                        return@runWithSecondFactorConfirmation
+                    }
+
+                    val updated = CredentialVaultStore.prepareRotation(
+                        context = this,
+                        owner = owner,
+                        category = category,
+                        service = form.service,
+                        username = form.username,
+                        url = form.url,
+                        currentPassword = form.currentPassword,
+                        nextPassword = nextPassword
+                    )
+
+                    val now = System.currentTimeMillis()
+                    CredentialActionStore.appendAction(
+                        this,
+                        CredentialAction(
+                            actionId = actionId,
+                            owner = owner,
+                            category = category,
+                            service = form.service,
+                            username = form.username,
+                            url = form.url,
+                            actionType = actionType,
+                            status = "pending",
+                            createdAtEpochMs = now,
+                            updatedAtEpochMs = now
+                        )
+                    )
+
+                    binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(updated)
+                    dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(updated)
+                    renderQueue()
+                    Toast.makeText(this, R.string.queue_action_saved, Toast.LENGTH_SHORT).show()
+                    refreshDialogState()
+                }
+            }
+        }
+
+        dialogBinding.startOverlayButton.setOnClickListener {
+            if (!profileControl.canUseOverlayAssistant) {
+                Toast.makeText(this, R.string.profile_overlay_restricted, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val access = PricingPolicy.resolveFeatureAccess(this)
+            if (!access.features.overlayAssistantEnabled) {
+                showLockedFeatureDialog(
+                    getString(R.string.feature_locked_overlay_title),
+                    getString(R.string.feature_locked_overlay_message)
+                )
+                return@setOnClickListener
+            }
+            withOverlayRootHardening(getString(R.string.action_start_overlay)) {
+                val selected = selectedNextPassword()
+                if (selected.isBlank()) {
+                    Toast.makeText(this, R.string.generated_password_missing, Toast.LENGTH_SHORT).show()
+                    return@withOverlayRootHardening
+                }
+                if (!Settings.canDrawOverlays(this)) {
+                    requestOverlayPermission()
+                    return@withOverlayRootHardening
+                }
+
+                val targetUrl = CredentialPolicy.normalizeUrl(dialogBinding.urlInput.text?.toString().orEmpty())
+                val overlayIntent = Intent(this, CredentialOverlayService::class.java).apply {
+                    action = WatchdogConfig.ACTION_SHOW_OVERLAY
+                    putExtra(WatchdogConfig.EXTRA_OVERLAY_PASSWORD, selected)
+                    putExtra(WatchdogConfig.EXTRA_OVERLAY_TARGET_URL, targetUrl)
+                }
+                startService(overlayIntent)
+                Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        dialogBinding.copyStoredCurrentButton.setOnClickListener {
+            if (!profileControl.canCopyStoredCredentials) {
+                Toast.makeText(this, R.string.profile_copy_stored_restricted, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val form = currentForm(requirePassword = false, requireUrl = false) ?: return@setOnClickListener
+            val record = CredentialVaultStore.findRecord(this, form.service, form.username)
+            if (record == null || record.currentPassword.isBlank()) {
+                Toast.makeText(this, R.string.stored_current_password_missing, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            withClipboardRootHardening(getString(R.string.overlay_copy_password)) {
+                copyToClipboard("DT current stored password", record.currentPassword)
+                Toast.makeText(this, R.string.stored_current_password_copied, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        dialogBinding.copyStoredPreviousButton.setOnClickListener {
+            if (!profileControl.canCopyStoredCredentials) {
+                Toast.makeText(this, R.string.profile_copy_stored_restricted, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val form = currentForm(requirePassword = false, requireUrl = false) ?: return@setOnClickListener
+            val record = CredentialVaultStore.findRecord(this, form.service, form.username)
+            val previous = record?.let { CredentialVaultStore.latestDistinctPreviousPassword(it) }
+            if (previous.isNullOrBlank()) {
+                Toast.makeText(this, R.string.stored_previous_password_missing, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            withClipboardRootHardening(getString(R.string.overlay_copy_password)) {
+                copyToClipboard("DT previous stored password", previous)
+                Toast.makeText(this, R.string.stored_previous_password_copied, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        dialogBinding.confirmRotationAppliedButton.setOnClickListener {
+            withSensitiveRootHardening(getString(R.string.two_factor_action_confirm_rotation)) {
+                val form = currentForm(requirePassword = false, requireUrl = false)
+                    ?: return@withSensitiveRootHardening
+                runWithSecondFactorConfirmation(
+                    actionLabel = getString(R.string.two_factor_action_confirm_rotation),
+                    protectedAction = GuardianProtectedAction.CREDENTIAL_CONFIRM_ROTATION
+                ) {
+                    val promoted = CredentialVaultStore.promotePendingToCurrent(this, form.service, form.username)
+                    if (promoted == null) {
+                        Toast.makeText(this, R.string.rotation_applied_missing, Toast.LENGTH_SHORT).show()
+                        return@runWithSecondFactorConfirmation
+                    }
+
+                    val actionType = "rotate_password"
+                    val actionId = stableActionId(promoted.owner, promoted.service, promoted.username, actionType)
+                    CredentialActionStore.updateActionStatus(this, actionId, "completed")
+
+                    binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(promoted)
+                    dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(promoted)
+                    renderQueue()
+                    Toast.makeText(this, R.string.rotation_applied_confirmed, Toast.LENGTH_SHORT).show()
+                    refreshDialogState()
+                }
+            }
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.service_action_dialog_title)
+            .setView(dialogBinding.root)
+            .setPositiveButton(android.R.string.ok, null)
+            .create()
+
+        dialog.setOnDismissListener {
+            serviceDraft = ServiceDraft(
+                service = dialogBinding.serviceInput.text?.toString().orEmpty().trim(),
+                username = dialogBinding.usernameInput.text?.toString().orEmpty().trim(),
+                url = CredentialPolicy.normalizeUrl(dialogBinding.urlInput.text?.toString().orEmpty()),
+                currentPassword = dialogBinding.currentPasswordInput.text?.toString().orEmpty(),
+                manualNextPassword = dialogBinding.manualNextPasswordInput.text?.toString().orEmpty(),
+                generatedPassword = generatedPassword
             )
-            return
+            renderVaultSummaryForCurrentDraft()
         }
 
-        if (existing.any { it.actionId == actionId }) {
-            Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        CredentialVaultStore.prepareRotation(
-            context = this,
-            owner = owner,
-            category = category,
-            service = form.service,
-            username = form.username,
-            url = form.url,
-            currentPassword = form.currentPassword,
-            nextPassword = generatedPassword
-        )
-
-        val now = System.currentTimeMillis()
-        val action = CredentialAction(
-            actionId = actionId,
-            owner = owner,
-            category = category,
-            service = form.service,
-            username = form.username,
-            url = form.url,
-            actionType = actionType,
-            status = "pending",
-            createdAtEpochMs = now,
-            updatedAtEpochMs = now
-        )
-
-        CredentialActionStore.appendAction(this, action)
-        renderVaultSummary()
-        renderQueue()
-        Toast.makeText(this, R.string.queue_action_saved, Toast.LENGTH_SHORT).show()
+        refreshDialogState()
+        dialog.show()
     }
 
-    private fun startOverlayAssist() {
-        val access = PricingPolicy.resolveFeatureAccess(this)
-        if (!access.features.overlayAssistantEnabled) {
-            showLockedFeatureDialog(
-                getString(R.string.feature_locked_overlay_title),
-                getString(R.string.feature_locked_overlay_message)
-            )
+    private fun renderVaultSummaryForCurrentDraft() {
+        if (serviceDraft.service.isBlank() || serviceDraft.username.isBlank()) {
+            binding.vaultSummaryLabel.text = getString(R.string.vault_summary_ready)
             return
         }
 
-        if (generatedPassword.isBlank()) {
-            Toast.makeText(this, R.string.generated_password_missing, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        if (!Settings.canDrawOverlays(this)) {
-            requestOverlayPermission()
-            return
-        }
-
-        val url = CredentialPolicy.normalizeUrl(binding.urlInput.text?.toString().orEmpty())
-        val overlayIntent = Intent(this, CredentialOverlayService::class.java).apply {
-            action = WatchdogConfig.ACTION_SHOW_OVERLAY
-            putExtra(WatchdogConfig.EXTRA_OVERLAY_PASSWORD, generatedPassword)
-            putExtra(WatchdogConfig.EXTRA_OVERLAY_TARGET_URL, url)
-        }
-
-        startService(overlayIntent)
-        Toast.makeText(this, R.string.overlay_started, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun requestOverlayPermission() {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:$packageName")
-        )
-        startActivity(intent)
-        Toast.makeText(this, R.string.overlay_permission_required, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun refreshClassifications() {
-        val username = binding.usernameInput.text?.toString().orEmpty()
-        val service = binding.serviceInput.text?.toString().orEmpty()
-        val url = binding.urlInput.text?.toString().orEmpty()
-
-        val owner = CredentialPolicy.detectOwner(username, policy)
-        val category = CredentialPolicy.classifyCategory(url, service)
-
-        binding.detectedOwnerLabel.text = getString(R.string.detected_owner_template, owner)
-        binding.detectedCategoryLabel.text = getString(R.string.detected_category_template, category)
-
-        val order = policy.priorityCategories.joinToString(" > ")
-        val access = PricingPolicy.resolveFeatureAccess(this)
-        val queueLimit = if (access.features.queueActionsLimit < 0) {
-            getString(R.string.pricing_limit_unlimited)
-        } else {
-            access.features.queueActionsLimit.toString()
-        }
-        val recordsLimit = if (access.features.credentialRecordsLimit < 0) {
-            getString(R.string.pricing_limit_unlimited)
-        } else {
-            access.features.credentialRecordsLimit.toString()
-        }
-        val breachLimit = if (access.features.breachScansPerDay < 0) {
-            getString(R.string.pricing_limit_unlimited)
-        } else {
-            access.features.breachScansPerDay.toString()
-        }
-        val base = getString(R.string.priority_order_template, order)
-        val tier = featureTierLabel(access.tierCode)
-        val featureSummary = getString(
-            R.string.credential_access_summary_template,
-            tier,
-            recordsLimit,
-            queueLimit,
-            breachLimit
-        )
-        binding.priorityOrderLabel.text = "$base\n$featureSummary"
-    }
-
-    private fun renderPasswordPolicyPreview() {
-        val service = binding.serviceInput.text?.toString().orEmpty()
-        val url = binding.urlInput.text?.toString().orEmpty()
-        val category = CredentialPolicy.classifyCategory(url, service)
-        val resolved = PasswordToolkit.resolvePolicyPreview(
-            context = this,
-            service = service,
-            url = url,
-            category = category
-        )
-        binding.passwordPolicyLabel.text = resolved.summary()
-    }
-
-    private fun renderVaultSummary() {
-        val form = normalizedForm(allowMissingPassword = true, requireUrl = false) ?: run {
-            binding.vaultSummaryLabel.text = getString(R.string.vault_summary_fill_service_username)
-            return
-        }
-
-        val record = CredentialVaultStore.findRecord(this, form.service, form.username)
+        val record = CredentialVaultStore.findRecord(this, serviceDraft.service, serviceDraft.username)
         binding.vaultSummaryLabel.text = if (record == null) {
             getString(R.string.vault_summary_not_found)
         } else {
@@ -512,60 +931,207 @@ class CredentialDefenseActivity : AppCompatActivity() {
         binding.queueCountLabel.text = getString(R.string.queue_count_template, queue.size, pendingCount)
 
         if (queue.isEmpty()) {
+            binding.queueCard.visibility = View.GONE
             binding.queueSummary.text = getString(R.string.queue_empty)
             return
         }
 
+        binding.queueCard.visibility = View.VISIBLE
         val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
         val lines = queue.take(25).mapIndexed { index, item ->
             val timestamp = formatter.format(Date(item.createdAtEpochMs))
-            "${index + 1}. [$timestamp] owner=${item.owner} category=${item.category} service=${item.service} username=${item.username} status=${item.status}"
+            "${index + 1}. [$timestamp] owner=${item.owner} service=${item.service} username=${item.username} status=${item.status}"
         }
-
         val remaining = queue.size - lines.size
-        val tail = if (remaining > 0) {
-            "\n... and $remaining more actions"
-        } else {
-            ""
-        }
-
+        val tail = if (remaining > 0) "\n... and $remaining more actions" else ""
         binding.queueSummary.text = lines.joinToString("\n") + tail
     }
 
     private fun setCredentialBusy(busy: Boolean) {
-        binding.savePrimaryEmailButton.isEnabled = !busy
+        binding.editIdentityButton.isEnabled = !busy
+        binding.linkEmailButton.isEnabled = !busy
         binding.runPrimaryBreachScanButton.isEnabled = !busy
-        binding.saveCredentialButton.isEnabled = !busy
-        binding.generatePasswordButton.isEnabled = !busy
-        binding.copyPasswordButton.isEnabled = !busy
-        binding.copyPendingPasswordButton.isEnabled = !busy
-        binding.confirmRotationAppliedButton.isEnabled = !busy
-        binding.copyStoredCurrentButton.isEnabled = !busy
-        binding.copyStoredPreviousButton.isEnabled = !busy
-        binding.openTargetUrlButton.isEnabled = !busy
-        binding.queueRotationButton.isEnabled = !busy
-        binding.startOverlayButton.isEnabled = !busy
+        binding.openServiceActionButton.isEnabled = !busy
         binding.refreshQueueButton.isEnabled = !busy
     }
 
-    private fun copyToClipboard(label: String, value: String) {
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-    }
-
-    private fun stableActionId(owner: String, service: String, username: String, actionType: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest("$owner|$service|$username|$actionType".toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }.take(20)
-    }
-
-    private fun featureTierLabel(tierCode: String): String {
-        return when (tierCode.lowercase(Locale.US)) {
-            "lifetime" -> getString(R.string.pricing_tier_lifetime)
-            "trial" -> getString(R.string.pricing_tier_trial)
-            "paid" -> getString(R.string.pricing_tier_paid)
-            else -> getString(R.string.pricing_tier_free)
+    private fun runWithSecondFactorConfirmation(
+        actionLabel: String,
+        protectedAction: GuardianProtectedAction,
+        onConfirmed: () -> Unit
+    ) {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val profileControl = PricingPolicy.resolveProfileControl(this)
+        if (!profile.onboardingComplete) {
+            showIdentityDialog(isOnboarding = true)
+            return
         }
+
+        val route = when (profile.twoFactorMethod) {
+            "sms" -> getString(
+                R.string.two_factor_route_sms_template,
+                maskPhone(profile.twoFactorPhone)
+            )
+            "auth_app" -> getString(
+                R.string.two_factor_route_auth_app_template,
+                profile.twoFactorAuthApp.ifBlank { getString(R.string.two_factor_auth_app_default) }
+            )
+            else -> getString(
+                R.string.two_factor_route_email_template,
+                maskEmail(profile.primaryEmail)
+            )
+        }
+        val guardianNote = if (profileControl.requiresGuardianApprovalForSensitiveActions) {
+            getString(
+                R.string.two_factor_guardian_confirmation_template,
+                if (profile.guardianEmail.isBlank()) {
+                    getString(R.string.identity_guardian_not_set)
+                } else {
+                    profile.guardianEmail
+                }
+            )
+        } else {
+            getString(R.string.two_factor_owner_confirmation_note)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.two_factor_confirm_title)
+            .setMessage(
+                getString(
+                    R.string.two_factor_confirm_message_template,
+                    actionLabel,
+                    route,
+                    guardianNote
+                )
+            )
+            .setPositiveButton(R.string.action_confirm) { _, _ ->
+                GuardianOverridePolicy.requestApproval(
+                    activity = this,
+                    action = protectedAction,
+                    actionLabel = actionLabel,
+                    reasonCode = "credential_two_factor",
+                    onApproved = onConfirmed
+                )
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun withSensitiveRootHardening(actionLabel: String, onAllowed: () -> Unit) {
+        val posture = SecurityScanner.currentRootPosture(this)
+        val hardening = RootDefense.resolveHardeningPolicy(posture)
+        if (!hardening.requireSensitiveActionConfirmation) {
+            onAllowed()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.root_hardening_sensitive_confirm_title)
+            .setMessage(
+                getString(
+                    R.string.root_hardening_sensitive_confirm_message_template,
+                    rootTierLabel(posture.riskTier),
+                    formatRootReasons(posture.reasonCodes),
+                    actionLabel
+                )
+            )
+            .setPositiveButton(R.string.action_confirm) { _, _ -> onAllowed() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun withClipboardRootHardening(actionLabel: String, onAllowed: () -> Unit) {
+        val posture = SecurityScanner.currentRootPosture(this)
+        val hardening = RootDefense.resolveHardeningPolicy(posture)
+        if (!hardening.allowClipboardActions) {
+            showRootHardeningBlockedDialog(
+                message = getString(R.string.root_hardening_clipboard_blocked_message),
+                titleRes = R.string.root_hardening_clipboard_blocked_title
+            )
+            return
+        }
+        if (!hardening.requireSensitiveActionConfirmation) {
+            onAllowed()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.root_hardening_sensitive_confirm_title)
+            .setMessage(
+                getString(
+                    R.string.root_hardening_sensitive_confirm_message_template,
+                    rootTierLabel(posture.riskTier),
+                    formatRootReasons(posture.reasonCodes),
+                    actionLabel
+                )
+            )
+            .setPositiveButton(R.string.action_confirm) { _, _ -> onAllowed() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun withOverlayRootHardening(actionLabel: String, onAllowed: () -> Unit) {
+        val posture = SecurityScanner.currentRootPosture(this)
+        val hardening = RootDefense.resolveHardeningPolicy(posture)
+        if (!hardening.allowOverlayAssistant) {
+            showRootHardeningBlockedDialog(
+                getString(
+                    R.string.root_hardening_overlay_blocked_message,
+                    formatRootReasons(posture.reasonCodes)
+                )
+            )
+            return
+        }
+        if (!hardening.requireSensitiveActionConfirmation) {
+            onAllowed()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.root_hardening_sensitive_confirm_title)
+            .setMessage(
+                getString(
+                    R.string.root_hardening_sensitive_confirm_message_template,
+                    rootTierLabel(posture.riskTier),
+                    formatRootReasons(posture.reasonCodes),
+                    actionLabel
+                )
+            )
+            .setPositiveButton(R.string.action_confirm) { _, _ -> onAllowed() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showRootHardeningBlockedDialog(
+        message: String,
+        titleRes: Int = R.string.root_hardening_block_title
+    ) {
+        AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun rootTierLabel(tier: RootRiskTier): String {
+        return when (tier) {
+            RootRiskTier.TRUSTED -> getString(R.string.root_tier_trusted)
+            RootRiskTier.ELEVATED -> getString(R.string.root_tier_elevated)
+            RootRiskTier.COMPROMISED -> getString(R.string.root_tier_compromised)
+        }
+    }
+
+    private fun formatRootReasons(reasonCodes: Set<String>): String {
+        if (reasonCodes.isEmpty()) {
+            return getString(R.string.root_hardening_reason_none)
+        }
+        return reasonCodes.sorted().joinToString(", ")
+    }
+
+    private fun requestOverlayPermission() {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+        startActivity(intent)
+        Toast.makeText(this, R.string.overlay_permission_required, Toast.LENGTH_SHORT).show()
     }
 
     private fun showLockedFeatureDialog(title: String, message: String) {
@@ -583,40 +1149,45 @@ class CredentialDefenseActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun normalizedForm(
-        requirePassword: Boolean = false,
-        allowMissingPassword: Boolean = false,
-        requireUrl: Boolean = true
-    ): CredentialForm? {
-        val service = binding.serviceInput.text?.toString().orEmpty().trim()
-        val username = binding.usernameInput.text?.toString().orEmpty().trim()
-        val url = CredentialPolicy.normalizeUrl(binding.urlInput.text?.toString().orEmpty())
-        val currentPassword = binding.currentPasswordInput.text?.toString().orEmpty()
+    private fun copyToClipboard(label: String, value: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    }
 
-        val missingRequiredField = service.isBlank() || username.isBlank() || (requireUrl && url.isBlank())
-        if (missingRequiredField) {
-            if (requirePassword || !allowMissingPassword) {
-                Toast.makeText(this, R.string.queue_fields_required, Toast.LENGTH_SHORT).show()
-            }
-            return null
+    private fun stableActionId(owner: String, service: String, username: String, actionType: String): String {
+        val ownerHashKey = CredentialPolicy.ownerHashKey(owner)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$ownerHashKey|$service|$username|$actionType".toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }.take(20)
+    }
+
+    private fun formatDateTime(epochMs: Long): String {
+        if (epochMs <= 0L) {
+            return "-"
         }
+        return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(epochMs))
+    }
 
-        if (requirePassword && currentPassword.isBlank()) {
-            Toast.makeText(this, R.string.current_password_required, Toast.LENGTH_SHORT).show()
-            return null
+    private fun maskEmail(email: String): String {
+        val value = email.trim()
+        if (!value.contains("@")) {
+            return value.ifBlank { "not set" }
         }
-
-        if (!allowMissingPassword && currentPassword.isBlank()) {
-            Toast.makeText(this, R.string.current_password_required, Toast.LENGTH_SHORT).show()
-            return null
+        val local = value.substringBefore("@")
+        val domain = value.substringAfter("@")
+        val maskedLocal = when {
+            local.length <= 2 -> "${local.firstOrNull() ?: '*'}*"
+            else -> "${local.take(2)}***"
         }
+        return "$maskedLocal@$domain"
+    }
 
-        return CredentialForm(
-            service = service,
-            username = username,
-            url = url,
-            currentPassword = currentPassword
-        )
+    private fun maskPhone(phone: String): String {
+        val digits = phone.filter { it.isDigit() }
+        if (digits.length <= 4) {
+            return phone.ifBlank { "not set" }
+        }
+        return "***${digits.takeLast(4)}"
     }
 
     private data class CredentialForm(
@@ -624,5 +1195,14 @@ class CredentialDefenseActivity : AppCompatActivity() {
         val username: String,
         val url: String,
         val currentPassword: String
+    )
+
+    private data class ServiceDraft(
+        val service: String = "",
+        val username: String = "",
+        val url: String = "",
+        val currentPassword: String = "",
+        val manualNextPassword: String = "",
+        val generatedPassword: String = ""
     )
 }

@@ -91,7 +91,7 @@ data class StoredCredential(
 
             return StoredCredential(
                 recordId = item.optString("recordId"),
-                owner = item.optString("owner"),
+                owner = CredentialPolicy.canonicalOwnerId(item.optString("owner")),
                 category = item.optString("category", "other"),
                 service = item.optString("service"),
                 username = item.optString("username"),
@@ -435,8 +435,9 @@ object CredentialVaultStore {
     }
 
     private fun stableRecordId(owner: String, service: String, username: String): String {
+        val ownerHashKey = CredentialPolicy.ownerHashKey(owner)
         return java.security.MessageDigest.getInstance("SHA-256")
-            .digest("$owner|${normalizeService(service)}|${normalizeUsername(username)}".toByteArray())
+            .digest("$ownerHashKey|${normalizeService(service)}|${normalizeUsername(username)}".toByteArray())
             .joinToString("") { "%02x".format(it) }
             .take(24)
     }

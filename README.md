@@ -119,6 +119,14 @@ bash scripts/ops/manage_lifetime_entitlement.sh revoke
 bash scripts/ops/manage_lifetime_entitlement.sh status
 ```
 
+Push/show/clear decoded Play Integrity verdict payload used by Root-Aware Defensive Mode:
+
+```bash
+bash scripts/ops/manage_play_integrity_verdict.sh push /path/to/decoded_verdict.json
+bash scripts/ops/manage_play_integrity_verdict.sh show
+bash scripts/ops/manage_play_integrity_verdict.sh clear
+```
+
 Build signed release artifacts for Play upload (requires signing env vars):
 
 ```bash
@@ -129,6 +137,12 @@ Run local support hub (AI chat hotline + FIFO ticket queue + embedded support pa
 
 ```bash
 bash scripts/ops/run_support_hub.sh
+```
+
+Ensure Zen MCP code-review threading is available (starts local Redis dependency if needed):
+
+```bash
+bash scripts/ops/ensure_zen_redis.sh
 ```
 
 If testing feedback API from a USB-connected physical Android device, map device port 8787 to local hub:
@@ -145,8 +159,11 @@ http://localhost:8787/
 
 In-app Android capabilities:
 - Watchdog one-time and continuous baseline-diff scanning
+- Root-aware defensive mode with trusted/elevated/compromised tiers and hardening gates
 - Credential Defense Center for local password generation and rotation action queueing
 - Overlay assistant (display-over-other-apps permission required) for copy/open support during password changes
+- Embedded AI Copilot with optional connected subscription mode via policy-safe local broker (session key only, no persisted raw key)
+- Safe Hygiene Toolkit for storage/log hygiene, stale queue cleanup, and permission posture review (no task-killer behavior)
 - Update check against a remote JSON manifest (`docs/android/latest.json` sample schema)
 
 ## 5) Docs and support pages
@@ -160,6 +177,7 @@ GitHub Pages-ready files are in `docs/`:
 Local support hub API routes (served by `credential-defense support-server`):
 - `GET /api/support/health`
 - `POST /api/support/chat`
+- `POST /api/support/copilot/brief`
 - `POST /api/support/feature-request`
 - `POST /api/support/problem-report`
 - `POST /api/support/feedback`

@@ -20,10 +20,13 @@ data class WorkspacePolicy(
 object CredentialPolicy {
 
     private const val SETTINGS_FILE_NAME = "workspace_settings.json"
+    private const val OWNER_PARENT = "parent"
+    private const val OWNER_CHILD = "child"
+    private const val OWNER_LEGACY_SON = "son"
 
     private val defaultOwners = listOf(
-        OwnerRule(id = "parent", emailPatterns = emptyList()),
-        OwnerRule(id = "son", emailPatterns = emptyList())
+        OwnerRule(id = OWNER_PARENT, emailPatterns = emptyList()),
+        OwnerRule(id = OWNER_CHILD, emailPatterns = emptyList())
     )
 
     private val defaultPriorityCategories = listOf(
@@ -51,11 +54,25 @@ object CredentialPolicy {
         policy.owners.forEach { owner ->
             owner.emailPatterns.forEach { pattern ->
                 if (pattern.isNotBlank() && value.contains(pattern.lowercase(Locale.US))) {
-                    return owner.id
+                    return canonicalOwnerId(owner.id)
                 }
             }
         }
-        return policy.owners.firstOrNull()?.id ?: "parent"
+        return canonicalOwnerId(policy.owners.firstOrNull()?.id ?: OWNER_PARENT)
+    }
+
+    fun canonicalOwnerId(raw: String): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            OWNER_LEGACY_SON, "kid" -> OWNER_CHILD
+            OWNER_PARENT -> OWNER_PARENT
+            OWNER_CHILD -> OWNER_CHILD
+            else -> raw.trim().ifBlank { OWNER_PARENT }.lowercase(Locale.US)
+        }
+    }
+
+    fun ownerHashKey(raw: String): String {
+        val canonical = canonicalOwnerId(raw)
+        return if (canonical == OWNER_CHILD) OWNER_LEGACY_SON else canonical
     }
 
     fun classifyCategory(url: String, service: String): String {
@@ -121,7 +138,7 @@ object CredentialPolicy {
 
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-            val id = item.optString("id").trim()
+            val id = canonicalOwnerId(item.optString("id"))
             if (id.isBlank()) {
                 continue
             }
@@ -133,7 +150,9 @@ object CredentialPolicy {
                     patterns.add(pattern)
                 }
             }
-            owners.add(OwnerRule(id = id, emailPatterns = patterns))
+            if (owners.none { it.id == id }) {
+                owners.add(OwnerRule(id = id, emailPatterns = patterns))
+            }
         }
 
         return owners

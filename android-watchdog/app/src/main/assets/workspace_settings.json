@@ -13,8 +13,11 @@
       ]
     },
     {
-      "id": "son",
-      "display_name": "Son",
+      "id": "child",
+      "display_name": "Child",
+      "legacy_aliases": [
+        "son"
+      ],
       "email_patterns": []
     }
   ],
@@ -37,7 +40,7 @@
   "pricing": {
     "currency": "USD",
     "free_trial_days": 7,
-    "target_discount_vs_competitor_avg_percent": 15.0,
+    "target_discount_vs_competitor_avg_percent": 15,
     "competitor_average_monthly_usd": 3.21,
     "competitor_reference": [
       {
@@ -62,12 +65,13 @@
     "plans": {
       "weekly_usd": 0.63,
       "monthly_usd": 2.73,
+      "family_monthly_usd": 4.39,
       "yearly_usd": 27.3,
       "yearly_months_charged": 10
     },
     "referral_offer": {
       "enabled": true,
-      "recommend_discount_percent": 10.0,
+      "recommend_discount_percent": 10,
       "requires_recommendation": true
     },
     "feature_access": {
@@ -88,7 +92,68 @@
         "overlay_assistant_enabled": true,
         "rotation_queue_enabled": true,
         "ai_hotline_enabled": true
+      },
+      "family_parent": {
+        "credential_records_limit": -1,
+        "queue_actions_limit": -1,
+        "breach_scans_per_day": -1,
+        "continuous_scan_enabled": true,
+        "overlay_assistant_enabled": true,
+        "rotation_queue_enabled": true,
+        "ai_hotline_enabled": true
+      },
+      "family_child": {
+        "credential_records_limit": 80,
+        "queue_actions_limit": 8,
+        "breach_scans_per_day": 5,
+        "continuous_scan_enabled": false,
+        "overlay_assistant_enabled": false,
+        "rotation_queue_enabled": true,
+        "ai_hotline_enabled": false
       }
+    },
+    "family_age_protocols": {
+      "enabled": true,
+      "graduation_age": 18,
+      "parent_controls_plan_opt_out": true,
+      "groups": [
+        {
+          "code": "foundation_0_12",
+          "label": "Foundation 0-12",
+          "min_age": 0,
+          "max_age": 12,
+          "allow_stored_credential_copy": false,
+          "allow_overlay_assistant": false,
+          "require_guardian_approval_for_sensitive_actions": true
+        },
+        {
+          "code": "guided_13_15",
+          "label": "Guided 13-15",
+          "min_age": 13,
+          "max_age": 15,
+          "allow_stored_credential_copy": false,
+          "allow_overlay_assistant": false,
+          "require_guardian_approval_for_sensitive_actions": true
+        },
+        {
+          "code": "transition_16_17",
+          "label": "Transition 16-17",
+          "min_age": 16,
+          "max_age": 17,
+          "allow_stored_credential_copy": true,
+          "allow_overlay_assistant": true,
+          "require_guardian_approval_for_sensitive_actions": true
+        },
+        {
+          "code": "family_single_18_plus",
+          "label": "Family single 18+",
+          "min_age": 18,
+          "max_age": 130,
+          "allow_stored_credential_copy": true,
+          "allow_overlay_assistant": true,
+          "require_guardian_approval_for_sensitive_actions": false
+        }
+      ]
     },
     "lifetime_pro": {
       "enabled": true,
@@ -101,8 +166,8 @@
         "region": "US",
         "label": "United States",
         "currency": "USD",
-        "usd_to_local_rate": 1.0,
-        "affordability_factor": 1.0
+        "usd_to_local_rate": 1,
+        "affordability_factor": 1
       },
       {
         "region": "GB",
@@ -122,7 +187,7 @@
         "region": "PH",
         "label": "Philippines",
         "currency": "PHP",
-        "usd_to_local_rate": 56.0,
+        "usd_to_local_rate": 56,
         "affordability_factor": 0.6
       },
       {
@@ -186,7 +251,7 @@
         "region": "JP",
         "label": "Japan",
         "currency": "JPY",
-        "usd_to_local_rate": 150.0,
+        "usd_to_local_rate": 150,
         "affordability_factor": 0.95
       }
     ]
@@ -206,5 +271,60 @@
     "feedback": {
       "create_ticket_for_feedback": true
     }
+  },
+  "hygiene": {
+    "enabled": true,
+    "log_retention_days": 30,
+    "completed_queue_retention_days": 30,
+    "storage_pressure_threshold_mb": 2048,
+    "cache_cleanup_threshold_mb": 64
+  },
+  "copilot": {
+    "connected_ai": {
+      "enabled": true,
+      "allow_user_subscription_link": true,
+      "require_explicit_action_confirmation": true,
+      "provider_allowlist": [
+        "openai"
+      ],
+      "model_allowlist": [
+        "gpt-4.1-mini",
+        "gpt-4o-mini",
+        "gpt-4.1"
+      ],
+      "max_actions": 4,
+      "block_core_mutation_intents": true,
+      "defensive_scope_only": true,
+      "session_key_persistence": "memory_only"
+    }
+  },
+  "app_lock": {
+    "enabled": true,
+    "allow_biometric": true,
+    "allow_pin_fallback": true,
+    "idle_relock_seconds": 120
+  },
+  "media_vault": {
+    "enabled": true,
+    "max_items_free": 5,
+    "retention_days_deleted": 7
+  },
+  "guardian_override": {
+    "enabled": true,
+    "require_for_vault_export": true,
+    "require_for_vault_delete": true,
+    "require_for_high_risk_phishing_actions": true,
+    "token_ttl_seconds": 300,
+    "child_idle_relock_seconds": 60
+  },
+  "wifi_posture": {
+    "enabled": true,
+    "scan_interval_minutes": 15,
+    "guardian_alert_threshold": 65
+  },
+  "anti_phishing": {
+    "enabled": true,
+    "allow_manual_clipboard_intake": true,
+    "high_risk_auto_alert": true
   }
 }

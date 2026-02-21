@@ -31,6 +31,17 @@ Derived from: `docs/integration/competitor_gap_analysis_2026-02-21.md`
 - Enforced gates for continuous scan, overlay assistant, breach scan quota, queue limits, and credential-record limits.
 - Added in-app tier visibility so users can see active entitlements and limits.
 
+7. Approved expansion Phase 2 (Wi-Fi posture + anti-phishing triage)
+- Added Wi-Fi posture module (`WifiPermissionGate`, `WifiPostureScanner`, `WifiRiskEvaluator`, `WifiScanSnapshotStore`) with timestamped local history.
+- Added anti-phishing triage module (`PhishingHeuristics`, `PhishingTriageEngine`, `PhishingIntakeStore`, `PhishingGuardianBridge`) for user-initiated link/text analysis.
+- Added guardian escalation hooks for high-risk child-profile phishing and Wi-Fi findings via `GuardianAlertStore`.
+- Integrated dashboard Wi-Fi card + phishing intake/remediation flow and updated security-hero weighting.
+
+8. Approved expansion Phase 3 (encrypted media vault + parent override actions)
+- Added encrypted media vault modules (`MediaVaultCrypto`, `MediaVaultIndexStore`, `MediaVaultFileStore`, `MediaVaultPolicyGate`) with Android Keystore-backed at-rest encryption.
+- Added dashboard media-vault card with `Add to vault` and `Open vault` flows, item retention handling, secure-open preview, and export support.
+- Added guardian override enforcement for child-sensitive vault export/delete actions and extended policy/config with `guardian_override.require_for_vault_delete`.
+
 ## Next high-priority Android items
 
 1. Official Play entitlement enforcement (publish gate)
@@ -55,6 +66,17 @@ Derived from: `docs/integration/competitor_gap_analysis_2026-02-21.md`
 
 6. Threat-context tie-in
 - Add optional posture checks before sensitive rotation flows (overlay abuse indicators, unknown-sources state, accessibility risk).
+
+## Approved expansion scope (locked 2026-02-21)
+
+Design-ready architecture and UI flow:
+- `docs/integration/approved_scope_architecture_ui_flow_2026-02-21.md`
+
+Implementation phase order:
+1. Phase 1: App lock (biometric/PIN) + guardian override foundation
+2. Phase 2: Wi-Fi posture scanner + anti-phishing triage
+3. Phase 3: Encrypted media vault + parent override actions
+4. Phase 4: Find-provider quick links + hero weighting + UX polish
 
 ## Validation checklist for connected device
 
