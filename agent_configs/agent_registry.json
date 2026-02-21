@@ -1,0 +1,120 @@
+{
+  "agent_registry": {
+    "version": "1.0",
+    "created": "2025-08-14T10:56:00Z",
+    "last_updated": "2025-08-14T10:56:00Z",
+    "description": "Zen Manus 50-Agent System Registry - Complete agent pool configuration"
+  },
+  "agent_pools": {
+    "tier1_reasoning": {
+      "count": 10,
+      "model": "gpt-oss-120b",
+      "description": "High-performance reasoning agents for strategic analysis",
+      "capabilities": [
+        "strategic_reasoning",
+        "complex_analysis", 
+        "decision_making",
+        "risk_assessment",
+        "architectural_planning"
+      ],
+      "max_concurrent_tasks": 3,
+      "priority_range": [8, 10],
+      "specializations": [
+        "logical_reasoning",
+        "strategic_planning",
+        "system_architecture",
+        "complex_problem_solving",
+        "decision_analysis"
+      ]
+    },
+    "tier2_processing": {
+      "count": 25,
+      "model": "gpt-oss-20b",
+      "description": "Wide research and parallel processing agents",
+      "capabilities": [
+        "parallel_processing",
+        "data_analysis",
+        "information_synthesis",
+        "research_coordination",
+        "task_distribution"
+      ],
+      "max_concurrent_tasks": 5,
+      "priority_range": [5, 8],
+      "specializations": [
+        "data_processing",
+        "research_analysis",
+        "information_gathering",
+        "parallel_execution",
+        "result_synthesis",
+        "wide_research",
+        "market_analysis",
+        "competitive_intelligence"
+      ]
+    },
+    "tier3_specialized": {
+      "count": 15,
+      "model": "qwen2.5:72b",
+      "description": "Specialized domain experts for specific technical areas",
+      "capabilities": [
+        "domain_expertise",
+        "technical_analysis",
+        "specialized_processing",
+        "quality_assurance",
+        "validation"
+      ],
+      "max_concurrent_tasks": 2,
+      "priority_range": [6, 9],
+      "specializations": [
+        "technical_analysis",
+        "security_assessment",
+        "performance_optimization",
+        "code_review",
+        "system_integration",
+        "trading_systems",
+        "financial_analysis",
+        "risk_management",
+        "compliance_validation",
+        "quality_assurance"
+      ]
+    }
+  },
+  "coordination_settings": {
+    "max_parallel_tasks": 50,
+    "task_timeout_seconds": 300,
+    "result_synthesis_timeout": 60,
+    "agent_selection_algorithm": "weighted_performance",
+    "load_balancing": "dynamic",
+    "failure_recovery": "automatic_retry"
+  },
+  "performance_metrics": {
+    "target_response_time": 5.0,
+    "max_queue_size": 100,
+    "agent_performance_threshold": 0.75,
+    "system_availability_target": 0.99
+  },
+  "wide_research_config": {
+    "default_max_agents": 100,
+    "research_aspects": [
+      "market_analysis",
+      "technical_analysis", 
+      "competitive_intelligence",
+      "risk_assessment",
+      "innovation_opportunities"
+    ],
+    "parallel_execution_limit": 20,
+    "result_synthesis_agents": 5,
+    "quality_validation_agents": 3
+  },
+  "agent_specialization_matrix": {
+    "trading_systems": ["tier2_processing", "tier3_specialized"],
+    "research_analysis": ["tier2_processing"],
+    "strategic_planning": ["tier1_reasoning"],
+    "technical_implementation": ["tier3_specialized"],
+    "quality_assurance": ["tier3_specialized"],
+    "performance_optimization": ["tier1_reasoning", "tier3_specialized"],
+    "risk_management": ["tier1_reasoning", "tier3_specialized"],
+    "data_analysis": ["tier2_processing"],
+    "system_architecture": ["tier1_reasoning"],
+    "compliance": ["tier3_specialized"]
+  }
+}

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>DT Scanner Support</title>
+    <title>DT Guardian Plans and Support</title>
     <link rel="stylesheet" href="assets/styles.css">
   </head>
   <body>
@@ -12,20 +12,39 @@
         <div class="hero-top">
           <img class="hero-logo" src="assets/lion_icon.png" alt="DT Scanner Lion Icon">
           <div>
-            <h1>DT Scanner Support Center</h1>
+            <h1>DT Guardian Plans and Support Center</h1>
             <p>
-              DT Scanner (Detect Treat) is currently free to use. Donations are optional
-              support only and do not unlock digital app features.
+              DT Guardian (Detect Treat) includes a 7-day free trial, then either limited free access
+              or opt-in paid plans: weekly, monthly, or yearly (12 months for the price of 10).
             </p>
           </div>
         </div>
         <nav class="nav">
-          <a href="index.html">Support + Donations</a>
+          <a href="index.html">Plans + Support</a>
           <a href="privacy.html">Privacy Policy</a>
           <a href="terms.html">Terms of Use</a>
           <a href="patreon-startup.html">Patreon Setup Guide</a>
         </nav>
       </header>
+
+      <section class="section legal">
+        <h2>Subscription Plans (Region-Based)</h2>
+        <ul>
+          <li>Free trial: 7 days</li>
+          <li>Free tier after trial: limited records, queue actions, and daily breach scans</li>
+          <li>Base monthly target: $2.73 (USD benchmark)</li>
+          <li>Weekly and yearly are derived per region from the local monthly amount.</li>
+          <li>Yearly always keeps 12 months of service for the price of 10 months.</li>
+        </ul>
+        <p class="small-note">
+          Pricing target is set to 15% below the average monthly price of selected top competitors
+          (Bitwarden, 1Password, Dashlane) using publicly listed plan references. Final displayed
+          and charged amounts vary by region and local currency.
+        </p>
+        <p class="small-note">
+          Regional policies currently configured: US, UK, EU, AU, CA, SG, JP, TH, and PH.
+        </p>
+      </section>
 
       <section class="section">
         <h2>Support Contact</h2>
@@ -37,10 +56,59 @@
       </section>
 
       <section class="section">
-        <h2>Donation Channels</h2>
+        <h2>Customer Feedback Loop</h2>
         <p class="small-note">
-          Each channel includes a direct link and QR code. Replace placeholder links with your real account links
-          as you activate each provider.
+          Submit feature requests, file problem reports, or use the AI hotline chat. Tickets are queued and addressed in FIFO order.
+          If the support hub is temporarily offline, this page stores requests locally and retries them in order when service returns.
+        </p>
+
+        <div class="feedback-grid">
+          <article class="feedback-card">
+            <h3>Request a Feature</h3>
+            <form id="featureForm" class="support-form">
+              <label for="featureTitle">Feature title</label>
+              <input id="featureTitle" name="title" required maxlength="120" placeholder="Example: Add per-owner dashboard filter">
+              <label for="featureDetails">Requested behavior</label>
+              <textarea id="featureDetails" name="details" required placeholder="What should happen, and why does it help?"></textarea>
+              <label for="featureEmail">Email (optional)</label>
+              <input id="featureEmail" name="email" type="email" placeholder="name@example.com">
+              <button type="submit">Submit Feature Request</button>
+              <div id="featureResultLabel" class="support-status"></div>
+            </form>
+          </article>
+
+          <article class="feedback-card">
+            <h3>Report a Problem</h3>
+            <form id="problemForm" class="support-form">
+              <label for="problemTitle">Problem title</label>
+              <input id="problemTitle" name="title" required maxlength="120" placeholder="Example: Overlay button does not open target URL">
+              <label for="problemDetails">Issue details</label>
+              <textarea id="problemDetails" name="details" required placeholder="Include device model, app version, and exact reproduction steps."></textarea>
+              <label for="problemEmail">Email (optional)</label>
+              <input id="problemEmail" name="email" type="email" placeholder="name@example.com">
+              <button type="submit">Submit Problem Report</button>
+              <div id="problemResultLabel" class="support-status"></div>
+            </form>
+          </article>
+        </div>
+
+        <article class="feedback-card" style="margin-top: 12px;">
+          <h3>AI Hotline Chat</h3>
+          <div id="chatLog" class="chat-log"></div>
+          <form id="chatForm" class="support-form" style="margin-top: 8px;">
+            <label for="chatMessage">Message</label>
+            <textarea id="chatMessage" name="message" required placeholder="Describe your issue or ask for guidance."></textarea>
+            <button type="submit">Send to Support AI</button>
+          </form>
+          <div id="supportHealthLabel" class="support-status">Support hub status: checking...</div>
+          <div id="pendingQueueLabel" class="support-status"></div>
+        </article>
+      </section>
+
+      <section class="section">
+        <h2>Community Support Channels (Optional)</h2>
+        <p class="small-note">
+          Optional support links remain available. Subscription access is handled via official in-app/store billing.
         </p>
         <div class="channel-list" id="channelList"></div>
       </section>
@@ -48,9 +116,10 @@
       <section class="section legal">
         <h2>Monetization Policy (Current)</h2>
         <ul>
-          <li>Version 1: App is free. Donations are optional support only.</li>
-          <li>No feature unlocks from donations in version 1.</li>
-          <li>Future paid features (version 2+) will use official in-app purchase channels.</li>
+          <li>7-day free trial is available to every new user.</li>
+          <li>After trial, users can remain on a limited free tier or opt in to weekly, monthly, or yearly subscription plans.</li>
+          <li>Yearly plan always keeps the 12-for-10-month pricing rule.</li>
+          <li>Optional donations are support-only and do not replace subscription billing.</li>
         </ul>
       </section>
 
@@ -70,6 +139,15 @@
     </div>
 
     <script>
+      const SUPPORT_API_BASE = window.DT_SUPPORT_API_BASE || (
+        window.location.origin.startsWith("http") ? window.location.origin : "http://localhost:8787"
+      );
+      const SUPPORT_QUEUE_KEY = "dt_support_pending_queue_v1";
+      const SUPPORT_SESSION_KEY = "dt_support_chat_session_v1";
+      const SUPPORT_URL_PARAMS = new URLSearchParams(window.location.search || "");
+      const SUPPORT_TIER = (SUPPORT_URL_PARAMS.get("tier") || "unknown").toLowerCase();
+      const AI_HOTLINE_ENABLED = SUPPORT_URL_PARAMS.get("ai_hotline") !== "0";
+
       const channels = [
         {
           name: "PayPal",
@@ -129,6 +207,203 @@
         }
       ];
 
+      function sanitizeClientText(value, maxChars = 2000) {
+        let text = (value || "").trim().slice(0, maxChars);
+        text = text.replace(/\b(password|pass|pwd|token|api[_-]?key|secret)\b\s*[:=]\s*([^\s,;]+)/gi, "$1=[REDACTED]");
+        text = text.replace(/\b(my password is|password is)\s+([^\s,;]+)/gi, "$1 [REDACTED]");
+        text = text.replace(/\b[A-Za-z0-9_\-]{28,}\b/g, "[REDACTED_TOKEN]");
+        return text;
+      }
+
+      function getOrCreateSessionId() {
+        const existing = localStorage.getItem(SUPPORT_SESSION_KEY);
+        if (existing) return existing;
+        const generated = `sess-${Math.random().toString(16).slice(2, 14)}`;
+        localStorage.setItem(SUPPORT_SESSION_KEY, generated);
+        return generated;
+      }
+
+      function loadPendingQueue() {
+        try {
+          const raw = localStorage.getItem(SUPPORT_QUEUE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function savePendingQueue(items) {
+        localStorage.setItem(SUPPORT_QUEUE_KEY, JSON.stringify(items));
+      }
+
+      function updatePendingQueueLabel() {
+        const pending = loadPendingQueue().length;
+        const label = document.getElementById("pendingQueueLabel");
+        label.textContent = pending > 0
+          ? `Pending local queue: ${pending} item(s) waiting for support hub reconnect.`
+          : "Pending local queue: 0";
+      }
+
+      async function apiPost(path, payload) {
+        const response = await fetch(`${SUPPORT_API_BASE}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function apiGet(path) {
+        const response = await fetch(`${SUPPORT_API_BASE}${path}`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function enqueueAndFlush(path, payload) {
+        const queue = loadPendingQueue();
+        queue.push({
+          path,
+          payload,
+          queuedAt: new Date().toISOString()
+        });
+        savePendingQueue(queue);
+        updatePendingQueueLabel();
+        return flushPendingQueue();
+      }
+
+      async function flushPendingQueue() {
+        const queue = loadPendingQueue();
+        if (!queue.length) return { sent: 0, remaining: 0, lastResponse: null };
+
+        const nextQueue = [];
+        let sent = 0;
+        let lastResponse = null;
+
+        for (let index = 0; index < queue.length; index += 1) {
+          const item = queue[index];
+          try {
+            lastResponse = await apiPost(item.path, item.payload);
+            sent += 1;
+          } catch {
+            nextQueue.push(...queue.slice(index));
+            break;
+          }
+        }
+
+        savePendingQueue(nextQueue);
+        updatePendingQueueLabel();
+        return { sent, remaining: nextQueue.length, lastResponse };
+      }
+
+      function appendChat(role, text) {
+        const log = document.getElementById("chatLog");
+        const item = document.createElement("div");
+        item.className = `chat-entry ${role === "user" ? "chat-user" : role === "ai" ? "chat-ai" : "chat-system"}`;
+        item.textContent = text;
+        log.appendChild(item);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function setResultLabel(elementId, text) {
+        const node = document.getElementById(elementId);
+        node.textContent = text;
+      }
+
+      async function submitTicketForm(formId, endpoint, resultLabelId) {
+        const form = document.getElementById(formId);
+        const title = sanitizeClientText(form.title.value, 120);
+        const details = sanitizeClientText(form.details.value, 2000);
+        const email = sanitizeClientText(form.email.value || "", 120);
+
+        if (!title || !details) {
+          setResultLabel(resultLabelId, "Title and details are required.");
+          return;
+        }
+
+        const payload = {
+          title,
+          details,
+          email,
+          source: "support_web",
+          client: navigator.userAgent
+        };
+
+        const flush = await enqueueAndFlush(endpoint, payload);
+        if (flush.sent > 0 && flush.lastResponse && flush.lastResponse.ticket) {
+          setResultLabel(resultLabelId, `Submitted. Ticket ID: ${flush.lastResponse.ticket.ticket_id}`);
+          form.reset();
+          return;
+        }
+        setResultLabel(resultLabelId, "Support hub offline. Saved locally; it will auto-submit in order when online.");
+      }
+
+      async function sendChatMessage() {
+        if (!AI_HOTLINE_ENABLED) {
+          appendChat("system", "AI hotline is available on paid tiers. Submit a feature/problem ticket for support.");
+          return;
+        }
+
+        const form = document.getElementById("chatForm");
+        const messageField = document.getElementById("chatMessage");
+        const message = sanitizeClientText(messageField.value, 2000);
+        if (!message) return;
+
+        appendChat("user", message);
+        messageField.value = "";
+
+        try {
+          const response = await apiPost("/api/support/chat", {
+            session_id: getOrCreateSessionId(),
+            message,
+            source: "support_web",
+            region: Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown"
+          });
+          appendChat("ai", response.reply || "No reply received.");
+          if (response.ticket_id) {
+            appendChat("system", `Auto-created ticket: ${response.ticket_id}`);
+          }
+        } catch {
+          appendChat("system", "Support hub is currently offline. Please submit a problem report ticket.");
+        }
+      }
+
+      async function refreshSupportHealth() {
+        const label = document.getElementById("supportHealthLabel");
+        try {
+          const health = await apiGet("/api/support/health");
+          const aiStatus = AI_HOTLINE_ENABLED
+            ? (health.ai_enabled ? "enabled" : "fallback mode")
+            : "locked on current tier";
+          label.textContent = `Support hub: online | pending tickets: ${health.pending_tickets} | AI: ${aiStatus} | tier: ${SUPPORT_TIER}`;
+          await flushPendingQueue();
+        } catch {
+          label.textContent = "Support hub: offline. Local ticket queue is active and will retry automatically.";
+        }
+      }
+
+      function configureChatAccess() {
+        if (AI_HOTLINE_ENABLED) {
+          return;
+        }
+        const input = document.getElementById("chatMessage");
+        const button = document.querySelector("#chatForm button[type='submit']");
+        if (input) {
+          input.value = "";
+          input.disabled = true;
+          input.placeholder = "AI hotline locked on free tier. Use tickets below.";
+        }
+        if (button) {
+          button.disabled = true;
+        }
+      }
+
       function qrUrl(value) {
         return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(value)}`;
       }
@@ -147,30 +422,59 @@
         return "Scan to open link";
       }
 
-      const channelList = document.getElementById("channelList");
+      function renderChannels() {
+        const channelList = document.getElementById("channelList");
+        channels.forEach((channel) => {
+          const card = document.createElement("article");
+          card.className = "channel-card";
 
-      channels.forEach((channel) => {
-        const card = document.createElement("article");
-        card.className = "channel-card";
+          const statusClass = channel.status === "active" ? "status-pill status-active" : "status-pill";
+          card.innerHTML = `
+            <div>
+              <h3>${channel.name}</h3>
+              <p>${channel.description}</p>
+              <span class="${statusClass}">${channel.statusLabel}</span><br>
+              <a class="channel-cta" href="${channel.url}" target="_blank" rel="noopener noreferrer">Open ${channel.name} link</a>
+              <p class="small-note">URL: <code>${channel.url}</code></p>
+            </div>
+            <div class="qr-box">
+              <img src="${resolveQrImage(channel)}" alt="${channel.name} QR code">
+              <div class="qr-caption">${qrCaption(channel)}</div>
+            </div>
+          `;
+          channelList.appendChild(card);
+        });
+      }
 
-        const statusClass = channel.status === "active" ? "status-pill status-active" : "status-pill";
+      function wireFeedbackForms() {
+        document.getElementById("featureForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          await submitTicketForm("featureForm", "/api/support/feature-request", "featureResultLabel");
+        });
 
-        card.innerHTML = `
-          <div>
-            <h3>${channel.name}</h3>
-            <p>${channel.description}</p>
-            <span class="${statusClass}">${channel.statusLabel}</span><br>
-            <a class="channel-cta" href="${channel.url}" target="_blank" rel="noopener noreferrer">Open ${channel.name} link</a>
-            <p class="small-note">URL: <code>${channel.url}</code></p>
-          </div>
-          <div class="qr-box">
-            <img src="${resolveQrImage(channel)}" alt="${channel.name} QR code">
-            <div class="qr-caption">${qrCaption(channel)}</div>
-          </div>
-        `;
+        document.getElementById("problemForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          await submitTicketForm("problemForm", "/api/support/problem-report", "problemResultLabel");
+        });
 
-        channelList.appendChild(card);
-      });
+        document.getElementById("chatForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          await sendChatMessage();
+        });
+      }
+
+      renderChannels();
+      configureChatAccess();
+      wireFeedbackForms();
+      updatePendingQueueLabel();
+      appendChat(
+        "system",
+        AI_HOTLINE_ENABLED
+          ? "AI hotline ready. For ticket creation from chat, mention 'feature request' or 'problem report'."
+          : "AI hotline is locked on this tier. Use feature/problem ticket forms and queue submission will retry if offline."
+      );
+      refreshSupportHealth();
+      setInterval(refreshSupportHealth, 30000);
     </script>
   </body>
 </html>

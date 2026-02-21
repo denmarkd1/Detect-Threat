@@ -1,0 +1,39 @@
+{
+  "default_mode": "council",
+  "council_confidence_floor": "high",
+  "todo_escalation_threshold": 4,
+  "auto_escalate_triggers": [
+    "AUTO_MANUS",
+    "WIDE_RESEARCH",
+    "50_AGENT_SYSTEM",
+    "MANUS_WIDE_RESEARCH",
+    "BREACH_RESPONSE",
+    "ACCOUNT_TAKEOVER",
+    "COOKIE_THEFT"
+  ],
+  "council_logging": true,
+  "clarification_confidence_floor": "high",
+  "manual_override_mode": "local_only",
+  "workflow": {
+    "memory_first": true,
+    "code_review_first_for_reviews": true,
+    "dt_autorun_if_available": true
+  },
+  "security_constraints": {
+    "defensive_only": true,
+    "no_destructive_actions": true,
+    "no_offensive_capabilities": true,
+    "require_explicit_confirmation_for_destructive_account_actions": true
+  },
+  "quality_gates": {
+    "require_scan_logs": true,
+    "require_alert_traceability": true,
+    "require_baseline_diffs": true
+  },
+  "logging_policy": {
+    "watchdog_logs_dir": "logs/",
+    "watchdog_alerts_dir": "alerts/",
+    "watchdog_state_dir": "state/"
+  },
+  "notes": "Unified security workspace policy: escalate early on breach/takeover indicators, keep credential handling local, enforce defensive-only Android watchdog scanning, and require confirmation for destructive account actions."
+}

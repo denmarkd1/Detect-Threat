@@ -1,0 +1,11 @@
+tools/android/platform-tools/
+tools/android/platform-tools-latest-linux.zip
+tools/android-sdk/
+tools/jdk/
+tools/gradle/
+state/*.json
+alerts/*.md
+logs/*.log
+android-watchdog/.gradle/
+android-watchdog/app/build/
+android-watchdog/local.properties

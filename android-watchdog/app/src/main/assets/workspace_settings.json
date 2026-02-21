@@ -1,0 +1,210 @@
+{
+  "owners": [
+    {
+      "id": "parent",
+      "full_name": "Daniel Denmark",
+      "display_name": "Danicous",
+      "email_patterns": [
+        "danieldenmark71@gmail.com",
+        "danieldenmark@live.com",
+        "danieldenmark15@gmail.com",
+        "danieldenmark08@gmail.com",
+        "danieldenmark1571@gmail.com"
+      ]
+    },
+    {
+      "id": "son",
+      "display_name": "Son",
+      "email_patterns": []
+    }
+  ],
+  "priority_categories": [
+    "email",
+    "banking",
+    "social",
+    "developer",
+    "other"
+  ],
+  "require_confirm_before_delete": true,
+  "allow_online_breach_checks": true,
+  "auto_queue_rotation_when_compromised": false,
+  "systems": {
+    "D_T_System": {
+      "src": "systems.D_T_System.src",
+      "dt_autorun_if_available": true
+    }
+  },
+  "pricing": {
+    "currency": "USD",
+    "free_trial_days": 7,
+    "target_discount_vs_competitor_avg_percent": 15.0,
+    "competitor_average_monthly_usd": 3.21,
+    "competitor_reference": [
+      {
+        "name": "Bitwarden",
+        "monthly_usd": 1.65,
+        "source_url": "https://bitwarden.com/pricing/",
+        "observed_at": "2026-02-21"
+      },
+      {
+        "name": "1Password",
+        "monthly_usd": 2.99,
+        "source_url": "https://start.1password.com/sign-up/family?currency=USD",
+        "observed_at": "2026-02-21"
+      },
+      {
+        "name": "Dashlane",
+        "monthly_usd": 4.99,
+        "source_url": "https://support.dashlane.com/hc/en-us/articles/25851560554258-How-a-plan-change-affects-your-invoice",
+        "observed_at": "2026-02-21"
+      }
+    ],
+    "plans": {
+      "weekly_usd": 0.63,
+      "monthly_usd": 2.73,
+      "yearly_usd": 27.3,
+      "yearly_months_charged": 10
+    },
+    "referral_offer": {
+      "enabled": true,
+      "recommend_discount_percent": 10.0,
+      "requires_recommendation": true
+    },
+    "feature_access": {
+      "free": {
+        "credential_records_limit": 40,
+        "queue_actions_limit": 5,
+        "breach_scans_per_day": 2,
+        "continuous_scan_enabled": false,
+        "overlay_assistant_enabled": false,
+        "rotation_queue_enabled": true,
+        "ai_hotline_enabled": false
+      },
+      "paid": {
+        "credential_records_limit": -1,
+        "queue_actions_limit": -1,
+        "breach_scans_per_day": -1,
+        "continuous_scan_enabled": true,
+        "overlay_assistant_enabled": true,
+        "rotation_queue_enabled": true,
+        "ai_hotline_enabled": true
+      }
+    },
+    "lifetime_pro": {
+      "enabled": true,
+      "allowlisted_android_id_sha256": [
+        "c26a2c2552781fe958e7ebdb9d7ab798bd25d1b08f70014f5e8cfdb8ecd87e8a"
+      ]
+    },
+    "regional_pricing": [
+      {
+        "region": "US",
+        "label": "United States",
+        "currency": "USD",
+        "usd_to_local_rate": 1.0,
+        "affordability_factor": 1.0
+      },
+      {
+        "region": "GB",
+        "label": "United Kingdom",
+        "currency": "GBP",
+        "usd_to_local_rate": 0.79,
+        "affordability_factor": 1.2
+      },
+      {
+        "region": "TH",
+        "label": "Thailand",
+        "currency": "THB",
+        "usd_to_local_rate": 35.8,
+        "affordability_factor": 0.55
+      },
+      {
+        "region": "PH",
+        "label": "Philippines",
+        "currency": "PHP",
+        "usd_to_local_rate": 56.0,
+        "affordability_factor": 0.6
+      },
+      {
+        "region": "EU",
+        "label": "European Union",
+        "currency": "EUR",
+        "usd_to_local_rate": 0.92,
+        "affordability_factor": 1.05,
+        "countries": [
+          "AT",
+          "BE",
+          "BG",
+          "CY",
+          "CZ",
+          "DE",
+          "DK",
+          "EE",
+          "ES",
+          "FI",
+          "FR",
+          "GR",
+          "HR",
+          "HU",
+          "IE",
+          "IT",
+          "LT",
+          "LU",
+          "LV",
+          "MT",
+          "NL",
+          "PL",
+          "PT",
+          "RO",
+          "SE",
+          "SI",
+          "SK"
+        ]
+      },
+      {
+        "region": "AU",
+        "label": "Australia",
+        "currency": "AUD",
+        "usd_to_local_rate": 1.53,
+        "affordability_factor": 1.05
+      },
+      {
+        "region": "CA",
+        "label": "Canada",
+        "currency": "CAD",
+        "usd_to_local_rate": 1.36,
+        "affordability_factor": 1.03
+      },
+      {
+        "region": "SG",
+        "label": "Singapore",
+        "currency": "SGD",
+        "usd_to_local_rate": 1.35,
+        "affordability_factor": 1.02
+      },
+      {
+        "region": "JP",
+        "label": "Japan",
+        "currency": "JPY",
+        "usd_to_local_rate": 150.0,
+        "affordability_factor": 0.95
+      }
+    ]
+  },
+  "watchdog": {
+    "enable_windows_mount_scan_on_linux": true,
+    "windows_mount_candidates": [
+      "/mnt",
+      "/media"
+    ],
+    "windows_user_hints": [],
+    "windows_profiles": [],
+    "heartbeat_interval_seconds": 60
+  },
+  "support": {
+    "api_base_url": "http://127.0.0.1:8787",
+    "feedback": {
+      "create_ticket_for_feedback": true
+    }
+  }
+}

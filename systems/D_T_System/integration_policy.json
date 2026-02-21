@@ -1,0 +1,15 @@
+{
+  "default_mode": "council",
+  "council_confidence_floor": "high",
+  "todo_escalation_threshold": 6,
+  "auto_escalate_triggers": [
+    "AUTO_MANUS",
+    "WIDE_RESEARCH",
+    "50_AGENT_SYSTEM",
+    "MANUS_WIDE_RESEARCH"
+  ],
+  "council_logging": true,
+  "clarification_confidence_floor": "moderate",
+  "manual_override_mode": "local_only",
+  "notes": "Policy tuned for ERCODA: keep work local unless confidence drops below 'high' or specific triggers fire."
+}

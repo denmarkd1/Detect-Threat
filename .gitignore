@@ -1,0 +1,46 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Workspace security data
+data/vault.enc
+data/vault_meta.json
+data/action_queue.json
+data/local_breach_cache.json
+data/session_journal.jsonl
+data/runtime_watchdog_status.json
+imports/*.csv
+
+# Android watchdog local tooling and build artifacts
+tools/android/platform-tools/
+tools/android/platform-tools-latest-linux.zip
+tools/android-sdk/
+tools/jdk/
+tools/gradle/
+state/*.json
+alerts/*.md
+logs/*.log
+android-watchdog/.gradle/
+android-watchdog/app/build/
+android-watchdog/local.properties
+
+# Local support runtime state/logs (contains user feedback/ticket records)
+state/support/*.json
+logs/support/*.jsonl
+
+# D_T runtime artifacts and local install logs
+D_T_System/bootstrap_install.log
+D_T_System/.dt_satellite_installed
+D_T_System/profiles/*/runtime/
+systems/D_T_System/data/
+systems/D_T_System/logs/
+systems/D_T_System/resolutions/
+systems/D_T_System/phase_tracking/phase_progress.json
+
+# Local GitHub CLI bundle
+tools/gh/

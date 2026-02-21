@@ -1,0 +1,15 @@
+{
+  "name": "manus_wide_research",
+  "description": "Parallel wide-research orchestration with Manus-inspired agent swarms.",
+  "entry_point": "hub_profiles.manus_wide_research.src:create_orchestrator",
+  "required_modules": [
+    "orchestrator.py",
+    "swarm_manager.py",
+    "prompt_registry.py"
+  ],
+  "prompts": [
+    "prompts/wide_research_base.md"
+  ],
+  "data_paths": [],
+  "additional_paths": []
+}

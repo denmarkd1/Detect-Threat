@@ -1,0 +1,61 @@
+{
+  "hub_path": "AUTO_DETECT",
+  "workspace_name": "security",
+  "workspace_path": "/home/danicous/security",
+  "category": "cybersecurity",
+  "auto_route": true,
+  "capabilities": [
+    "credential_defense",
+    "breach_triage",
+    "password_rotation",
+    "account_lifecycle_management",
+    "family_workspace_guardrails",
+    "phishing_cookie_hardening",
+    "android_watchdog",
+    "adb_device_scan",
+    "stalkerware_indicator_detection",
+    "android_security_configuration_audit",
+    "scan_alerting"
+  ],
+  "metadata": {
+    "workspace_objective": "Protect family credentials and Android device posture with local-first defensive workflows",
+    "primary_owners": [
+      "parent",
+      "son",
+      "Realyn"
+    ],
+    "sensitivity": "high",
+    "automation_mode": "human_confirmed_high_impact_actions",
+    "default_priority_order": [
+      "email",
+      "banking",
+      "social",
+      "developer",
+      "other"
+    ],
+    "offline_password_handling": true,
+    "requires_explicit_delete_confirmation": true,
+    "integrated_modules": [
+      "credential_defense",
+      "android_watchdog",
+      "support_docs"
+    ],
+    "android_scope": {
+      "platform": "android",
+      "connection_mode": [
+        "adb_usb",
+        "adb_wifi_optional"
+      ],
+      "root_required": false
+    },
+    "merge_history": {
+      "source_workspace": "/home/danicous/Realyn Phone",
+      "merged_on": "2026-02-20",
+      "merge_mode": "flattened_conflict_safe"
+    }
+  },
+  "required_profiles": [
+    "manus_wide_research"
+  ],
+  "last_bootstrap": "2026-02-15T04:38:50.908448Z"
+}

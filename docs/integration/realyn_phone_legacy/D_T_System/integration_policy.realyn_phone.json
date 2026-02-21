@@ -1,0 +1,18 @@
+{
+  "workflow": {
+    "memory_first": true,
+    "code_review_first_for_reviews": true,
+    "dt_autorun_if_available": true
+  },
+  "security_constraints": {
+    "defensive_only": true,
+    "no_destructive_actions": true,
+    "no_offensive_capabilities": true
+  },
+  "quality_gates": {
+    "require_scan_logs": true,
+    "require_alert_traceability": true,
+    "require_baseline_diffs": true
+  }
+}
+

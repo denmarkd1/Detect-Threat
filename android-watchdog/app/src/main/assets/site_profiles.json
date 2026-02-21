@@ -1,0 +1,93 @@
+{
+  "profiles": {
+    "google.com": {
+      "change_password_url": "https://myaccount.google.com/signinoptions/password",
+      "delete_account_url": "https://myaccount.google.com/delete-services-or-account",
+      "password_policy": {
+        "min_length": 12,
+        "max_length": 100,
+        "preferred_length": 20,
+        "require_lower": true,
+        "require_upper": true,
+        "require_digit": true,
+        "require_symbol": true,
+        "allow_lower": true,
+        "allow_upper": true,
+        "allow_digit": true,
+        "allow_symbol": true,
+        "allowed_symbols": "!@#$%^&*_-+=?",
+        "start_with_letter": true,
+        "max_consecutive_identical": 2
+      },
+      "automation": {
+        "enabled": false,
+        "selectors": {
+          "current_password": "input[type='password'][name='Passwd']",
+          "new_password": "input[type='password'][name='password']",
+          "confirm_password": "input[type='password'][name='confirmation_password']",
+          "submit_button": "button[type='submit']",
+          "delete_confirm_button": "button[type='submit']"
+        }
+      }
+    },
+    "facebook.com": {
+      "change_password_url": "https://www.facebook.com/settings?tab=security",
+      "delete_account_url": "https://www.facebook.com/help/delete_account",
+      "password_policy": {
+        "min_length": 12,
+        "max_length": 64,
+        "preferred_length": 18,
+        "require_lower": true,
+        "require_upper": true,
+        "require_digit": true,
+        "require_symbol": true,
+        "allow_lower": true,
+        "allow_upper": true,
+        "allow_digit": true,
+        "allow_symbol": true,
+        "allowed_symbols": "!@#$%^&*_-+=?",
+        "start_with_letter": true,
+        "max_consecutive_identical": 2
+      },
+      "automation": {
+        "enabled": false,
+        "selectors": {
+          "new_password": "",
+          "confirm_password": "",
+          "submit_button": "",
+          "delete_confirm_button": ""
+        }
+      }
+    },
+    "github.com": {
+      "change_password_url": "https://github.com/settings/security",
+      "delete_account_url": "https://github.com/settings/admin",
+      "password_policy": {
+        "min_length": 15,
+        "max_length": 128,
+        "preferred_length": 24,
+        "require_lower": true,
+        "require_upper": true,
+        "require_digit": true,
+        "require_symbol": true,
+        "allow_lower": true,
+        "allow_upper": true,
+        "allow_digit": true,
+        "allow_symbol": true,
+        "allowed_symbols": "!@#$%^&*_-+=?",
+        "start_with_letter": true,
+        "max_consecutive_identical": 2
+      },
+      "automation": {
+        "enabled": false,
+        "selectors": {
+          "current_password": "input#password",
+          "new_password": "input#new_password",
+          "confirm_password": "input#confirm_password",
+          "submit_button": "button[type='submit']",
+          "delete_confirm_button": "button[type='submit']"
+        }
+      }
+    }
+  }
+}

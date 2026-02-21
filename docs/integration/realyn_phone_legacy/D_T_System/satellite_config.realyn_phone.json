@@ -1,0 +1,21 @@
+{
+  "satellite_id": "realyn-phone",
+  "workspace_path": "/home/danicous/Realyn Phone",
+  "classification": "defensive-security",
+  "owner": "Realyn",
+  "created_on": "2026-02-19",
+  "components": [
+    "android-communications",
+    "android-watchdog",
+    "alerting"
+  ],
+  "device_scope": {
+    "platform": "android",
+    "connection_mode": [
+      "adb_usb",
+      "adb_wifi_optional"
+    ],
+    "root_required": false
+  }
+}
+

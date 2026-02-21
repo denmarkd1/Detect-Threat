@@ -1,0 +1,5 @@
+{
+  "inline_prompts": {
+    "guidance_wrapper": "Additional operator guidance: {guidance}\n\nIncorporate this guidance into your research plan before executing any actions."
+  }
+}

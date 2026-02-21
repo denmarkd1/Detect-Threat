@@ -11,8 +11,8 @@ Repository target: `https://github.com/denmarkd1/Detect-Threat`
 6. Open `https://denmarkd1.github.io/Detect-Threat/`.
 
 ## Files
-- `docs/index.html`: support + donation links + QR layout
+- `docs/index.html`: pricing plans, embedded feedback loop (feature/problem tickets), AI hotline chat widget, and optional donation channels
 - `docs/privacy.html`: privacy policy
 - `docs/terms.html`: terms of use
 - `docs/patreon-startup.html`: Patreon setup walkthrough
-
+- `docs/integration/play_release_rollout_checklist_2026-02-21.md`: release signing and Play Store rollout runbook

@@ -1,0 +1,10 @@
+{
+  "max_total": 50,
+  "default": 5,
+  "roles": {
+    "reasoning": 5,
+    "wide_research": 40,
+    "specialized": 10,
+    "general": 5
+  }
+}

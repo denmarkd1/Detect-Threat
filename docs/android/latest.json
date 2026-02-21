@@ -1,0 +1,6 @@
+{
+  "latestVersionCode": 1,
+  "latestVersionName": "1.0.0",
+  "downloadUrl": "https://denmarkd1.github.io/Detect-Threat/releases",
+  "releaseNotes": "Initial merged Android release with watchdog + credential defense center + overlay assistant."
+}
