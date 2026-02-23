@@ -1,6 +1,7 @@
 package com.realyn.watchdog
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.provider.Settings
 import org.json.JSONArray
 import org.json.JSONObject
@@ -120,6 +121,14 @@ data class EntitlementStatus(
     val source: String
 )
 
+data class VerifiedPaidPlanStatus(
+    val planId: String,
+    val source: String,
+    val verifiedAtEpochMs: Long,
+    val renewalAnchorEpochMs: Long,
+    val expiresAtEpochMs: Long
+)
+
 data class ResolvedFeatureAccess(
     val tierCode: String,
     val paidAccess: Boolean,
@@ -165,6 +174,11 @@ object PricingPolicy {
     private const val KEY_TRIAL_STARTED_AT = "pricing_trial_started_at_epoch_ms"
     private const val KEY_SELECTED_PLAN = "pricing_selected_plan"
     private const val KEY_SELECTED_PLAN_AT = "pricing_selected_plan_at_epoch_ms"
+    private const val KEY_VERIFIED_PLAN_ID = "pricing_verified_plan_id"
+    private const val KEY_VERIFIED_PLAN_SOURCE = "pricing_verified_plan_source"
+    private const val KEY_VERIFIED_PLAN_VERIFIED_AT = "pricing_verified_plan_verified_at_epoch_ms"
+    private const val KEY_VERIFIED_PLAN_ANCHOR_AT = "pricing_verified_plan_anchor_at_epoch_ms"
+    private const val KEY_VERIFIED_PLAN_EXPIRES_AT = "pricing_verified_plan_expires_at_epoch_ms"
     private const val KEY_LIFETIME_PRO = "pricing_lifetime_pro_enabled"
     private const val KEY_LIFETIME_PRO_SOURCE = "pricing_lifetime_pro_source"
     private const val KEY_FEEDBACK_PERFORMANCE_RATING = "pricing_feedback_performance_rating"
@@ -175,10 +189,22 @@ object PricingPolicy {
     private const val LIFETIME_SOURCE_NONE = "none"
     private const val LIFETIME_SOURCE_MANUAL = "manual"
     private const val LIFETIME_SOURCE_ALLOWLIST = "device_allowlist"
+    private const val LIFETIME_SOURCE_PLAY_BILLING = "play_billing"
+    private const val LIFETIME_SOURCE_DEBUG = "debug_auto"
+    private const val VERIFIED_SOURCE_NONE = "none"
+    private const val VERIFIED_SOURCE_PLAY_BILLING = "play_billing"
+    private const val VERIFIED_SOURCE_MANUAL = "manual"
+    private const val PLAN_NONE = "none"
+    private const val PLAN_WEEKLY = "weekly"
+    private const val PLAN_MONTHLY = "monthly"
+    private const val PLAN_YEARLY = "yearly"
+    private const val PLAN_FAMILY = "family"
+    private const val PLAN_LIFETIME = "lifetime"
     private const val ROLE_PARENT = "parent"
     private const val ROLE_CHILD = "child"
     private const val ROLE_FAMILY_SINGLE = "family_single"
     private const val DAY_MS = 24L * 60L * 60L * 1000L
+    private const val VERIFIED_PLAN_STALE_AFTER_MS = 45L * DAY_MS
 
     private val defaultCompetitors = listOf(
         CompetitorPricePoint(
@@ -494,6 +520,19 @@ object PricingPolicy {
     }
 
     fun entitlement(context: Context): EntitlementStatus {
+        val isDebuggableBuild =
+            (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (isDebuggableBuild) {
+            val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean(KEY_LIFETIME_PRO, true)
+                .putString(KEY_LIFETIME_PRO_SOURCE, LIFETIME_SOURCE_DEBUG)
+                .apply()
+            return EntitlementStatus(
+                isLifetimePro = true,
+                source = LIFETIME_SOURCE_DEBUG
+            )
+        }
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
         val persistedLifetime = prefs.getBoolean(KEY_LIFETIME_PRO, false)
         if (persistedLifetime) {
@@ -521,16 +560,92 @@ object PricingPolicy {
         )
     }
 
+    fun verifiedPaidPlan(
+        context: Context,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): VerifiedPaidPlanStatus? {
+        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
+        val planId = normalizeSubscriptionPlanId(
+            prefs.getString(KEY_VERIFIED_PLAN_ID, PLAN_NONE).orEmpty()
+        )
+        if (planId == PLAN_NONE) {
+            return null
+        }
+
+        val verifiedAt = prefs.getLong(KEY_VERIFIED_PLAN_VERIFIED_AT, 0L).coerceAtLeast(0L)
+        val anchorAt = prefs.getLong(KEY_VERIFIED_PLAN_ANCHOR_AT, 0L).coerceAtLeast(0L)
+        val expiresAt = prefs.getLong(KEY_VERIFIED_PLAN_EXPIRES_AT, 0L).coerceAtLeast(0L)
+        if (verifiedAt <= 0L || verifiedAt > nowEpochMs) {
+            clearVerifiedPaidPlan(context)
+            return null
+        }
+        if (expiresAt > 0L && expiresAt <= nowEpochMs) {
+            clearVerifiedPaidPlan(context)
+            return null
+        }
+        if (nowEpochMs - verifiedAt > VERIFIED_PLAN_STALE_AFTER_MS) {
+            return null
+        }
+
+        val source = normalizeVerifiedSource(
+            prefs.getString(KEY_VERIFIED_PLAN_SOURCE, VERIFIED_SOURCE_NONE).orEmpty()
+        )
+        return VerifiedPaidPlanStatus(
+            planId = planId,
+            source = source,
+            verifiedAtEpochMs = verifiedAt,
+            renewalAnchorEpochMs = if (anchorAt > 0L) anchorAt else verifiedAt,
+            expiresAtEpochMs = expiresAt
+        )
+    }
+
+    fun saveVerifiedPaidPlan(
+        context: Context,
+        planId: String,
+        source: String = VERIFIED_SOURCE_MANUAL,
+        verifiedAtEpochMs: Long = System.currentTimeMillis(),
+        renewalAnchorEpochMs: Long = verifiedAtEpochMs,
+        expiresAtEpochMs: Long = 0L
+    ) {
+        val normalizedPlan = normalizeSubscriptionPlanId(planId)
+        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
+        if (normalizedPlan == PLAN_NONE) {
+            clearVerifiedPaidPlan(context)
+            return
+        }
+        prefs.edit()
+            .putString(KEY_VERIFIED_PLAN_ID, normalizedPlan)
+            .putString(KEY_VERIFIED_PLAN_SOURCE, normalizeVerifiedSource(source))
+            .putLong(KEY_VERIFIED_PLAN_VERIFIED_AT, verifiedAtEpochMs.coerceAtLeast(0L))
+            .putLong(KEY_VERIFIED_PLAN_ANCHOR_AT, renewalAnchorEpochMs.coerceAtLeast(0L))
+            .putLong(KEY_VERIFIED_PLAN_EXPIRES_AT, expiresAtEpochMs.coerceAtLeast(0L))
+            .apply()
+    }
+
+    fun clearVerifiedPaidPlan(context: Context) {
+        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove(KEY_VERIFIED_PLAN_ID)
+            .remove(KEY_VERIFIED_PLAN_SOURCE)
+            .remove(KEY_VERIFIED_PLAN_VERIFIED_AT)
+            .remove(KEY_VERIFIED_PLAN_ANCHOR_AT)
+            .remove(KEY_VERIFIED_PLAN_EXPIRES_AT)
+            .apply()
+    }
+
     fun grantLifetimePro(context: Context, source: String = LIFETIME_SOURCE_MANUAL) {
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
         val normalized = when (source.trim().lowercase(Locale.US)) {
             LIFETIME_SOURCE_ALLOWLIST -> LIFETIME_SOURCE_ALLOWLIST
+            LIFETIME_SOURCE_PLAY_BILLING -> LIFETIME_SOURCE_PLAY_BILLING
+            LIFETIME_SOURCE_DEBUG -> LIFETIME_SOURCE_DEBUG
             else -> LIFETIME_SOURCE_MANUAL
         }
         prefs.edit()
             .putBoolean(KEY_LIFETIME_PRO, true)
             .putString(KEY_LIFETIME_PRO_SOURCE, normalized)
             .apply()
+        clearVerifiedPaidPlan(context)
     }
 
     fun feedbackStatus(context: Context): FeedbackStatus {
@@ -585,7 +700,7 @@ object PricingPolicy {
         val entitlement = entitlement(context)
         if (entitlement.isLifetimePro) {
             return ResolvedFeatureAccess(
-                tierCode = "lifetime",
+                tierCode = PLAN_LIFETIME,
                 paidAccess = true,
                 features = model.paidTierAccess
             )
@@ -600,8 +715,8 @@ object PricingPolicy {
             )
         }
 
-        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
-        if (selectedPlan == "family") {
+        val verifiedPlan = verifiedPaidPlan(context)
+        if (verifiedPlan?.planId == PLAN_FAMILY) {
             val familyRole = resolveFamilyRoleContext(context, model)
             return when (familyRole.roleCode) {
                 ROLE_CHILD -> ResolvedFeatureAccess(
@@ -622,7 +737,7 @@ object PricingPolicy {
             }
         }
 
-        if (hasPaidPlanSelected(context)) {
+        if (verifiedPlan != null) {
             return ResolvedFeatureAccess(
                 tierCode = "paid",
                 paidAccess = true,
@@ -780,22 +895,19 @@ object PricingPolicy {
 
     fun selectedPlan(context: Context): String {
         if (entitlement(context).isLifetimePro) {
-            return "lifetime"
+            return PLAN_LIFETIME
         }
-        return rawSelectedPlan(context)
+        return normalizeSelectablePlanId(rawSelectedPlan(context))
     }
 
     fun saveSelectedPlan(context: Context, planId: String) {
         if (entitlement(context).isLifetimePro) {
             return
         }
-        val normalized = when (planId.lowercase(Locale.US)) {
-            "weekly", "monthly", "yearly", "family", "none" -> planId.lowercase(Locale.US)
-            else -> "none"
-        }
+        val normalized = normalizeSelectablePlanId(planId)
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
         val editor = prefs.edit().putString(KEY_SELECTED_PLAN, normalized)
-        if (normalized == "none") {
+        if (normalized == PLAN_NONE) {
             editor.remove(KEY_SELECTED_PLAN_AT)
         } else {
             editor.putLong(KEY_SELECTED_PLAN_AT, System.currentTimeMillis())
@@ -816,28 +928,24 @@ object PricingPolicy {
         val entitlement = entitlement(context)
         if (entitlement.isLifetimePro) {
             return NextPaymentDueStatus(
-                statusCode = "lifetime",
-                planId = "lifetime",
+                statusCode = PLAN_LIFETIME,
+                planId = PLAN_LIFETIME,
                 dueAtEpochMs = 0L
             )
         }
 
-        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
-        if (selectedPlan == "weekly" || selectedPlan == "monthly" || selectedPlan == "yearly" || selectedPlan == "family") {
-            val selectedAt = planSelectedAtEpochMs(context).let { stored ->
-                if (stored > 0L && stored <= nowEpochMs) stored else nowEpochMs
-            }
-            val interval = when (selectedPlan) {
-                "weekly" -> 7L * DAY_MS
-                "monthly" -> 30L * DAY_MS
-                "yearly" -> 365L * DAY_MS
-                "family" -> 30L * DAY_MS
-                else -> 0L
-            }
+        val verifiedPlan = verifiedPaidPlan(context, nowEpochMs)
+        if (verifiedPlan != null) {
+            val interval = planIntervalMs(verifiedPlan.planId)
+            val nextDue = computeNextDueEpochMs(
+                anchorEpochMs = verifiedPlan.renewalAnchorEpochMs,
+                intervalMs = interval,
+                nowEpochMs = nowEpochMs
+            )
             return NextPaymentDueStatus(
                 statusCode = "scheduled",
-                planId = selectedPlan,
-                dueAtEpochMs = selectedAt + interval
+                planId = verifiedPlan.planId,
+                dueAtEpochMs = nextDue
             )
         }
 
@@ -845,14 +953,14 @@ object PricingPolicy {
         if (trial.inTrial) {
             return NextPaymentDueStatus(
                 statusCode = "trial",
-                planId = "none",
+                planId = PLAN_NONE,
                 dueAtEpochMs = trial.startedAtEpochMs + (model.freeTrialDays * DAY_MS)
             )
         }
 
         return NextPaymentDueStatus(
-            statusCode = "none",
-            planId = "none",
+            statusCode = PLAN_NONE,
+            planId = PLAN_NONE,
             dueAtEpochMs = 0L
         )
     }
@@ -1049,10 +1157,10 @@ object PricingPolicy {
         context: Context,
         model: PricingPolicyModel
     ): FamilyRoleContext {
-        val selectedPlan = rawSelectedPlan(context).trim().lowercase(Locale.US)
+        val activePlan = verifiedPaidPlan(context)?.planId ?: PLAN_NONE
         val profile = PrimaryIdentityStore.readProfile(context)
         val baseRole = normalizeProfileRole(profile.familyRole)
-        val inFamilyPlan = selectedPlan == "family"
+        val inFamilyPlan = activePlan == PLAN_FAMILY
         if (baseRole == ROLE_PARENT) {
             return FamilyRoleContext(
                 roleCode = ROLE_PARENT,
@@ -1099,12 +1207,63 @@ object PricingPolicy {
 
     private fun rawSelectedPlan(context: Context): String {
         val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_SELECTED_PLAN, "none").orEmpty()
+        return prefs.getString(KEY_SELECTED_PLAN, PLAN_NONE).orEmpty()
     }
 
-    private fun hasPaidPlanSelected(context: Context): Boolean {
-        val plan = rawSelectedPlan(context).trim().lowercase(Locale.US)
-        return plan == "weekly" || plan == "monthly" || plan == "yearly" || plan == "family"
+    private fun normalizeSelectablePlanId(raw: String): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            PLAN_WEEKLY -> PLAN_WEEKLY
+            PLAN_MONTHLY -> PLAN_MONTHLY
+            PLAN_YEARLY -> PLAN_YEARLY
+            PLAN_FAMILY -> PLAN_FAMILY
+            PLAN_NONE -> PLAN_NONE
+            else -> PLAN_NONE
+        }
+    }
+
+    private fun normalizeSubscriptionPlanId(raw: String): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            PLAN_WEEKLY -> PLAN_WEEKLY
+            PLAN_MONTHLY -> PLAN_MONTHLY
+            PLAN_YEARLY -> PLAN_YEARLY
+            PLAN_FAMILY -> PLAN_FAMILY
+            else -> PLAN_NONE
+        }
+    }
+
+    private fun normalizeVerifiedSource(raw: String): String {
+        return when (raw.trim().lowercase(Locale.US)) {
+            VERIFIED_SOURCE_PLAY_BILLING -> VERIFIED_SOURCE_PLAY_BILLING
+            VERIFIED_SOURCE_MANUAL -> VERIFIED_SOURCE_MANUAL
+            else -> VERIFIED_SOURCE_NONE
+        }
+    }
+
+    private fun planIntervalMs(planId: String): Long {
+        return when (normalizeSubscriptionPlanId(planId)) {
+            PLAN_WEEKLY -> 7L * DAY_MS
+            PLAN_YEARLY -> 365L * DAY_MS
+            PLAN_MONTHLY, PLAN_FAMILY -> 30L * DAY_MS
+            else -> 30L * DAY_MS
+        }
+    }
+
+    private fun computeNextDueEpochMs(
+        anchorEpochMs: Long,
+        intervalMs: Long,
+        nowEpochMs: Long
+    ): Long {
+        if (intervalMs <= 0L) {
+            return 0L
+        }
+        val anchor = if (anchorEpochMs > 0L && anchorEpochMs <= nowEpochMs) {
+            anchorEpochMs
+        } else {
+            nowEpochMs
+        }
+        val elapsed = (nowEpochMs - anchor).coerceAtLeast(0L)
+        val cycles = elapsed / intervalMs
+        return anchor + ((cycles + 1L) * intervalMs)
     }
 
     private fun utcDayKey(epochMs: Long): String {

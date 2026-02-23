@@ -1,22 +1,47 @@
 package com.realyn.watchdog
 
 import android.Manifest
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.app.Activity
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityMainBinding
+import com.realyn.watchdog.theme.LionThemeCatalog
+import com.realyn.watchdog.theme.LionThemePalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -25,6 +50,16 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        const val EXTRA_GUARDIAN_SETTINGS_ACTION = "com.realyn.watchdog.extra.GUARDIAN_SETTINGS_ACTION"
+        const val GUARDIAN_SETTINGS_ACTION_OPEN_PLAN_BILLING = "open_plan_billing"
+        const val GUARDIAN_SETTINGS_ACTION_OPEN_AI_CONNECTION = "open_ai_connection"
+        const val GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP = "open_locator_setup"
+
+        private const val UI_PREFS_FILE = "dt_ui_prefs"
+        private const val KEY_HOME_INTRO_SHOWN = "home_intro_shown_v3"
+        private const val KEY_HOME_TUTORIAL_POPUP_SHOWN = "home_tutorial_popup_shown_v1"
+    }
 
     private enum class SecurityActionRoute {
         RUN_SCAN,
@@ -33,8 +68,17 @@ class MainActivity : AppCompatActivity() {
         FIX_OVERLAY,
         RUN_PHISHING_TRIAGE,
         START_INCIDENT,
+        OPEN_DEVICE_LOCATOR_PROVIDER,
+        OPEN_DEVICE_LOCATOR_SETUP,
         OPEN_SUPPORT,
         OPEN_CREDENTIAL_CENTER
+    }
+
+    private enum class GuidedDestination {
+        SWEEP,
+        THREATS,
+        CREDENTIALS,
+        SERVICES
     }
 
     private data class SecurityHeroAction(
@@ -49,6 +93,19 @@ class MainActivity : AppCompatActivity() {
         val details: List<String>
     )
 
+    private data class GuidedSuggestion(
+        val destination: GuidedDestination,
+        val destinationLabel: String,
+        val bodyText: String
+    )
+
+    private data class HomeViewportProfile(
+        val compactHeight: Boolean,
+        val compactWidth: Boolean,
+        val foldableLayout: Boolean,
+        val tabletLayout: Boolean
+    )
+
     private lateinit var binding: ActivityMainBinding
     private var latestCopilotBrief: CopilotBrief? = null
     private var latestHygieneAudit: HygieneAuditResult? = null
@@ -60,9 +117,22 @@ class MainActivity : AppCompatActivity() {
     private var hygieneAuditInFlight: Boolean = false
     private var advancedControlsVisible: Boolean = false
     private var appUnlockBootstrapDone: Boolean = false
+    private var billingRefreshInFlight: Boolean = false
     private var latestWifiSnapshot: WifiScanSnapshotRecord? = null
+    private var latestLocatorState: LocatorCapabilityState? = null
     private var pendingWifiPermissionScan: Boolean = false
     private var pendingVaultExportItemId: String = ""
+    private var lionFillMode: LionFillMode = LionFillMode.LEFT_TO_RIGHT
+    private var lionBusyInProgress: Boolean = false
+    private var lionProgressAnimator: ValueAnimator? = null
+    private var lionIdleResetRunnable: Runnable? = null
+    private var homeIntroHandledThisSession: Boolean = false
+    private var homeIntroAnimating: Boolean = false
+    private var introWordAnimator: ValueAnimator? = null
+    private var introSequenceRunnable: Runnable? = null
+    private var latestSystemBarInsets: Insets = Insets.NONE
+    private var activeHomePalette: LionThemePalette? = null
+    private var pendingGuardianSettingsAction: String? = null
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -102,8 +172,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        pendingGuardianSettingsAction = intent?.getStringExtra(EXTRA_GUARDIAN_SETTINGS_ACTION)
+        configureResponsiveHomeLayout()
 
-        binding.oneTimeScanButton.setOnClickListener { runOneTimeScan() }
+        binding.oneTimeScanButton.setOnClickListener { runHomeFullScan() }
         binding.continuousScanButton.setOnClickListener { toggleContinuousMode() }
         binding.refreshButton.setOnClickListener { refreshUiState() }
         binding.supportButton.setOnClickListener { openSupportCenter() }
@@ -118,7 +190,9 @@ class MainActivity : AppCompatActivity() {
         binding.wifiFindingsButton.setOnClickListener { openWifiFindingsDialog() }
         binding.mediaVaultImportButton.setOnClickListener { startMediaVaultImport() }
         binding.mediaVaultOpenButton.setOnClickListener { openMediaVaultDialog() }
-        binding.securityTopActionButton.setOnClickListener { runTopSecurityAction() }
+        binding.deviceLocatorOpenButton.setOnClickListener { openDeviceLocatorProvider() }
+        binding.deviceLocatorSetupButton.setOnClickListener { openDeviceLocatorSetupDialog() }
+        binding.securityTopActionButton.setOnClickListener { runHomeFullScan() }
         binding.securityActionDetailsButton.setOnClickListener { openSecurityDetailsDialog() }
         binding.advancedControlsToggleButton.setOnClickListener { toggleAdvancedControls() }
         binding.pricingManageButton.setOnClickListener { openPlanSelectionDialog() }
@@ -135,6 +209,23 @@ class MainActivity : AppCompatActivity() {
         }
         binding.copilotPlaybookButton.setOnClickListener { openCopilotPlaybookDialog() }
         binding.copilotConnectButton.setOnClickListener { openConnectedAiDialog() }
+        binding.navScanButton.setOnClickListener { runHomeFullScan() }
+        binding.navGuardButton.setOnClickListener { openPhishingTriageDialog() }
+        binding.navLionButton.setOnClickListener { openSecurityScoreDialog() }
+        binding.navVaultButton.setOnClickListener { openCredentialCenter() }
+        binding.navSupportButton.setOnClickListener { openSecurityDetailsDialog() }
+        binding.widgetSweepCard.setOnClickListener { runHomeFullScan() }
+        binding.widgetThreatsCard.setOnClickListener { openPhishingTriageDialog() }
+        binding.widgetCredentialsCard.setOnClickListener { openCredentialCenter() }
+        binding.widgetServicesCard.setOnClickListener { openSecurityDetailsDialog() }
+        binding.goProButton.setOnClickListener { openPlanSelectionDialog() }
+        binding.lionModeToggleButton.setOnClickListener { openGuardianSettingsDialog() }
+
+        lionFillMode = LionThemePrefs.readFillMode(this)
+        refreshLionHeroVisuals()
+        binding.lionHeroView.setIdleState()
+        binding.bottomNavCard.visibility = View.GONE
+        applyMinimalHomeSurface()
 
         maybeRequestNotificationPermission()
         applyAdvancedControlsVisibility()
@@ -144,13 +235,31 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         enforceAccessGate()
+        recoverBottomNavIfNeeded()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingGuardianSettingsAction = intent.getStringExtra(EXTRA_GUARDIAN_SETTINGS_ACTION)
     }
 
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) {
-            AppAccessGate.onAppBackgrounded()
+            AppAccessGate.onAppBackgrounded(this)
         }
+    }
+
+    override fun onDestroy() {
+        cancelLionProcessingAnimations(resetToIdle = false)
+        clearHomeIntroTimeline()
+        binding.homeIntroOverlay.animate().cancel()
+        binding.introLionHero.animate().cancel()
+        binding.introWelcomeLabel.animate().cancel()
+        binding.introCelebrationView.stopCelebration()
+        binding.bottomNavCard.animate().cancel()
+        super.onDestroy()
     }
 
     override fun onUserInteraction() {
@@ -167,6 +276,11 @@ class MainActivity : AppCompatActivity() {
                     flushPendingFeedbackSync()
                 }
                 refreshUiState()
+                consumePendingGuardianSettingsAction()
+                refreshBillingEntitlementIfNeeded(force = false, userVisibleStatus = false)
+                if (!homeIntroHandledThisSession) {
+                    binding.root.post { maybeRunHomeIntroOnce() }
+                }
             },
             onDenied = {
                 finish()
@@ -189,16 +303,260 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun runOneTimeScan() {
-        setBusy(true, "Running one-time local scan...")
+    private fun configureResponsiveHomeLayout() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            latestSystemBarInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            applyResponsiveHomeViewport(resources.configuration)
+            insets
+        }
+        binding.root.post { applyResponsiveHomeViewport(resources.configuration) }
+        ViewCompat.requestApplyInsets(binding.root)
+    }
 
+    private fun applyResponsiveHomeViewport(configuration: Configuration) {
+        val profile = resolveHomeViewportProfile(configuration)
+        val sideInset = maxOf(latestSystemBarInsets.left, latestSystemBarInsets.right)
+        val screenWidthPx = resources.displayMetrics.widthPixels - (sideInset * 2)
+        val maxContentWidthDp = when {
+            profile.tabletLayout -> 780f
+            profile.foldableLayout -> 640f
+            else -> 560f
+        }
+        val contentWidthPx = screenWidthPx
+            .coerceAtMost(dpToPx(maxContentWidthDp))
+            .coerceAtLeast(dpToPx(280f))
+        binding.homeContentColumn.updateLayoutParams<FrameLayout.LayoutParams> {
+            width = contentWidthPx
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        }
+
+        val navHeightPx = dpToPx(if (profile.compactHeight) 70f else 74f)
+        val navBottomMargin = latestSystemBarInsets.bottom + dpToPx(if (profile.compactHeight) 6f else 10f)
+        val navHorizontalMargin = dpToPx(if (profile.tabletLayout) 24f else 12f)
+        binding.bottomNavCard.updateLayoutParams<CoordinatorLayout.LayoutParams> {
+            height = navHeightPx
+            leftMargin = navHorizontalMargin + latestSystemBarInsets.left
+            rightMargin = navHorizontalMargin + latestSystemBarInsets.right
+            bottomMargin = navBottomMargin
+        }
+
+        val scanButtonBottomMargin = navBottomMargin + navHeightPx + dpToPx(if (profile.compactHeight) 8f else 12f)
+        binding.securityTopActionButton.updateLayoutParams<CoordinatorLayout.LayoutParams> {
+            leftMargin = navHorizontalMargin + latestSystemBarInsets.left
+            rightMargin = navHorizontalMargin + latestSystemBarInsets.right
+            bottomMargin = scanButtonBottomMargin
+        }
+
+        val scanButtonHeightPx = dpToPx(if (profile.compactHeight) 50f else 54f)
+        val heroContainerHeight = (
+            resources.displayMetrics.heightPixels -
+                (latestSystemBarInsets.top + dpToPx(8f)) -
+                scanButtonBottomMargin -
+                scanButtonHeightPx -
+                dpToPx(if (profile.compactHeight) 20f else 24f)
+            )
+            .coerceAtLeast(dpToPx(if (profile.compactHeight) 500f else 560f))
+            .coerceAtMost(dpToPx(if (profile.tabletLayout) 880f else 700f))
+        binding.homeHeroCard.updateLayoutParams<LinearLayout.LayoutParams> {
+            height = heroContainerHeight
+        }
+        binding.homeHeroContent.updateLayoutParams<FrameLayout.LayoutParams> {
+            height = FrameLayout.LayoutParams.MATCH_PARENT
+        }
+
+        binding.mainScrollView.updatePadding(
+            top = latestSystemBarInsets.top + dpToPx(8f),
+            bottom = scanButtonBottomMargin + dpToPx(if (profile.compactHeight) 58f else 64f)
+        )
+
+        applyHeroViewportProfile(profile)
+        binding.homeQuickWidgetsGrid.translationY = 0f
+        binding.root.post { alignHomeWidgetsBetweenTitleAndScan() }
+    }
+
+    private fun applyHeroViewportProfile(profile: HomeViewportProfile) {
+        val heroHeightPx = when {
+            profile.tabletLayout -> dpToPx(284f)
+            profile.compactHeight -> dpToPx(176f)
+            profile.foldableLayout -> dpToPx(238f)
+            else -> resources.getDimensionPixelSize(R.dimen.home_lion_hero_height)
+        }
+        binding.lionHeroView.updateLayoutParams<LinearLayout.LayoutParams> {
+            height = heroHeightPx
+        }
+
+        val widgetCardHeightPx = when {
+            profile.tabletLayout -> dpToPx(118f)
+            profile.compactHeight -> dpToPx(96f)
+            else -> dpToPx(108f)
+        }
+        listOf(
+            binding.widgetSweepCard,
+            binding.widgetThreatsCard,
+            binding.widgetCredentialsCard,
+            binding.widgetServicesCard
+        ).forEach { card ->
+            card.updateLayoutParams<LinearLayout.LayoutParams> {
+                height = widgetCardHeightPx
+            }
+        }
+
+        val introHeroSizePx = when {
+            profile.tabletLayout -> dpToPx(390f)
+            profile.compactHeight -> dpToPx(268f)
+            profile.foldableLayout -> dpToPx(340f)
+            else -> resources.getDimensionPixelSize(R.dimen.intro_lion_hero_size)
+        }
+        binding.introLionHero.updateLayoutParams<FrameLayout.LayoutParams> {
+            width = introHeroSizePx
+            height = introHeroSizePx
+        }
+
+        val welcomeBottomMargin = when {
+            profile.tabletLayout -> dpToPx(220f)
+            profile.compactHeight -> dpToPx(136f)
+            else -> resources.getDimensionPixelSize(R.dimen.home_intro_welcome_bottom_margin)
+        }
+        binding.introWelcomeLabel.updateLayoutParams<FrameLayout.LayoutParams> {
+            bottomMargin = welcomeBottomMargin
+        }
+        binding.introWelcomeLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.tabletLayout) 22f else if (profile.compactWidth) 17f else 19f
+        )
+
+        val compactControls = profile.compactWidth && profile.compactHeight
+        binding.heroTopControlsRow.orientation = if (compactControls) {
+            LinearLayout.VERTICAL
+        } else {
+            LinearLayout.HORIZONTAL
+        }
+        binding.heroTopSpacer.visibility = if (compactControls) View.GONE else View.VISIBLE
+
+        val goProLayout = binding.goProButton.layoutParams as LinearLayout.LayoutParams
+        val modeLayout = binding.lionModeToggleButton.layoutParams as LinearLayout.LayoutParams
+        if (compactControls) {
+            goProLayout.width = LinearLayout.LayoutParams.WRAP_CONTENT
+            goProLayout.weight = 0f
+            goProLayout.bottomMargin = dpToPx(4f)
+            modeLayout.width = LinearLayout.LayoutParams.MATCH_PARENT
+            modeLayout.weight = 0f
+            modeLayout.topMargin = 0
+            binding.lionModeToggleButton.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            binding.lionModeToggleButton.maxLines = 2
+        } else {
+            goProLayout.bottomMargin = 0
+            modeLayout.width = LinearLayout.LayoutParams.WRAP_CONTENT
+            modeLayout.weight = 0f
+            modeLayout.topMargin = 0
+            binding.lionModeToggleButton.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            binding.lionModeToggleButton.maxLines = 1
+        }
+        binding.goProButton.layoutParams = goProLayout
+        binding.lionModeToggleButton.layoutParams = modeLayout
+
+        binding.goProButton.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactWidth) 13f else 14f
+        )
+        binding.lionModeToggleButton.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactWidth) 11f else 12f
+        )
+        binding.homeFrameTitleLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 19f else 22f
+        )
+        binding.securityScoreLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 22f else if (profile.tabletLayout) 30f else 26f
+        )
+        binding.securityHeroTitleLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 10f else 11f
+        )
+        binding.securityTierLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 11f else 12f
+        )
+        binding.statusLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 14f else 15f
+        )
+        binding.subStatusLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 11f else 12f
+        )
+        binding.securityUrgentActionsLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 10f else 11f
+        )
+    }
+
+    private fun resolveHomeViewportProfile(configuration: Configuration): HomeViewportProfile {
+        val widthDp = configuration.screenWidthDp
+        val heightDp = configuration.screenHeightDp
+        val smallestDp = configuration.smallestScreenWidthDp
+        val tabletLayout = smallestDp >= 600
+        val foldableLayout = !tabletLayout && widthDp >= 540
+        val compactHeight = heightDp in 1..760
+        val compactWidth = widthDp in 1..359
+        return HomeViewportProfile(
+            compactHeight = compactHeight,
+            compactWidth = compactWidth,
+            foldableLayout = foldableLayout,
+            tabletLayout = tabletLayout
+        )
+    }
+
+    private fun applyMinimalHomeSurface() {
+        binding.mainScrollView.scrollEnabled = false
+        binding.mainScrollView.overScrollMode = View.OVER_SCROLL_NEVER
+        binding.securityActionDetailsButton.visibility = View.GONE
+        binding.updateStatusLabel.visibility = View.GONE
+        binding.wifiPostureCard.visibility = View.GONE
+        binding.mediaVaultCard.visibility = View.GONE
+        binding.deviceLocatorCard.visibility = View.GONE
+        binding.translationCard.visibility = View.GONE
+        binding.pricingCard.visibility = View.GONE
+        binding.scamShieldCard.visibility = View.GONE
+        binding.readinessCard.visibility = View.GONE
+        binding.incidentCard.visibility = View.GONE
+        binding.readinessActionsCard.visibility = View.GONE
+        binding.incidentLifecycleCard.visibility = View.GONE
+        binding.oneTimeScanButton.visibility = View.GONE
+        binding.continuousScanButton.visibility = View.GONE
+        binding.credentialCenterButton.visibility = View.GONE
+        binding.checkUpdatesButton.visibility = View.GONE
+        binding.refreshSupportRow.visibility = View.GONE
+        binding.resultCard.visibility = View.GONE
+        binding.advancedControlsToggleButton.visibility = View.GONE
+        binding.attributionText.visibility = View.GONE
+    }
+
+    private fun runOneTimeScan() {
+        runHomeFullScan()
+    }
+
+    private fun runHomeFullScan() {
+        if (homeIntroAnimating) {
+            return
+        }
+        setBusy(true, getString(R.string.home_full_scan_running))
         lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
                 SecurityScanner.runScan(this@MainActivity, createBaselineIfMissing = true)
             }
-
+            val wifiEnabled = WifiPostureScanner.config(this@MainActivity).enabled
+            if (wifiEnabled) {
+                withContext(Dispatchers.Default) {
+                    WifiPostureScanner.runPostureScan(this@MainActivity)
+                }
+            }
+            latestWifiSnapshot = WifiScanSnapshotStore.latest(this@MainActivity)
             binding.statusLabel.text = SecurityScanner.summaryLine(result)
-            binding.subStatusLabel.text = getString(R.string.scan_completed_substatus)
+            binding.subStatusLabel.text = getString(R.string.home_full_scan_completed)
             binding.resultText.text = SecurityScanner.formatReport(result)
             setBusy(false)
             refreshUiState()
@@ -289,6 +647,12 @@ class MainActivity : AppCompatActivity() {
         val active = SecurityScanner.isContinuousModeEnabled(this)
         val access = PricingPolicy.resolveFeatureAccess(this)
         val profileControl = PricingPolicy.resolveProfileControl(this, access)
+        refreshLionHeroVisuals()
+        binding.goProButton.text = if (access.paidAccess) {
+            getString(R.string.action_pro_active)
+        } else {
+            getString(R.string.action_go_pro)
+        }
         binding.continuousScanButton.text = if (active) {
             getString(R.string.action_stop_continuous)
         } else if (!access.features.continuousScanEnabled) {
@@ -314,6 +678,7 @@ class MainActivity : AppCompatActivity() {
 
         refreshWifiPanel()
         refreshMediaVaultPanel()
+        refreshDeviceLocatorPanel()
         refreshReadinessPanel()
         refreshScamPanel()
         refreshCopilotPanel()
@@ -322,7 +687,10 @@ class MainActivity : AppCompatActivity() {
         refreshPricingPanel()
         refreshTranslationPanel()
         refreshSecurityHero()
+        refreshHomeQuickWidgets()
+        refreshBottomNavIndicators()
         applyAdvancedControlsVisibility()
+        recoverBottomNavIfNeeded()
     }
 
     private fun setBusy(busy: Boolean, status: String? = null) {
@@ -342,6 +710,8 @@ class MainActivity : AppCompatActivity() {
         binding.wifiFindingsButton.isEnabled = !busy
         binding.mediaVaultImportButton.isEnabled = !busy
         binding.mediaVaultOpenButton.isEnabled = !busy
+        binding.deviceLocatorOpenButton.isEnabled = !busy
+        binding.deviceLocatorSetupButton.isEnabled = !busy
         binding.securityTopActionButton.isEnabled = !busy
         binding.securityActionDetailsButton.isEnabled = !busy
         binding.advancedControlsToggleButton.isEnabled = !busy
@@ -356,9 +726,582 @@ class MainActivity : AppCompatActivity() {
         binding.copilotRefreshButton.isEnabled = !busy
         binding.copilotPlaybookButton.isEnabled = !busy
         binding.copilotConnectButton.isEnabled = !busy
+        binding.lionModeToggleButton.isEnabled = !busy
+        binding.goProButton.isEnabled = !busy
+        val navEnabled = !busy && !homeIntroAnimating
+        binding.navScanButton.isEnabled = navEnabled
+        binding.navGuardButton.isEnabled = navEnabled
+        binding.navLionButton.isEnabled = navEnabled
+        binding.navVaultButton.isEnabled = navEnabled
+        binding.navSupportButton.isEnabled = navEnabled
+        binding.widgetSweepCard.isEnabled = navEnabled
+        binding.widgetThreatsCard.isEnabled = navEnabled
+        binding.widgetCredentialsCard.isEnabled = navEnabled
+        binding.widgetServicesCard.isEnabled = navEnabled
 
+        if (busy) {
+            beginLionProcessingAnimation()
+        } else {
+            completeLionProcessingAnimation()
+        }
         if (status != null) {
             binding.statusLabel.text = status
+        }
+    }
+
+    private fun maybeRunHomeIntroOnce() {
+        if (homeIntroHandledThisSession || isFinishing || isDestroyed) {
+            return
+        }
+        homeIntroHandledThisSession = true
+        if (isHomeIntroAlreadyShown()) {
+            showBottomNavImmediate()
+            maybeShowHomeTutorialPopup()
+            return
+        }
+        playHomeIntroSequence()
+    }
+
+    private fun playHomeIntroSequence() {
+        homeIntroAnimating = true
+        clearHomeIntroTimeline()
+        binding.bottomNavCard.visibility = View.GONE
+        binding.homeIntroOverlay.visibility = View.VISIBLE
+        binding.homeIntroOverlay.alpha = 1f
+        binding.introWelcomeLabel.alpha = 0f
+        binding.introWelcomeLabel.text = ""
+        binding.lionHeroView.alpha = 0f
+        binding.introCelebrationView.alpha = 0f
+        refreshLionHeroVisuals()
+        binding.introLionHero.setScanProgress(1f)
+        setBusy(false)
+
+        binding.homeIntroOverlay.post {
+            if (isFinishing || isDestroyed) {
+                return@post
+            }
+            val introLoc = IntArray(2)
+            val targetLoc = IntArray(2)
+            binding.introLionHero.getLocationOnScreen(introLoc)
+            binding.lionHeroView.getLocationOnScreen(targetLoc)
+
+            val introCenterX = introLoc[0] + (binding.introLionHero.width / 2f)
+            val introCenterY = introLoc[1] + (binding.introLionHero.height / 2f)
+            val targetCenterX = targetLoc[0] + (binding.lionHeroView.width / 2f)
+            val targetCenterY = targetLoc[1] + (binding.lionHeroView.height / 2f)
+
+            val deltaX = targetCenterX - introCenterX
+            val deltaY = targetCenterY - introCenterY
+            val targetScale = ((binding.lionHeroView.height.toFloat() / binding.introLionHero.height.toFloat()) * 0.88f)
+                .coerceIn(0.42f, 0.72f)
+
+            binding.introLionHero.apply {
+                scaleX = 1.30f
+                scaleY = 1.30f
+                translationX = 0f
+                translationY = 0f
+            }
+
+            binding.introLionHero.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationX(deltaX)
+                .translationY(deltaY)
+                .setDuration(1850L)
+                .setInterpolator(AccelerateDecelerateInterpolator())
+                .withEndAction {
+                    binding.lionHeroView.alpha = 1f
+                    animateIntroWelcomeMessage {
+                        playIntroCelebrationAndLockIn()
+                    }
+                }
+                .start()
+        }
+    }
+
+    private fun animateIntroWelcomeMessage(onComplete: () -> Unit) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val fullText = getString(R.string.home_intro_welcome)
+        val chunks = Regex("\\S+\\s*").findAll(fullText).map { it.value }.toList()
+        if (chunks.isEmpty()) {
+            onComplete()
+            return
+        }
+
+        introWordAnimator?.cancel()
+        binding.introWelcomeLabel.text = ""
+        binding.introWelcomeLabel.alpha = 0f
+        binding.introWelcomeLabel.animate()
+            .alpha(1f)
+            .setDuration(420L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        var cancelled = false
+        introWordAnimator = ValueAnimator.ofInt(0, chunks.size).apply {
+            duration = chunks.size * 210L
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                val count = (animator.animatedValue as Int).coerceIn(0, chunks.size)
+                binding.introWelcomeLabel.text = chunks.take(count).joinToString(separator = "")
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    if (cancelled || isFinishing || isDestroyed) {
+                        return
+                    }
+                    introSequenceRunnable = Runnable { onComplete() }
+                    binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 1100L)
+                }
+            })
+            start()
+        }
+    }
+
+    private fun playIntroCelebrationAndLockIn() {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val accentColor = activeHomePalette?.accent ?: LionThemePrefs.resolveAccentColor(this)
+        binding.introCelebrationView.animate().cancel()
+        binding.introCelebrationView.alpha = 0f
+        binding.introCelebrationView.animate()
+            .alpha(1f)
+            .setDuration(240L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                binding.introCelebrationView.startCelebration(accentColor, 2500L)
+            }
+            .start()
+
+        binding.introLionHero.animate()
+            .scaleXBy(0.05f)
+            .scaleYBy(0.05f)
+            .setDuration(300L)
+            .withEndAction {
+                binding.introLionHero.animate()
+                    .scaleXBy(-0.05f)
+                    .scaleYBy(-0.05f)
+                    .setDuration(300L)
+                    .start()
+            }
+            .start()
+
+        introSequenceRunnable = Runnable { finalizeHomeIntroTransition() }
+        binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 2600L)
+    }
+
+    private fun finalizeHomeIntroTransition() {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        binding.homeIntroOverlay.animate()
+            .alpha(0f)
+            .setDuration(540L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                binding.homeIntroOverlay.visibility = View.GONE
+                binding.homeIntroOverlay.alpha = 1f
+                binding.introWelcomeLabel.alpha = 0f
+                binding.introWelcomeLabel.text = getString(R.string.home_intro_welcome)
+                binding.introLionHero.translationX = 0f
+                binding.introLionHero.translationY = 0f
+                binding.introLionHero.scaleX = 1f
+                binding.introLionHero.scaleY = 1f
+                binding.introCelebrationView.alpha = 0f
+                binding.introCelebrationView.stopCelebration()
+                homeIntroAnimating = false
+                animateBottomNavIn()
+                setBusy(false)
+                markHomeIntroShown()
+                maybeShowHomeTutorialPopup()
+            }
+            .start()
+    }
+
+    private fun clearHomeIntroTimeline() {
+        introWordAnimator?.cancel()
+        introWordAnimator = null
+        introSequenceRunnable?.let { pending ->
+            binding.homeIntroOverlay.removeCallbacks(pending)
+        }
+        introSequenceRunnable = null
+        binding.introCelebrationView.animate().cancel()
+        binding.introCelebrationView.stopCelebration()
+    }
+
+    private fun animateBottomNavIn() {
+        binding.bottomNavCard.visibility = View.VISIBLE
+        binding.bottomNavCard.alpha = 0f
+        binding.bottomNavCard.translationY = 56f
+        val navItems = listOf(
+            binding.navScanButton,
+            binding.navGuardButton,
+            binding.navLionButton,
+            binding.navVaultButton,
+            binding.navSupportButton
+        )
+        navItems.forEach {
+            it.alpha = 0f
+            it.translationY = 12f
+        }
+        binding.bottomNavCard.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(360L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+        navItems.forEachIndexed { index, view ->
+            view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay((index * 70L) + 110L)
+                .setDuration(250L)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+        binding.bottomNavCard.postDelayed(
+            { refreshBottomNavIndicators() },
+            640L
+        )
+    }
+
+    private fun showBottomNavImmediate() {
+        clearHomeIntroTimeline()
+        homeIntroAnimating = false
+        binding.homeIntroOverlay.visibility = View.GONE
+        binding.lionHeroView.alpha = 1f
+        binding.bottomNavCard.visibility = View.VISIBLE
+        binding.bottomNavCard.alpha = 1f
+        binding.bottomNavCard.translationY = 0f
+        val navItems = listOf(
+            binding.navScanButton,
+            binding.navGuardButton,
+            binding.navLionButton,
+            binding.navVaultButton,
+            binding.navSupportButton
+        )
+        navItems.forEach {
+            it.alpha = 1f
+            it.translationY = 0f
+        }
+        refreshBottomNavIndicators()
+    }
+
+    private fun recoverBottomNavIfNeeded() {
+        if (homeIntroAnimating && binding.homeIntroOverlay.visibility != View.VISIBLE) {
+            homeIntroAnimating = false
+        }
+        val introReadyForNav = isHomeIntroAlreadyShown() || homeIntroHandledThisSession
+        if (!homeIntroAnimating && introReadyForNav && binding.bottomNavCard.visibility != View.VISIBLE) {
+            showBottomNavImmediate()
+            maybeShowHomeTutorialPopup()
+        }
+    }
+
+    private fun maybeShowHomeTutorialPopup() {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val prefs = getSharedPreferences(UI_PREFS_FILE, MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, false)) {
+            return
+        }
+        val state = latestSecurityHeroState ?: buildSecurityHeroState()
+        val suggestion = resolveGuidedSuggestion(state)
+        prefs.edit()
+            .putBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, true)
+            .apply()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.home_tutorial_popup_title)
+            .setMessage(
+                getString(
+                    R.string.home_tutorial_popup_message_template,
+                    suggestion.destinationLabel,
+                    suggestion.bodyText
+                )
+            )
+            .setPositiveButton(R.string.home_tutorial_popup_action) { _, _ ->
+                routeToGuidedDestination(suggestion.destination)
+            }
+            .setNegativeButton(R.string.home_tutorial_popup_later, null)
+            .show()
+    }
+
+    private fun openSecurityScoreDialog() {
+        val state = latestSecurityHeroState ?: buildSecurityHeroState().also {
+            latestSecurityHeroState = it
+        }
+        val headline = state.details.firstOrNull()
+        val message = buildString {
+            appendLine(getString(R.string.security_score_template, state.score))
+            appendLine(state.tierLabel)
+            if (!headline.isNullOrBlank()) {
+                appendLine()
+                append(headline)
+            }
+        }.trim()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.security_hero_title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(R.string.action_view_details) { _, _ ->
+                openSecurityDetailsDialog()
+            }
+            .show()
+    }
+
+    private fun isHomeIntroAlreadyShown(): Boolean {
+        return getSharedPreferences(UI_PREFS_FILE, MODE_PRIVATE)
+            .getBoolean(KEY_HOME_INTRO_SHOWN, false)
+    }
+
+    private fun markHomeIntroShown() {
+        getSharedPreferences(UI_PREFS_FILE, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_HOME_INTRO_SHOWN, true)
+            .apply()
+    }
+
+    private fun openGuardianSettingsDialog() {
+        startActivity(Intent(this, GuardianSettingsActivity::class.java))
+    }
+
+    private fun consumePendingGuardianSettingsAction() {
+        val action = pendingGuardianSettingsAction ?: return
+        pendingGuardianSettingsAction = null
+        when (action) {
+            GUARDIAN_SETTINGS_ACTION_OPEN_PLAN_BILLING -> openPlanSelectionDialog()
+            GUARDIAN_SETTINGS_ACTION_OPEN_AI_CONNECTION -> openConnectedAiDialog()
+            GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP -> openDeviceLocatorSetupDialog()
+        }
+    }
+
+    private fun cycleLionFillMode() {
+        lionFillMode = lionFillMode.next()
+        LionThemePrefs.writeFillMode(this, lionFillMode)
+        refreshLionHeroVisuals()
+        binding.subStatusLabel.text = getString(
+            R.string.lion_mode_status_template,
+            getString(lionFillMode.labelRes)
+        )
+    }
+
+    private fun refreshLionHeroVisuals() {
+        lionFillMode = LionThemePrefs.readFillMode(this)
+        val access = PricingPolicy.resolveFeatureAccess(this)
+        val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
+        val themeState = LionThemeCatalog.resolveState(
+            context = this,
+            paidAccess = access.paidAccess,
+            selectedLionBitmap = selectedBitmap
+        )
+        val accentColor = themeState.palette.accent
+        activeHomePalette = themeState.palette
+        applyHomeTheme(themeState.palette, themeState.isDark)
+        binding.lionHeroView.setFillMode(lionFillMode)
+        binding.lionHeroView.setSurfaceTone(themeState.isDark)
+        binding.lionHeroView.setLionBitmap(selectedBitmap)
+        binding.lionHeroView.setAccentColor(accentColor)
+        binding.introLionHero.setFillMode(lionFillMode)
+        binding.introLionHero.setSurfaceTone(themeState.isDark)
+        binding.introLionHero.setLionBitmap(selectedBitmap)
+        binding.introLionHero.setAccentColor(accentColor)
+        binding.lionModeToggleButton.text = getString(R.string.action_guardian_settings)
+    }
+
+    private fun applyHomeTheme(
+        palette: LionThemePalette,
+        isDarkTone: Boolean
+    ) {
+        window.statusBarColor = palette.backgroundEnd
+        window.navigationBarColor = palette.backgroundEnd
+        val systemBarController = WindowCompat.getInsetsController(window, binding.root)
+        systemBarController.isAppearanceLightStatusBars = !isDarkTone
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            systemBarController.isAppearanceLightNavigationBars = !isDarkTone
+        }
+
+        binding.root.background = gradientBackground(
+            startColor = palette.backgroundStart,
+            centerColor = palette.backgroundCenter,
+            endColor = palette.backgroundEnd,
+            angle = 90
+        )
+        binding.homeIntroOverlay.setBackgroundColor(palette.backgroundEnd)
+        binding.homeHeroCard.strokeColor = palette.stroke
+        binding.homeFrameTitleLabel.setTextColor(palette.textPrimary)
+        binding.lionModeToggleButton.setTextColor(palette.accent)
+
+        applyActionButtonPalette(binding.goProButton, palette)
+        applyActionButtonPalette(binding.securityTopActionButton, palette)
+
+        applyWidgetCardPalette(binding.widgetSweepCard, palette)
+        applyWidgetCardPalette(binding.widgetThreatsCard, palette)
+        applyWidgetCardPalette(binding.widgetCredentialsCard, palette)
+        applyWidgetCardPalette(binding.widgetServicesCard, palette)
+
+        binding.widgetSweepValue.setTextColor(palette.textPrimary)
+        binding.widgetThreatsValue.setTextColor(palette.textPrimary)
+        binding.widgetCredentialsValue.setTextColor(palette.textPrimary)
+        binding.widgetServicesValue.setTextColor(palette.textPrimary)
+        binding.widgetSweepHint.setTextColor(palette.textMuted)
+        binding.widgetThreatsHint.setTextColor(palette.textMuted)
+        binding.widgetCredentialsHint.setTextColor(palette.textMuted)
+        binding.widgetServicesHint.setTextColor(palette.textMuted)
+
+        binding.bottomNavCard.strokeColor = palette.stroke
+        binding.bottomNavRow.background = gradientBackground(
+            startColor = palette.navShellStart,
+            centerColor = blendColors(palette.navShellStart, palette.navShellEnd, 0.45f),
+            endColor = palette.navShellEnd,
+            angle = 90,
+            cornerRadiusDp = 22f
+        )
+        binding.navLionButton.background = if (isDarkTone) {
+            GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+            }
+        } else {
+            GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(blendColors(palette.panel, Color.WHITE, 0.14f))
+            }
+        }
+        applyBottomNavButtonPalette(binding.navScanButton, palette)
+        applyBottomNavButtonPalette(binding.navGuardButton, palette)
+        applyBottomNavButtonPalette(binding.navVaultButton, palette)
+        applyBottomNavButtonPalette(binding.navSupportButton, palette)
+        tintAlertDot(binding.navScanDot, palette.alert)
+        tintAlertDot(binding.navGuardDot, palette.alert)
+        tintAlertDot(binding.navVaultDot, palette.alert)
+        tintAlertDot(binding.navSupportDot, palette.alert)
+    }
+
+    private fun applyActionButtonPalette(
+        button: com.google.android.material.button.MaterialButton,
+        palette: LionThemePalette
+    ) {
+        button.backgroundTintList = ColorStateList.valueOf(palette.panelAlt)
+        button.strokeColor = ColorStateList.valueOf(palette.stroke)
+        button.setTextColor(palette.accent)
+        button.iconTint = ColorStateList.valueOf(palette.accent)
+    }
+
+    private fun applyWidgetCardPalette(
+        card: com.google.android.material.card.MaterialCardView,
+        palette: LionThemePalette
+    ) {
+        card.setCardBackgroundColor(palette.panelAlt)
+        card.strokeColor = palette.stroke
+        val content = card.getChildAt(0) as? LinearLayout ?: return
+        val headerRow = content.getChildAt(0) as? LinearLayout ?: return
+        (headerRow.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(palette.accent)
+        (headerRow.getChildAt(1) as? TextView)?.setTextColor(palette.textSecondary)
+    }
+
+    private fun applyBottomNavButtonPalette(button: LinearLayout, palette: LionThemePalette) {
+        for (index in 0 until button.childCount) {
+            when (val child = button.getChildAt(index)) {
+                is ImageView -> child.imageTintList = ColorStateList.valueOf(palette.textSecondary)
+                is TextView -> child.setTextColor(palette.textSecondary)
+            }
+        }
+    }
+
+    private fun tintAlertDot(dot: View, @androidx.annotation.ColorInt color: Int) {
+        dot.background?.mutate()?.setTint(color)
+    }
+
+    private fun gradientBackground(
+        @androidx.annotation.ColorInt startColor: Int,
+        @androidx.annotation.ColorInt centerColor: Int,
+        @androidx.annotation.ColorInt endColor: Int,
+        angle: Int,
+        cornerRadiusDp: Float = 0f
+    ): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            orientation = if (angle == 90) {
+                GradientDrawable.Orientation.TOP_BOTTOM
+            } else {
+                GradientDrawable.Orientation.LEFT_RIGHT
+            }
+            colors = intArrayOf(startColor, centerColor, endColor)
+            if (cornerRadiusDp > 0f) {
+                cornerRadius = dpToPx(cornerRadiusDp).toFloat()
+            }
+        }
+    }
+
+    private fun blendColors(
+        @androidx.annotation.ColorInt from: Int,
+        @androidx.annotation.ColorInt to: Int,
+        fraction: Float
+    ): Int {
+        return androidx.core.graphics.ColorUtils.blendARGB(
+            from,
+            to,
+            fraction.coerceIn(0f, 1f)
+        )
+    }
+
+    private fun beginLionProcessingAnimation() {
+        if (lionBusyInProgress) {
+            return
+        }
+        lionBusyInProgress = true
+        lionIdleResetRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionIdleResetRunnable = null
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = ValueAnimator.ofFloat(0f, 0.92f).apply {
+            duration = 2200L
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
+            }
+            start()
+        }
+    }
+
+    private fun completeLionProcessingAnimation() {
+        if (!lionBusyInProgress) {
+            return
+        }
+        lionBusyInProgress = false
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = null
+        binding.lionHeroView.setScanComplete()
+        val resetRunnable = Runnable {
+            if (!lionBusyInProgress) {
+                binding.lionHeroView.setIdleState()
+            }
+        }
+        lionIdleResetRunnable = resetRunnable
+        binding.lionHeroView.postDelayed(resetRunnable, 1400L)
+    }
+
+    private fun cancelLionProcessingAnimations(resetToIdle: Boolean) {
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = null
+        lionIdleResetRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionIdleResetRunnable = null
+        lionBusyInProgress = false
+        if (resetToIdle) {
+            binding.lionHeroView.setIdleState()
         }
     }
 
@@ -380,6 +1323,37 @@ class MainActivity : AppCompatActivity() {
             .onFailure { binding.updateStatusLabel.text = getString(R.string.overlay_open_site_failed) }
     }
 
+    private fun refreshBillingEntitlementIfNeeded(force: Boolean, userVisibleStatus: Boolean) {
+        if (billingRefreshInFlight) {
+            return
+        }
+        if (!force && !PlayBillingEntitlementRefresher.shouldRefresh(this)) {
+            return
+        }
+        billingRefreshInFlight = true
+        if (userVisibleStatus) {
+            binding.subStatusLabel.text = getString(R.string.billing_refresh_started)
+        }
+        PlayBillingEntitlementRefresher.refresh(
+            activity = this,
+            force = force
+        ) { result ->
+            billingRefreshInFlight = false
+            refreshPricingPanel()
+            if (userVisibleStatus) {
+                binding.subStatusLabel.text = when {
+                    !result.success -> getString(R.string.billing_refresh_failed)
+                    result.verifiedPlanId == "lifetime" -> getString(R.string.billing_refresh_lifetime)
+                    result.verifiedPlanId != "none" -> getString(
+                        R.string.billing_refresh_verified_template,
+                        shortPlanLabel(result.verifiedPlanId)
+                    )
+                    else -> getString(R.string.billing_refresh_no_active_purchase)
+                }
+            }
+        }
+    }
+
     private fun refreshPricingPanel() {
         val model = PricingPolicy.load(this)
         val access = PricingPolicy.resolveFeatureAccess(this, model)
@@ -387,6 +1361,7 @@ class MainActivity : AppCompatActivity() {
         val regional = PricingPolicy.resolveForCurrentRegion(this, model)
         val trial = PricingPolicy.ensureTrial(this)
         val entitlement = PricingPolicy.entitlement(this)
+        val verifiedPlan = PricingPolicy.verifiedPaidPlan(this)
         val feedback = PricingPolicy.feedbackStatus(this)
         val selectedPlan = PricingPolicy.selectedPlan(this)
         val nextDue = PricingPolicy.nextPaymentDue(this, model)
@@ -398,12 +1373,17 @@ class MainActivity : AppCompatActivity() {
             )
         } else if (trial.inTrial) {
             getString(R.string.pricing_trial_active_template, trial.daysRemaining, model.freeTrialDays)
+        } else if (verifiedPlan != null) {
+            getString(
+                R.string.pricing_paid_verified_plan_template,
+                planLabel(verifiedPlan.planId, regional)
+            )
         } else {
             if (selectedPlan == "none") {
                 getString(R.string.pricing_trial_ended_no_plan)
             } else {
                 getString(
-                    R.string.pricing_trial_ended_plan_template,
+                    R.string.pricing_trial_ended_plan_selected_template,
                     planLabel(selectedPlan, regional)
                 )
             }
@@ -436,7 +1416,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             ""
         }
-        val familyPriceLine = if (selectedPlan == "family") {
+        val familyPriceLine = if (selectedPlan == "family" || verifiedPlan?.planId == "family") {
             getString(R.string.pricing_family_flat_rate_note)
         } else {
             ""
@@ -508,7 +1488,10 @@ class MainActivity : AppCompatActivity() {
                     )
                 )
                 .setPositiveButton(android.R.string.ok, null)
-                .setNeutralButton(R.string.action_open_billing) { _, _ ->
+                .setNeutralButton(R.string.action_refresh_purchase_status) { _, _ ->
+                    refreshBillingEntitlementIfNeeded(force = true, userVisibleStatus = true)
+                }
+                .setNegativeButton(R.string.action_open_billing) { _, _ ->
                     openSupportCenter()
                 }
                 .show()
@@ -553,14 +1536,17 @@ class MainActivity : AppCompatActivity() {
                 PricingPolicy.saveSelectedPlan(this, selectedPlan)
                 refreshPricingPanel()
                 binding.subStatusLabel.text = getString(
-                    R.string.plan_saved_template,
+                    R.string.plan_saved_pending_verification_template,
                     planLabel(selectedPlan, regional)
                 )
+                refreshBillingEntitlementIfNeeded(force = true, userVisibleStatus = false)
             }
-            .setNeutralButton(R.string.action_open_billing) { _, _ ->
+            .setNeutralButton(R.string.action_refresh_purchase_status) { _, _ ->
+                refreshBillingEntitlementIfNeeded(force = true, userVisibleStatus = true)
+            }
+            .setNegativeButton(R.string.action_open_billing) { _, _ ->
                 openSupportCenter()
             }
-            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
@@ -668,7 +1654,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun entitlementSourceLabel(source: String): String {
         return when (source.lowercase(Locale.US)) {
+            "play_billing" -> getString(R.string.pricing_lifetime_source_play_billing)
             "device_allowlist" -> getString(R.string.pricing_lifetime_source_allowlist)
+            "debug_auto" -> getString(R.string.pricing_lifetime_source_debug)
             else -> getString(R.string.pricing_lifetime_source_manual)
         }
     }
@@ -1282,6 +2270,177 @@ class MainActivity : AppCompatActivity() {
                 check.maxItemsFree
             )
             else -> getString(R.string.media_vault_import_failed)
+        }
+    }
+
+    private fun refreshDeviceLocatorPanel() {
+        val state = LocatorCapabilityViewModel.resolve(this)
+        latestLocatorState = state
+
+        if (!state.enabled) {
+            binding.deviceLocatorSummaryLabel.text = getString(R.string.device_locator_disabled)
+            binding.deviceLocatorActionsLabel.text = getString(R.string.device_locator_actions_placeholder)
+            return
+        }
+        if (!state.hasProvidersConfigured) {
+            binding.deviceLocatorSummaryLabel.text = getString(R.string.device_locator_no_providers)
+            binding.deviceLocatorActionsLabel.text = getString(R.string.device_locator_actions_placeholder)
+            return
+        }
+
+        val available = state.providers.count { it.launchReady }
+        val recommended = preferredLocatorProvider(state)?.provider?.label
+            ?: getString(R.string.device_locator_recommended_none)
+        val linked = if (state.primaryEmailLinked) {
+            getString(R.string.device_locator_linked_yes)
+        } else {
+            getString(R.string.device_locator_linked_no)
+        }
+        binding.deviceLocatorSummaryLabel.text = getString(
+            R.string.device_locator_summary_template,
+            linked,
+            available,
+            state.providers.size,
+            recommended
+        )
+
+        val lines = mutableListOf<String>()
+        if (!state.primaryEmailLinked) {
+            lines += getString(R.string.device_locator_guidance_link_account)
+        }
+        preferredLocatorProvider(state)?.let { preferred ->
+            lines += getString(
+                R.string.device_locator_guidance_open_provider_template,
+                preferred.provider.label
+            )
+        }
+        state.providers.take(3).forEachIndexed { index, capability ->
+            lines += "${index + 1}. ${capability.provider.label}: ${locatorCapabilityLabel(capability)}"
+        }
+
+        binding.deviceLocatorActionsLabel.text = if (lines.isEmpty()) {
+            getString(R.string.device_locator_actions_placeholder)
+        } else {
+            "${getString(R.string.device_locator_actions_title)}:\n${lines.joinToString("\n")}"
+        }
+    }
+
+    private fun openDeviceLocatorProvider() {
+        val state = latestLocatorState ?: LocatorCapabilityViewModel.resolve(this).also {
+            latestLocatorState = it
+        }
+        if (!state.enabled) {
+            binding.subStatusLabel.text = getString(R.string.device_locator_disabled)
+            return
+        }
+
+        val providers = state.providers.filter { it.launchReady }
+        if (providers.isEmpty()) {
+            binding.subStatusLabel.text = getString(R.string.device_locator_launch_failed)
+            return
+        }
+
+        if (providers.size == 1) {
+            launchLocatorProvider(providers.first())
+            return
+        }
+        openLocatorProviderPicker(
+            titleRes = R.string.device_locator_provider_picker_title,
+            providers = providers,
+            onSelected = { launchLocatorProvider(it) }
+        )
+    }
+
+    private fun openDeviceLocatorSetupDialog() {
+        val state = latestLocatorState ?: LocatorCapabilityViewModel.resolve(this).also {
+            latestLocatorState = it
+        }
+        if (!state.enabled) {
+            binding.subStatusLabel.text = getString(R.string.device_locator_disabled)
+            return
+        }
+        if (!state.hasProvidersConfigured) {
+            binding.subStatusLabel.text = getString(R.string.device_locator_no_providers)
+            return
+        }
+        val setupProviders = state.providers.filter { it.setupReady }
+        if (setupProviders.isEmpty()) {
+            binding.subStatusLabel.text = getString(R.string.device_locator_setup_failed)
+            return
+        }
+
+        openLocatorProviderPicker(
+            titleRes = R.string.device_locator_setup_dialog_title,
+            providers = setupProviders,
+            onSelected = { launchLocatorSetup(it) }
+        )
+    }
+
+    private fun openLocatorProviderPicker(
+        titleRes: Int,
+        providers: List<LocatorProviderCapability>,
+        onSelected: (LocatorProviderCapability) -> Unit
+    ) {
+        if (providers.isEmpty()) {
+            return
+        }
+        val options = providers.map { capability ->
+            getString(
+                R.string.device_locator_provider_option_template,
+                capability.provider.label,
+                locatorCapabilityLabel(capability)
+            )
+        }.toTypedArray()
+        var selectedIndex = 0
+
+        AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setSingleChoiceItems(options, selectedIndex) { _, which ->
+                selectedIndex = which
+            }
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                onSelected(providers[selectedIndex])
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun launchLocatorProvider(capability: LocatorProviderCapability) {
+        val result = DeviceLocatorLinkLauncher.openProvider(this, capability.provider)
+        binding.subStatusLabel.text = when {
+            result.opened && result.usedFallback -> getString(
+                R.string.device_locator_launch_fallback_template,
+                capability.provider.label
+            )
+            result.opened -> getString(
+                R.string.device_locator_launch_success_template,
+                capability.provider.label
+            )
+            else -> getString(R.string.device_locator_launch_failed)
+        }
+    }
+
+    private fun launchLocatorSetup(capability: LocatorProviderCapability) {
+        val result = DeviceLocatorLinkLauncher.openSetup(this, capability.provider)
+        binding.subStatusLabel.text = if (result.opened) {
+            getString(R.string.device_locator_setup_opened)
+        } else {
+            getString(R.string.device_locator_setup_failed)
+        }
+    }
+
+    private fun preferredLocatorProvider(state: LocatorCapabilityState): LocatorProviderCapability? {
+        return state.providers.firstOrNull { it.packageLaunchReady } ?:
+            state.providers.firstOrNull { it.deepLinkReady } ?:
+            state.providers.firstOrNull { it.fallbackReady }
+    }
+
+    private fun locatorCapabilityLabel(capability: LocatorProviderCapability): String {
+        return when {
+            capability.packageLaunchReady -> getString(R.string.device_locator_capability_app_ready)
+            capability.deepLinkReady -> getString(R.string.device_locator_capability_link_ready)
+            capability.fallbackReady -> getString(R.string.device_locator_capability_web_ready)
+            else -> getString(R.string.device_locator_capability_unavailable)
         }
     }
 
@@ -2060,22 +3219,220 @@ class MainActivity : AppCompatActivity() {
         latestRiskCards = listOf(toRiskCardModel(state))
         binding.securityScoreLabel.text = getString(R.string.security_score_template, state.score)
         binding.securityTierLabel.text = state.tierLabel
+        binding.securityUrgentActionsLabel.text = buildHomeStatusBlock()
+        binding.securityTopActionButton.text = getString(R.string.action_scan_now_all)
+    }
 
-        binding.securityUrgentActionsLabel.text = if (state.actions.isEmpty()) {
-            getString(R.string.security_urgent_actions_none)
+    private fun resolveGuidedSuggestion(state: SecurityHeroState): GuidedSuggestion {
+        val route = state.actions.firstOrNull()?.route
+        return when (route) {
+            SecurityActionRoute.RUN_PHISHING_TRIAGE,
+            SecurityActionRoute.START_INCIDENT -> GuidedSuggestion(
+                destination = GuidedDestination.THREATS,
+                destinationLabel = getString(R.string.guided_target_threats),
+                bodyText = getString(R.string.guided_body_threats)
+            )
+
+            SecurityActionRoute.OPEN_CREDENTIAL_CENTER -> GuidedSuggestion(
+                destination = GuidedDestination.CREDENTIALS,
+                destinationLabel = getString(R.string.guided_target_credentials),
+                bodyText = getString(R.string.guided_body_credentials)
+            )
+
+            SecurityActionRoute.OPEN_SUPPORT,
+            SecurityActionRoute.OPEN_DEVICE_LOCATOR_PROVIDER,
+            SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP -> GuidedSuggestion(
+                destination = GuidedDestination.SERVICES,
+                destinationLabel = getString(R.string.guided_target_services),
+                bodyText = getString(R.string.guided_body_services)
+            )
+
+            else -> GuidedSuggestion(
+                destination = GuidedDestination.SWEEP,
+                destinationLabel = getString(R.string.guided_target_sweep),
+                bodyText = getString(R.string.guided_body_sweep)
+            )
+        }
+    }
+
+    private fun routeToGuidedDestination(destination: GuidedDestination) {
+        when (destination) {
+            GuidedDestination.SWEEP -> runHomeFullScan()
+            GuidedDestination.THREATS -> openPhishingTriageDialog()
+            GuidedDestination.CREDENTIALS -> openCredentialCenter()
+            GuidedDestination.SERVICES -> openSecurityDetailsDialog()
+        }
+    }
+
+    private fun buildHomeStatusBlock(): String {
+        val scanReady = SecurityScanner.readLastScanTimestamp(this) != "never"
+        val wifi = WifiScanSnapshotStore.latest(this)
+        val wifiState = when {
+            wifi == null -> getString(R.string.home_state_pending)
+            wifi.tier.equals("high_risk", ignoreCase = true) ||
+                wifi.tier.equals("elevated", ignoreCase = true) ->
+                getString(R.string.home_state_attention)
+            else -> getString(R.string.home_state_ready)
+        }
+        val latestThreat = PhishingIntakeStore.latest(this)
+        val threatState = when {
+            latestThreat == null -> getString(R.string.home_state_pending)
+            latestThreat.result.severity == Severity.HIGH || latestThreat.result.severity == Severity.MEDIUM ->
+                getString(R.string.home_state_attention)
+            else -> getString(R.string.home_state_ready)
+        }
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val credentialState = if (profile.primaryEmail.isNotBlank() && profile.emailLinkedAtEpochMs > 0L) {
+            getString(R.string.home_state_ready)
         } else {
-            val lines = state.actions.take(3).mapIndexed { index, action ->
-                "${index + 1}. ${action.label}"
-            }.joinToString("\n")
-            "${getString(R.string.security_urgent_actions_title)}:\n$lines"
+            getString(R.string.home_state_pending)
+        }
+        return getString(
+            R.string.home_status_block_template,
+            if (scanReady) getString(R.string.home_state_ready) else getString(R.string.home_state_pending),
+            wifiState,
+            threatState,
+            credentialState
+        )
+    }
+
+    private fun refreshBottomNavIndicators() {
+        val state = latestSecurityHeroState ?: buildSecurityHeroState()
+        val scanNeedsAction = state.score < 85 || SecurityScanner.readLastScanTimestamp(this) == "never"
+        val wifi = WifiScanSnapshotStore.latest(this)
+        val (phishingHigh, phishingMedium, _) = PhishingIntakeStore.summarizeRecent(this, lookback = 12)
+        val threatNeedsAction = phishingHigh > 0 || phishingMedium > 0 ||
+            wifi?.tier.equals("high_risk", ignoreCase = true) ||
+            wifi?.tier.equals("elevated", ignoreCase = true)
+        val queueHasPending = CredentialActionStore.loadQueue(this)
+            .any { !it.status.equals("completed", ignoreCase = true) }
+        val incidentSummary = IncidentStore.summarize(this)
+        val serviceNeedsAction = !PricingPolicy.resolveFeatureAccess(this).paidAccess ||
+            (incidentSummary.openCount + incidentSummary.inProgressCount > 0)
+
+        applyNavSignal(binding.navScanButton, binding.navScanDot, scanNeedsAction)
+        applyNavSignal(binding.navGuardButton, binding.navGuardDot, threatNeedsAction)
+        applyNavSignal(binding.navVaultButton, binding.navVaultDot, queueHasPending)
+        applyNavSignal(binding.navSupportButton, binding.navSupportDot, serviceNeedsAction)
+    }
+
+    private fun refreshHomeQuickWidgets() {
+        val lastScan = SecurityScanner.readLastScanTimestamp(this)
+        val hasScan = lastScan != "never"
+        binding.widgetSweepValue.text = if (hasScan) {
+            getString(R.string.home_widget_sweep_ready)
+        } else {
+            getString(R.string.home_widget_sweep_pending)
+        }
+        binding.widgetSweepHint.text = if (hasScan) {
+            getString(R.string.home_widget_last_scan_template, compactScanTimestamp(lastScan))
+        } else {
+            getString(R.string.home_widget_last_scan_never)
         }
 
-        val topAction = state.actions.firstOrNull()
-            ?: SecurityHeroAction(
-                label = getString(R.string.security_action_open_support),
-                route = SecurityActionRoute.OPEN_SUPPORT
-            )
-        binding.securityTopActionButton.text = topAction.label
+        val (phishingHigh, phishingMedium, _) = PhishingIntakeStore.summarizeRecent(this, lookback = 12)
+        val threatCount = phishingHigh + phishingMedium
+        binding.widgetThreatsValue.text = if (threatCount <= 0) {
+            getString(R.string.home_widget_threats_clear)
+        } else {
+            getString(R.string.home_widget_threats_count_template, threatCount)
+        }
+        binding.widgetThreatsHint.text = getString(
+            R.string.home_widget_threats_hint_template,
+            phishingHigh,
+            phishingMedium
+        )
+
+        val pendingQueue = CredentialActionStore.loadQueue(this)
+            .count { !it.status.equals("completed", ignoreCase = true) }
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val linkedEmail = profile.primaryEmail.isNotBlank() && profile.emailLinkedAtEpochMs > 0L
+        binding.widgetCredentialsValue.text = if (pendingQueue <= 0) {
+            getString(R.string.home_widget_credentials_clear)
+        } else {
+            getString(R.string.home_widget_credentials_pending_template, pendingQueue)
+        }
+        binding.widgetCredentialsHint.text = if (linkedEmail) {
+            getString(R.string.home_widget_credentials_hint_linked)
+        } else {
+            getString(R.string.home_widget_credentials_hint_not_linked)
+        }
+
+        val access = PricingPolicy.resolveFeatureAccess(this)
+        val incidentSummary = IncidentStore.summarize(this)
+        val openIncidents = incidentSummary.openCount + incidentSummary.inProgressCount
+        binding.widgetServicesValue.text = if (access.paidAccess) {
+            getString(R.string.home_widget_services_paid)
+        } else {
+            getString(R.string.home_widget_services_free)
+        }
+        binding.widgetServicesHint.text = getString(
+            R.string.home_widget_services_hint_template,
+            openIncidents
+        )
+    }
+
+    private fun compactScanTimestamp(raw: String): String {
+        val normalized = raw.trim()
+            .replace('T', ' ')
+            .removeSuffix("Z")
+        if (normalized.equals("never", ignoreCase = true)) {
+            return normalized
+        }
+        return if (normalized.length > 16) {
+            normalized.substring(0, 16)
+        } else {
+            normalized
+        }
+    }
+
+    private fun alignHomeWidgetsBetweenTitleAndScan() {
+        if (
+            binding.homeFrameTitleLabel.height <= 0 ||
+            binding.homeQuickWidgetsGrid.height <= 0 ||
+            binding.securityTopActionButton.height <= 0 ||
+            binding.homeHeroContent.height <= 0
+        ) {
+            return
+        }
+        binding.homeQuickWidgetsGrid.translationY = 0f
+        val titleLoc = IntArray(2)
+        val widgetLoc = IntArray(2)
+        val scanLoc = IntArray(2)
+        val heroLoc = IntArray(2)
+        binding.homeFrameTitleLabel.getLocationOnScreen(titleLoc)
+        binding.homeQuickWidgetsGrid.getLocationOnScreen(widgetLoc)
+        binding.securityTopActionButton.getLocationOnScreen(scanLoc)
+        binding.homeHeroContent.getLocationOnScreen(heroLoc)
+
+        val titleBottom = titleLoc[1].toFloat() + binding.homeFrameTitleLabel.height
+        val scanTop = scanLoc[1].toFloat()
+        val heroTop = heroLoc[1].toFloat() + binding.homeHeroContent.paddingTop
+        val heroBottom = heroLoc[1].toFloat() + binding.homeHeroContent.height - binding.homeHeroContent.paddingBottom
+        val safeTop = maxOf(titleBottom + dpToPx(10f), heroTop)
+        val safeBottom = minOf(scanTop - dpToPx(10f), heroBottom)
+        if (safeBottom <= safeTop) {
+            return
+        }
+
+        val currentTop = widgetLoc[1].toFloat()
+        val currentBottom = currentTop + binding.homeQuickWidgetsGrid.height
+        val currentCenterY = currentTop + (binding.homeQuickWidgetsGrid.height * 0.5f)
+        val targetCenterY = safeTop + ((safeBottom - safeTop) * 0.5f)
+        val minDelta = safeTop - currentTop
+        val maxDelta = safeBottom - currentBottom
+        val delta = if (minDelta > maxDelta) {
+            // Safe range is smaller than widget block height; prefer keeping lower row visible.
+            maxDelta
+        } else {
+            (targetCenterY - currentCenterY).coerceIn(minDelta, maxDelta)
+        }
+        binding.homeQuickWidgetsGrid.translationY = delta
+    }
+
+    private fun applyNavSignal(navView: View, dotView: View, active: Boolean) {
+        dotView.visibility = if (active) View.VISIBLE else View.GONE
+        navView.alpha = if (active) 1f else 0.50f
     }
 
     private fun toRiskCardModel(state: SecurityHeroState): RiskCardModel {
@@ -2145,6 +3502,45 @@ class MainActivity : AppCompatActivity() {
                     score -= 10
                     details += getString(R.string.security_detail_wifi_risk_elevated)
                     addAction(SecurityActionRoute.RUN_WIFI_POSTURE_SCAN, R.string.security_action_run_wifi_scan)
+                }
+            }
+        }
+
+        val locatorState = LocatorCapabilityViewModel.resolve(this)
+        latestLocatorState = locatorState
+        if (locatorState.enabled) {
+            when {
+                !locatorState.hasProvidersConfigured -> {
+                    score -= 10
+                    details += getString(R.string.security_detail_locator_not_configured)
+                    addAction(
+                        SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP,
+                        R.string.security_action_setup_locator
+                    )
+                }
+                !locatorState.hasLaunchableProvider -> {
+                    score -= 10
+                    details += getString(R.string.security_detail_locator_unavailable)
+                    addAction(
+                        SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP,
+                        R.string.security_action_setup_locator
+                    )
+                }
+                !locatorState.primaryEmailLinked -> {
+                    score -= 6
+                    details += getString(R.string.security_detail_locator_not_linked)
+                    addAction(
+                        SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP,
+                        R.string.security_action_setup_locator
+                    )
+                }
+                locatorState.providers.none { it.packageLaunchReady || it.deepLinkReady } -> {
+                    score -= 3
+                    details += getString(R.string.security_detail_locator_web_only)
+                    addAction(
+                        SecurityActionRoute.OPEN_DEVICE_LOCATOR_PROVIDER,
+                        R.string.security_action_open_locator
+                    )
                 }
             }
         }
@@ -2240,6 +3636,8 @@ class MainActivity : AppCompatActivity() {
             SecurityActionRoute.FIX_OVERLAY -> openOverlayPermissionFix()
             SecurityActionRoute.RUN_PHISHING_TRIAGE -> runScamTriage()
             SecurityActionRoute.START_INCIDENT -> startNextIncident()
+            SecurityActionRoute.OPEN_DEVICE_LOCATOR_PROVIDER -> openDeviceLocatorProvider()
+            SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP -> openDeviceLocatorSetupDialog()
             SecurityActionRoute.OPEN_SUPPORT -> openSupportCenter()
             SecurityActionRoute.OPEN_CREDENTIAL_CENTER -> openCredentialCenter()
         }
@@ -2413,6 +3811,10 @@ class MainActivity : AppCompatActivity() {
             )
         }
         refreshIncidentPanel()
+    }
+
+    private fun dpToPx(valueDp: Float): Int {
+        return (valueDp * resources.displayMetrics.density).toInt()
     }
 
     private fun isNotificationPermissionReady(): Boolean {

@@ -108,6 +108,14 @@ data class StoredCredential(
     }
 }
 
+data class CredentialHealthAssessment(
+    val score: Int,
+    val tier: String,
+    val signals: List<String>,
+    val rotationAgeDays: Int,
+    val pendingAgeDays: Int
+)
+
 object CredentialVaultStore {
 
     private const val VAULT_ALIAS = "dt_credential_vault_key"
@@ -116,6 +124,7 @@ object CredentialVaultStore {
     private const val IV_LENGTH_BYTES = 12
     private const val TAG_LENGTH_BITS = 128
     private const val MAX_HISTORY_ENTRIES = 20
+    private const val DAY_MS = 24L * 60L * 60L * 1000L
 
     private fun vaultFile(context: Context): File = File(context.filesDir, WatchdogConfig.CREDENTIAL_SECRET_VAULT_FILE)
 
@@ -282,14 +291,111 @@ object CredentialVaultStore {
         return updated
     }
 
-    fun formatRecordSummary(record: StoredCredential): String {
+    fun assessRecordHealth(
+        record: StoredCredential,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): CredentialHealthAssessment {
+        var score = 100
+        val signals = mutableListOf<String>()
+        val rotationAgeDays = ((nowEpochMs - record.updatedAtEpochMs).coerceAtLeast(0L) / DAY_MS).toInt()
+        val pendingAgeDays = if (record.pendingPassword.isNullOrBlank()) {
+            0
+        } else {
+            ((nowEpochMs - record.updatedAtEpochMs).coerceAtLeast(0L) / DAY_MS).toInt()
+        }
+
+        if (record.compromised || record.breachCount > 0) {
+            score -= 60
+            signals += "breach hits=${record.breachCount}"
+        }
+        if (isWeakPassword(record.currentPassword)) {
+            score -= 22
+            signals += "current password weak"
+        }
+        if (rotationAgeDays >= 120) {
+            score -= 18
+            signals += "rotation stale (${rotationAgeDays}d)"
+        } else if (rotationAgeDays >= 90) {
+            score -= 10
+            signals += "rotation aging (${rotationAgeDays}d)"
+        }
+        if (!record.pendingPassword.isNullOrBlank()) {
+            score -= 6
+            signals += "pending rotation queued"
+            if (pendingAgeDays >= 7) {
+                score -= 8
+                signals += "pending unchanged ${pendingAgeDays}d"
+            }
+        }
+        if (record.history.size <= 1) {
+            score -= 4
+            signals += "rotation history limited"
+        }
+
+        val bounded = score.coerceIn(0, 100)
+        val tier = when {
+            bounded >= 85 -> "healthy"
+            bounded >= 65 -> "guarded"
+            bounded >= 40 -> "elevated"
+            else -> "critical"
+        }
+        return CredentialHealthAssessment(
+            score = bounded,
+            tier = tier,
+            signals = signals,
+            rotationAgeDays = rotationAgeDays,
+            pendingAgeDays = pendingAgeDays
+        )
+    }
+
+    fun formatRecordSummary(
+        record: StoredCredential,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): String {
+        val assessment = assessRecordHealth(record, nowEpochMs)
         val checkedAt = if (record.lastCheckedAtEpochMs > 0L) {
             formatDisplayTime(record.lastCheckedAtEpochMs)
         } else {
             "never"
         }
         val pendingState = if (record.pendingPassword.isNullOrBlank()) "none" else "queued"
-        return "Stored: yes\nPending rotation: $pendingState\nBreach count: ${record.breachCount}\nLast breach scan: $checkedAt\nHistory entries: ${record.history.size}"
+        val pendingLine = if (record.pendingPassword.isNullOrBlank()) {
+            "Pending rotation: $pendingState"
+        } else {
+            "Pending rotation: $pendingState (${assessment.pendingAgeDays}d)"
+        }
+        val signalLine = if (assessment.signals.isEmpty()) {
+            "none"
+        } else {
+            assessment.signals.joinToString("; ")
+        }
+        return "Stored: yes\nHealth: ${assessment.score}/100 (${assessment.tier})\nRisk signals: $signalLine\nRotation age: ${assessment.rotationAgeDays}d\n$pendingLine\nBreach count: ${record.breachCount}\nLast breach scan: $checkedAt\nHistory entries: ${record.history.size}"
+    }
+
+    fun formatVaultHealthSummary(
+        records: List<StoredCredential>,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): String {
+        if (records.isEmpty()) {
+            return "Stored records: 0"
+        }
+        val assessments = records.map { assessRecordHealth(it, nowEpochMs) }
+        val average = assessments.map { it.score }.average()
+        val compromisedCount = records.count { it.compromised || it.breachCount > 0 }
+        val weakCount = records.count { isWeakPassword(it.currentPassword) }
+        val staleCount = assessments.count { it.rotationAgeDays >= 90 }
+        val pendingCount = records.count { !it.pendingPassword.isNullOrBlank() }
+        val topSignals = assessments
+            .flatMap { it.signals }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(3)
+            .joinToString(" | ") { "${it.key} x${it.value}" }
+            .ifBlank { "none" }
+
+        return "Stored records: ${records.size}\nHealth avg: ${"%.1f".format(Locale.US, average)}/100\nCompromised: $compromisedCount | Weak: $weakCount | Stale(90d+): $staleCount | Pending: $pendingCount\nTop risk signals: $topSignals"
     }
 
     private fun findByIdentity(
@@ -448,6 +554,23 @@ object CredentialVaultStore {
 
     private fun normalizeUsername(username: String): String {
         return username.trim().lowercase(Locale.US)
+    }
+
+    private fun isWeakPassword(password: String): Boolean {
+        val value = password.trim()
+        if (value.length < 14) {
+            return true
+        }
+        val classes = listOf(
+            value.any { it.isLowerCase() },
+            value.any { it.isUpperCase() },
+            value.any { it.isDigit() },
+            value.any { !it.isLetterOrDigit() }
+        ).count { it }
+        if (classes < 4) {
+            return true
+        }
+        return Regex("(.)\\1{3,}").containsMatchIn(value)
     }
 
     private fun formatDisplayTime(epochMs: Long): String {

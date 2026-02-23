@@ -3,6 +3,8 @@ package com.realyn.watchdog
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
+import java.security.MessageDigest
+import java.util.Locale
 
 enum class GuardianProtectedAction(
     val code: String,
@@ -20,6 +22,7 @@ enum class GuardianProtectedAction(
 data class GuardianOverrideSettings(
     val enabled: Boolean,
     val tokenTtlSeconds: Int,
+    val tokenSingleUse: Boolean,
     val requireForVaultExport: Boolean,
     val requireForVaultDelete: Boolean,
     val requireForHighRiskPhishingActions: Boolean,
@@ -31,6 +34,7 @@ object GuardianOverridePolicy {
     private val defaults = GuardianOverrideSettings(
         enabled = true,
         tokenTtlSeconds = 300,
+        tokenSingleUse = true,
         requireForVaultExport = true,
         requireForVaultDelete = true,
         requireForHighRiskPhishingActions = true,
@@ -72,13 +76,43 @@ object GuardianOverridePolicy {
         onDenied: () -> Unit = {}
     ) {
         val profileControl = PricingPolicy.resolveProfileControl(activity)
+        val settings = load(activity)
         if (!requiresOverride(activity, action, profileControl)) {
             onApproved()
             return
         }
 
-        val cached = GuardianOverrideTokenStore.readValidToken(activity, action.code)
+        val profile = PrimaryIdentityStore.readProfile(activity)
+        val guardianEmail = profile.guardianEmail.trim().lowercase(Locale.US)
+        if (profileControl.requiresGuardianApprovalForSensitiveActions && guardianEmail.isBlank()) {
+            FamilyControlAuditLog.appendGuardianOverrideEvent(
+                context = activity,
+                actionCode = action.code,
+                outcome = "blocked_missing_guardian",
+                reasonCode = reasonCode
+            )
+            AlertDialog.Builder(activity)
+                .setTitle(R.string.guardian_override_missing_title)
+                .setMessage(R.string.guardian_override_missing_message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            onDenied()
+            return
+        }
+        val profileHash = buildProfileHash(
+            roleCode = profileControl.roleCode,
+            guardianEmail = guardianEmail
+        )
+        val cached = GuardianOverrideTokenStore.readValidToken(
+            context = activity,
+            actionCode = action.code,
+            expectedReasonCode = reasonCode,
+            expectedProfileHash = profileHash
+        )
         if (cached != null) {
+            if (settings.tokenSingleUse) {
+                GuardianOverrideTokenStore.clearToken(activity, action.code)
+            }
             FamilyControlAuditLog.appendGuardianOverrideEvent(
                 context = activity,
                 actionCode = action.code,
@@ -90,8 +124,7 @@ object GuardianOverridePolicy {
             return
         }
 
-        val guardianEmail = PrimaryIdentityStore.readProfile(activity).guardianEmail
-            .ifBlank { activity.getString(R.string.identity_guardian_not_set) }
+        val guardianEmailLabel = guardianEmail.ifBlank { activity.getString(R.string.identity_guardian_not_set) }
 
         AlertDialog.Builder(activity)
             .setTitle(R.string.guardian_override_confirm_title)
@@ -99,15 +132,15 @@ object GuardianOverridePolicy {
                 activity.getString(
                     R.string.guardian_override_confirm_message_template,
                     actionLabel,
-                    guardianEmail
+                    guardianEmailLabel
                 )
             )
             .setPositiveButton(R.string.action_confirm) { _, _ ->
-                val settings = load(activity)
                 val token = GuardianOverrideTokenStore.issueToken(
                     context = activity,
                     actionCode = action.code,
                     reasonCode = reasonCode,
+                    profileHash = profileHash,
                     ttlSeconds = settings.tokenTtlSeconds
                 )
                 FamilyControlAuditLog.appendGuardianOverrideEvent(
@@ -153,6 +186,7 @@ object GuardianOverridePolicy {
             enabled = item.optBoolean("enabled", defaults.enabled),
             tokenTtlSeconds = item.optInt("token_ttl_seconds", defaults.tokenTtlSeconds)
                 .coerceIn(30, 15 * 60),
+            tokenSingleUse = item.optBoolean("token_single_use", defaults.tokenSingleUse),
             requireForVaultExport = item.optBoolean(
                 "require_for_vault_export",
                 defaults.requireForVaultExport
@@ -170,5 +204,15 @@ object GuardianOverridePolicy {
                 defaults.childIdleRelockSeconds
             ).coerceIn(15, 15 * 60)
         )
+    }
+
+    private fun buildProfileHash(roleCode: String, guardianEmail: String): String {
+        val normalizedRole = roleCode.trim().lowercase(Locale.US)
+        val normalizedGuardian = guardianEmail.trim().lowercase(Locale.US)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$normalizedRole|$normalizedGuardian".toByteArray(Charsets.UTF_8))
+        return digest.joinToString(separator = "") { byte ->
+            String.format(Locale.US, "%02x", byte)
+        }
     }
 }

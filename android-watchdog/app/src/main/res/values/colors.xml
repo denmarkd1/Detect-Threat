@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand_bg_dark">#08080D</color>
-    <color name="brand_bg">#101019</color>
-    <color name="brand_panel">#141420</color>
-    <color name="brand_panel_alt">#1B1B2A</color>
-    <color name="brand_stroke">#4E4E78</color>
-    <color name="brand_accent">#D4AF37</color>
-    <color name="brand_alert">#C74F31</color>
-    <color name="surface_alt">#1B1B2A</color>
-    <color name="text_primary">#F3EBCB</color>
-    <color name="text_secondary">#C8B782</color>
-    <color name="text_muted">#9B9276</color>
-    <color name="icon_background">#11111A</color>
+    <color name="brand_bg_dark">#110C08</color>
+    <color name="brand_bg">#1A120C</color>
+    <color name="brand_panel">#231710</color>
+    <color name="brand_panel_alt">#2C1D14</color>
+    <color name="brand_stroke">#7A5B39</color>
+    <color name="brand_accent">#D6A545</color>
+    <color name="brand_alert">#C14830</color>
+    <color name="surface_alt">#2C1D14</color>
+    <color name="text_primary">#F7EBD5</color>
+    <color name="text_secondary">#D8BE92</color>
+    <color name="text_muted">#A78E6A</color>
+    <color name="icon_background">#1F140D</color>
+    <color name="nav_alert_dot">#D64A33</color>
 </resources>

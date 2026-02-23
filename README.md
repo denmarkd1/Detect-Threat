@@ -139,10 +139,50 @@ Run local support hub (AI chat hotline + FIFO ticket queue + embedded support pa
 bash scripts/ops/run_support_hub.sh
 ```
 
+Start Android Studio + real-time collaboration monitor (IDE and CLI edits visible in one stream):
+
+```bash
+bash scripts/ops/start_android_studio_collab.sh
+tail -f logs/android_studio_collab.log
+```
+
+Run monitor only (if Studio is already open):
+
+```bash
+bash scripts/ops/watch_android_project_changes.sh
+```
+
+Monitor behavior:
+- Uses `inotifywait` for low-latency events when available.
+- Falls back to portable polling mode when `inotifywait` is not installed.
+
+Prepare a policy-sanitized Gemini handoff prompt (local-only by default):
+
+```bash
+bash scripts/ops/gemini_task_bridge.sh \
+  --task "Implement queued rotation status badge in home screen" \
+  --files "app/src/main/java/com/dtguardian/ui/home/HomeViewModel.kt,app/src/main/res/layout/fragment_home.xml"
+```
+
+Send to Gemini only with explicit outbound command opt-in:
+
+```bash
+bash scripts/ops/gemini_task_bridge.sh \
+  --task-file /tmp/gemini_task.txt \
+  --send \
+  --exec-cmd "gemini -m gemini-2.5-pro"
+```
+
 Ensure Zen MCP code-review threading is available (starts local Redis dependency if needed):
 
 ```bash
 bash scripts/ops/ensure_zen_redis.sh
+```
+
+Refresh the single D_T hub runtime source used by all MCP launcher wrappers:
+
+```bash
+bash scripts/ops/dt_hub_runtime_sync.sh
 ```
 
 If testing feedback API from a USB-connected physical Android device, map device port 8787 to local hub:

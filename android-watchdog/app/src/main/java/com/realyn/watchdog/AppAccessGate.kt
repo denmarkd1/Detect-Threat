@@ -4,6 +4,7 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
+import android.content.Context
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONObject
@@ -66,8 +67,11 @@ object AppAccessGate {
         )
     }
 
-    fun onAppBackgrounded() {
+    fun onAppBackgrounded(context: Context? = null) {
         SessionUnlockState.markBackgrounded()
+        if (context != null) {
+            GuardianOverrideTokenStore.clearAllTokens(context)
+        }
     }
 
     fun onUserInteraction() {

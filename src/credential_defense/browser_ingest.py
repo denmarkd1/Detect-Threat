@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -46,16 +47,46 @@ def _normalized_key(row: dict[str, Any], logical_key: str) -> str:
     return ""
 
 
-def _owner_for_username(username: str, settings: dict[str, Any]) -> str:
-    value = (username or "").lower()
+def _owner_pattern_matches(username: str, raw_pattern: str) -> bool:
+    pattern = str(raw_pattern or "").strip().lower()
+    if not pattern:
+        return False
+    domain = username.split("@", 1)[1] if "@" in username else ""
+    if pattern.startswith("@"):
+        return domain == pattern[1:]
+    if "*" in pattern:
+        expr = "^" + re.escape(pattern).replace("\\*", ".*") + "$"
+        return re.match(expr, username) is not None
+    if "@" in pattern:
+        return username == pattern
+    return pattern in username
+
+
+def _owner_fallback(settings: dict[str, Any], fallback_owner_id: str = "parent") -> str:
     owners = settings.get("owners", [])
+    fallback = canonical_owner_id(fallback_owner_id)
+    for owner in owners:
+        if canonical_owner_id(owner.get("id")) == fallback:
+            return fallback
+    return canonical_owner_id(owners[0]["id"]) if owners else "parent"
+
+
+def _owner_for_username(
+    username: str,
+    settings: dict[str, Any],
+    fallback_owner_id: str = "parent",
+) -> str:
+    value = (username or "").strip().lower()
+    owners = settings.get("owners", [])
+    fallback = _owner_fallback(settings, fallback_owner_id=fallback_owner_id)
+    if not value:
+        return fallback
     for owner in owners:
         owner_id = canonical_owner_id(owner.get("id"))
         for pattern in owner.get("email_patterns", []):
-            pattern_l = str(pattern).lower()
-            if pattern_l and pattern_l in value:
+            if _owner_pattern_matches(value, str(pattern)):
                 return owner_id
-    return canonical_owner_id(owners[0]["id"]) if owners else "parent"
+    return fallback
 
 
 def _source_from_file(path: Path) -> str:

@@ -42,6 +42,12 @@ Derived from: `docs/integration/competitor_gap_analysis_2026-02-21.md`
 - Added dashboard media-vault card with `Add to vault` and `Open vault` flows, item retention handling, secure-open preview, and export support.
 - Added guardian override enforcement for child-sensitive vault export/delete actions and extended policy/config with `guardian_override.require_for_vault_delete`.
 
+9. Approved expansion Phase 4 (find-provider quick links + hero weighting + UX polish)
+- Added device-locator provider modules (`DeviceLocatorProviderRegistry`, `DeviceLocatorLinkLauncher`, `LocatorCapabilityViewModel`) with safe launch + fallback behavior.
+- Integrated dashboard device-locator card with `Open provider` and `Provider setup` flows and capability/status guidance.
+- Updated Security Hero weighting and action routing for locator readiness, account-link status, and web-only fallback posture.
+- Expanded translated copy coverage for the new locator surface and synced `device_locator_links` config into workspace + Android assets.
+
 ## Next high-priority Android items
 
 1. Official Play entitlement enforcement (publish gate)
@@ -73,10 +79,10 @@ Design-ready architecture and UI flow:
 - `docs/integration/approved_scope_architecture_ui_flow_2026-02-21.md`
 
 Implementation phase order:
-1. Phase 1: App lock (biometric/PIN) + guardian override foundation
-2. Phase 2: Wi-Fi posture scanner + anti-phishing triage
-3. Phase 3: Encrypted media vault + parent override actions
-4. Phase 4: Find-provider quick links + hero weighting + UX polish
+1. Phase 1: App lock (biometric/PIN) + guardian override foundation (completed)
+2. Phase 2: Wi-Fi posture scanner + anti-phishing triage (completed)
+3. Phase 3: Encrypted media vault + parent override actions (completed)
+4. Phase 4: Find-provider quick links + hero weighting + UX polish (completed)
 
 ## Validation checklist for connected device
 

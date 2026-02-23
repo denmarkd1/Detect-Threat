@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import webbrowser
 from dataclasses import asdict
+from getpass import getpass
 from typing import Any
 
 from .config import ACTION_QUEUE_PATH, SESSION_JOURNAL_PATH, load_json, save_json
 from .models import ActionTask, CredentialRecord
+from .passwords import is_weak_password
 from .prompts import prompt_yes_no
 from .utils import domain_from_url, utc_now_iso
 
@@ -54,6 +56,25 @@ def _playwright_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def _prompt_manual_rotation_password() -> str:
+    while True:
+        first = getpass("Enter the new password currently set on the account: ").strip()
+        if not first:
+            print("Password entry is required to safely complete rotation.")
+            continue
+        second = getpass("Confirm the new password: ").strip()
+        if first != second:
+            print("Password confirmation mismatch. Try again.")
+            continue
+        if is_weak_password(first):
+            if not prompt_yes_no(
+                "Entered password appears weak. Continue anyway?",
+                default=False,
+            ):
+                continue
+        return first
 
 
 def _run_playwright_rotation(
@@ -154,6 +175,7 @@ def execute_pending_actions(
         automation_attempted = False
         automation_succeeded = False
         new_password = record.pending_password or record.password
+        applied_password = new_password
         if _playwright_available() and profile.get("automation", {}).get("enabled", False):
             if prompt_yes_no("Try Playwright automation for this task?", default=True):
                 automation_attempted = True
@@ -174,11 +196,11 @@ def execute_pending_actions(
 
         if task.action_type == "rotate_password":
             if not automation_succeeded:
-                show_secret = prompt_yes_no("Show generated password once in terminal for manual paste?", default=False)
-                if show_secret:
-                    print(f"NEW PASSWORD: {new_password}")
-                else:
-                    print("Password was not displayed.")
+                print(
+                    "Raw password display is disabled by security policy. "
+                    "Confirm the password you applied using hidden input."
+                )
+                applied_password = _prompt_manual_rotation_password()
 
         completed = prompt_yes_no("Mark this task as completed?", default=True)
         task.status = "completed" if completed else "failed"
@@ -192,7 +214,7 @@ def execute_pending_actions(
         else:
             task.detail = "Not completed"
         if task.action_type == "rotate_password" and completed:
-            record.password = new_password
+            record.password = applied_password
             record.pending_password = None
             record.updated_at = utc_now_iso()
         task.updated_at = utc_now_iso()

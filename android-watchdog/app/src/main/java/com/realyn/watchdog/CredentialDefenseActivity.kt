@@ -1,20 +1,29 @@
 package com.realyn.watchdog
 
+import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
 import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
 import com.realyn.watchdog.databinding.DialogServiceActionBinding
+import com.realyn.watchdog.theme.LionThemeCatalog
+import com.realyn.watchdog.theme.LionThemePalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -26,12 +35,41 @@ import java.util.Locale
 
 class CredentialDefenseActivity : AppCompatActivity() {
 
+    private enum class QueueFilter {
+        ALL,
+        PENDING,
+        OVERDUE,
+        COMPLETED;
+
+        fun next(): QueueFilter {
+            val values = values()
+            return values[(ordinal + 1) % values.size]
+        }
+    }
+
+    private enum class QueueOwnerFilter {
+        ALL,
+        PARENT,
+        CHILD;
+
+        fun next(): QueueOwnerFilter {
+            val values = values()
+            return values[(ordinal + 1) % values.size]
+        }
+    }
+
     private lateinit var binding: ActivityCredentialDefenseBinding
     private lateinit var policy: WorkspacePolicy
 
     private var pendingEmailLink: String? = null
     private var serviceDraft = ServiceDraft()
     private var accessGateBootstrapped: Boolean = false
+    private var queueFilter: QueueFilter = QueueFilter.ALL
+    private var queueOwnerFilter: QueueOwnerFilter = QueueOwnerFilter.ALL
+    private var lionFillMode: LionFillMode = LionFillMode.LEFT_TO_RIGHT
+    private var lionBusyInProgress: Boolean = false
+    private var lionProgressAnimator: ValueAnimator? = null
+    private var lionIdleResetRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +88,48 @@ class CredentialDefenseActivity : AppCompatActivity() {
         binding.runPrimaryBreachScanButton.setOnClickListener { runPrimaryBreachScan() }
         binding.openServiceActionButton.setOnClickListener { openServiceActionDialog() }
         binding.refreshQueueButton.setOnClickListener { renderQueue() }
+        binding.queueFilterButton.setOnClickListener {
+            queueFilter = queueFilter.next()
+            renderQueue()
+        }
+        binding.queueFilterButton.setOnLongClickListener {
+            queueOwnerFilter = queueOwnerFilter.next()
+            renderQueue()
+            Toast.makeText(
+                this,
+                getString(
+                    R.string.queue_owner_filter_switched_template,
+                    queueOwnerFilterLabel(queueOwnerFilter)
+                ),
+                Toast.LENGTH_SHORT
+            ).show()
+            true
+        }
+        binding.openAutofillSettingsButton.setOnClickListener {
+            val opened = AutofillPasskeyFoundation.openAutofillSettings(this)
+            if (!opened) {
+                Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
+            }
+            refreshAutofillPasskeyPanel()
+        }
+        binding.openPasskeySettingsButton.setOnClickListener {
+            val opened = AutofillPasskeyFoundation.openPasskeyProviderSettings(this)
+            if (!opened) {
+                Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
+            }
+            refreshAutofillPasskeyPanel()
+        }
+        binding.lionModeToggleButton.setOnClickListener {
+            startActivity(Intent(this, GuardianSettingsActivity::class.java))
+        }
+        binding.lionModeToggleButton.setOnLongClickListener {
+            startActivity(Intent(this, GuardianSettingsActivity::class.java))
+            true
+        }
+
+        lionFillMode = LionThemePrefs.readFillMode(this)
+        refreshLionHeroVisuals()
+        binding.lionHeroView.setIdleState()
 
         enforceAccessGateAndRefresh()
     }
@@ -62,8 +142,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) {
-            AppAccessGate.onAppBackgrounded()
+            AppAccessGate.onAppBackgrounded(this)
         }
+    }
+
+    override fun onDestroy() {
+        cancelLionProcessingAnimations(resetToIdle = false)
+        super.onDestroy()
     }
 
     override fun onUserInteraction() {
@@ -79,9 +164,11 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     accessGateBootstrapped = true
                     binding.breachSummaryLabel.text = getString(R.string.breach_summary_idle)
                 }
+                refreshLionHeroVisuals()
                 refreshIdentityCard()
                 renderQueue()
                 renderVaultSummaryForCurrentDraft()
+                refreshAutofillPasskeyPanel()
                 maybeShowIdentityOnboarding()
                 pendingEmailLink?.let { email ->
                     pendingEmailLink = null
@@ -687,7 +774,14 @@ class CredentialDefenseActivity : AppCompatActivity() {
                         return@runWithSecondFactorConfirmation
                     }
 
-                    val owner = CredentialPolicy.detectOwner(form.username, policy)
+                    val fallbackOwner = PrimaryIdentityStore.normalizeFamilyRole(
+                        PrimaryIdentityStore.readProfile(this).familyRole
+                    )
+                    val owner = CredentialPolicy.detectOwner(
+                        username = form.username,
+                        policy = policy,
+                        fallbackOwnerId = fallbackOwner
+                    )
                     val category = CredentialPolicy.classifyCategory(form.url, form.service)
                     val saved = CredentialVaultStore.saveCurrentCredential(
                         context = this,
@@ -729,7 +823,14 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     actionLabel = getString(R.string.two_factor_action_queue_rotation),
                     protectedAction = GuardianProtectedAction.CREDENTIAL_QUEUE_ROTATION
                 ) {
-                    val owner = CredentialPolicy.detectOwner(form.username, policy)
+                    val fallbackOwner = PrimaryIdentityStore.normalizeFamilyRole(
+                        PrimaryIdentityStore.readProfile(this).familyRole
+                    )
+                    val owner = CredentialPolicy.detectOwner(
+                        username = form.username,
+                        policy = policy,
+                        fallbackOwnerId = fallbackOwner
+                    )
                     val category = CredentialPolicy.classifyCategory(form.url, form.service)
                     val actionType = "rotate_password"
                     val actionId = stableActionId(owner, form.service, form.username, actionType)
@@ -744,7 +845,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
                         )
                         return@runWithSecondFactorConfirmation
                     }
-                    if (existingQueue.any { it.actionId == actionId }) {
+                    if (existingQueue.any {
+                            it.actionId == actionId && !it.status.equals("completed", ignoreCase = true)
+                        }
+                    ) {
                         Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
                         return@runWithSecondFactorConfirmation
                     }
@@ -761,7 +865,8 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     )
 
                     val now = System.currentTimeMillis()
-                    CredentialActionStore.appendAction(
+                    val dueAt = now + (3L * 24L * 60L * 60L * 1000L)
+                    val appended = CredentialActionStore.appendAction(
                         this,
                         CredentialAction(
                             actionId = actionId,
@@ -773,9 +878,16 @@ class CredentialDefenseActivity : AppCompatActivity() {
                             actionType = actionType,
                             status = "pending",
                             createdAtEpochMs = now,
-                            updatedAtEpochMs = now
+                            updatedAtEpochMs = now,
+                            dueAtEpochMs = dueAt,
+                            completedAtEpochMs = 0L,
+                            receiptId = ""
                         )
                     )
+                    if (!appended) {
+                        Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
+                        return@runWithSecondFactorConfirmation
+                    }
 
                     binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(updated)
                     dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(updated)
@@ -872,12 +984,21 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
                     val actionType = "rotate_password"
                     val actionId = stableActionId(promoted.owner, promoted.service, promoted.username, actionType)
-                    CredentialActionStore.updateActionStatus(this, actionId, "completed")
+                    val completedAction = CredentialActionStore.completeActionWithReceipt(this, actionId)
 
                     binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(promoted)
                     dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(promoted)
                     renderQueue()
-                    Toast.makeText(this, R.string.rotation_applied_confirmed, Toast.LENGTH_SHORT).show()
+                    val receipt = completedAction?.receiptId.orEmpty()
+                    if (receipt.isBlank()) {
+                        Toast.makeText(this, R.string.rotation_applied_confirmed, Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(
+                            this,
+                            getString(R.string.rotation_applied_receipt_template, receipt),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                     refreshDialogState()
                 }
             }
@@ -907,7 +1028,12 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private fun renderVaultSummaryForCurrentDraft() {
         if (serviceDraft.service.isBlank() || serviceDraft.username.isBlank()) {
-            binding.vaultSummaryLabel.text = getString(R.string.vault_summary_ready)
+            val records = CredentialVaultStore.loadRecords(this)
+            binding.vaultSummaryLabel.text = if (records.isEmpty()) {
+                getString(R.string.vault_summary_ready)
+            } else {
+                CredentialVaultStore.formatVaultHealthSummary(records)
+            }
             return
         }
 
@@ -920,17 +1046,31 @@ class CredentialDefenseActivity : AppCompatActivity() {
     }
 
     private fun renderQueue() {
-        val queue = CredentialActionStore.loadQueue(this)
-            .sortedWith(
-                compareBy<CredentialAction> {
-                    CredentialPolicy.categorySortKey(it.category, policy)
-                }.thenByDescending { it.createdAtEpochMs }
-            )
+        val now = System.currentTimeMillis()
+        val allQueue = prioritizeQueue(CredentialActionStore.loadQueue(this), now)
+        val filteredQueue = applyQueueFilter(allQueue, queueFilter, queueOwnerFilter, now)
 
-        val pendingCount = queue.count { !it.status.equals("completed", ignoreCase = true) }
-        binding.queueCountLabel.text = getString(R.string.queue_count_template, queue.size, pendingCount)
+        val pendingCount = allQueue.count { !it.status.equals("completed", ignoreCase = true) }
+        val completedCount = allQueue.count { it.status.equals("completed", ignoreCase = true) }
+        val overdueCount = allQueue.count { isOverdue(it, now) }
+        val filterLabel = queueFilterLabel(queueFilter)
+        val ownerFilterLabel = queueOwnerFilterLabel(queueOwnerFilter)
+        binding.queueCountLabel.text = getString(
+            R.string.queue_count_detailed_owner_template,
+            allQueue.size,
+            pendingCount,
+            overdueCount,
+            completedCount,
+            filterLabel,
+            ownerFilterLabel
+        )
+        binding.queueFilterButton.text = getString(
+            R.string.queue_filter_button_owner_template,
+            filterLabel,
+            ownerFilterLabel
+        )
 
-        if (queue.isEmpty()) {
+        if (allQueue.isEmpty()) {
             binding.queueCard.visibility = View.GONE
             binding.queueSummary.text = getString(R.string.queue_empty)
             return
@@ -938,13 +1078,169 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
         binding.queueCard.visibility = View.VISIBLE
         val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-        val lines = queue.take(25).mapIndexed { index, item ->
-            val timestamp = formatter.format(Date(item.createdAtEpochMs))
-            "${index + 1}. [$timestamp] owner=${item.owner} service=${item.service} username=${item.username} status=${item.status}"
+        val dueFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        if (filteredQueue.isEmpty()) {
+            binding.queueSummary.text = getString(
+                R.string.queue_filter_owner_empty_template,
+                filterLabel,
+                ownerFilterLabel
+            )
+            return
         }
-        val remaining = queue.size - lines.size
+        val lines = filteredQueue.take(25).mapIndexed { index, item ->
+            val timestamp = formatter.format(Date(item.createdAtEpochMs))
+            val dueLabel = dueLabel(item, dueFormatter, now)
+            val riskReason = queueRiskReason(item, now)
+            val priorityPrefix = if (isOverdue(item, now) && isHighPriorityCategory(item.category)) {
+                "!! "
+            } else {
+                ""
+            }
+            val receipt = if (item.receiptId.isBlank()) {
+                ""
+            } else {
+                " | ${getString(R.string.queue_receipt_template, item.receiptId)}"
+            }
+            "${index + 1}. ${priorityPrefix}[$timestamp] owner=${item.owner} service=${item.service} username=${item.username} category=${item.category} status=${item.status} | $dueLabel | ${getString(R.string.queue_risk_reason_template, riskReason)}$receipt"
+        }
+        val remaining = filteredQueue.size - lines.size
         val tail = if (remaining > 0) "\n... and $remaining more actions" else ""
         binding.queueSummary.text = lines.joinToString("\n") + tail
+    }
+
+    private fun applyQueueFilter(
+        queue: List<CredentialAction>,
+        filter: QueueFilter,
+        ownerFilter: QueueOwnerFilter,
+        nowEpochMs: Long
+    ): List<CredentialAction> {
+        val statusFiltered = when (filter) {
+            QueueFilter.ALL -> queue
+            QueueFilter.PENDING -> queue.filter { !it.status.equals("completed", ignoreCase = true) }
+            QueueFilter.OVERDUE -> queue.filter { isOverdue(it, nowEpochMs) }
+            QueueFilter.COMPLETED -> queue.filter { it.status.equals("completed", ignoreCase = true) }
+        }
+        return statusFiltered.filter { matchesOwnerFilter(it, ownerFilter) }
+    }
+
+    private fun matchesOwnerFilter(item: CredentialAction, ownerFilter: QueueOwnerFilter): Boolean {
+        val owner = CredentialPolicy.canonicalOwnerId(item.owner)
+        return when (ownerFilter) {
+            QueueOwnerFilter.ALL -> true
+            QueueOwnerFilter.PARENT -> owner == "parent"
+            QueueOwnerFilter.CHILD -> owner == "child"
+        }
+    }
+
+    private fun isOverdue(item: CredentialAction, nowEpochMs: Long): Boolean {
+        if (item.status.equals("completed", ignoreCase = true)) {
+            return false
+        }
+        return item.dueAtEpochMs > 0L && item.dueAtEpochMs < nowEpochMs
+    }
+
+    private fun dueLabel(
+        item: CredentialAction,
+        formatter: SimpleDateFormat,
+        nowEpochMs: Long
+    ): String {
+        if (item.dueAtEpochMs <= 0L) {
+            return getString(R.string.queue_no_due)
+        }
+        val dueDate = formatter.format(Date(item.dueAtEpochMs))
+        return if (isOverdue(item, nowEpochMs)) {
+            val overdueDays = ((nowEpochMs - item.dueAtEpochMs).coerceAtLeast(0L) / (24L * 60L * 60L * 1000L))
+                .toInt()
+                .coerceAtLeast(1)
+            getString(R.string.queue_due_overdue_template, dueDate, overdueDays)
+        } else {
+            getString(R.string.queue_due_template, dueDate)
+        }
+    }
+
+    private fun queueFilterLabel(filter: QueueFilter): String {
+        return when (filter) {
+            QueueFilter.ALL -> getString(R.string.queue_filter_all)
+            QueueFilter.PENDING -> getString(R.string.queue_filter_pending)
+            QueueFilter.OVERDUE -> getString(R.string.queue_filter_overdue)
+            QueueFilter.COMPLETED -> getString(R.string.queue_filter_completed)
+        }
+    }
+
+    private fun queueOwnerFilterLabel(filter: QueueOwnerFilter): String {
+        return when (filter) {
+            QueueOwnerFilter.ALL -> getString(R.string.queue_owner_filter_all)
+            QueueOwnerFilter.PARENT -> getString(R.string.profile_role_parent).lowercase(Locale.US)
+            QueueOwnerFilter.CHILD -> getString(R.string.profile_role_child).lowercase(Locale.US)
+        }
+    }
+
+    private fun queueRiskReason(item: CredentialAction, nowEpochMs: Long): String {
+        if (item.status.equals("completed", ignoreCase = true)) {
+            return getString(R.string.queue_risk_reason_completed)
+        }
+        val overdue = isOverdue(item, nowEpochMs)
+        val highPriority = isHighPriorityCategory(item.category)
+        return when {
+            overdue && highPriority -> getString(
+                R.string.queue_risk_reason_overdue_high_priority_template,
+                item.category
+            )
+
+            overdue -> getString(R.string.queue_risk_reason_overdue)
+            highPriority -> getString(
+                R.string.queue_risk_reason_high_priority_template,
+                item.category
+            )
+
+            else -> getString(R.string.queue_risk_reason_standard)
+        }
+    }
+
+    private fun isHighPriorityCategory(category: String): Boolean {
+        val normalized = category.trim().lowercase(Locale.US)
+        return normalized == "email" || normalized == "banking"
+    }
+
+    private fun queueUrgencyRank(item: CredentialAction, nowEpochMs: Long): Int {
+        val completed = item.status.equals("completed", ignoreCase = true)
+        if (completed) {
+            return 4
+        }
+        val overdue = isOverdue(item, nowEpochMs)
+        val highPriority = isHighPriorityCategory(item.category)
+        return when {
+            overdue && highPriority -> 0
+            overdue -> 1
+            highPriority -> 2
+            else -> 3
+        }
+    }
+
+    private fun prioritizeQueue(
+        queue: List<CredentialAction>,
+        nowEpochMs: Long
+    ): List<CredentialAction> {
+        return queue.sortedWith(
+            compareBy<CredentialAction> { queueUrgencyRank(it, nowEpochMs) }
+                .thenBy { CredentialPolicy.categorySortKey(it.category, policy) }
+                .thenBy { if (it.dueAtEpochMs > 0L) it.dueAtEpochMs else Long.MAX_VALUE }
+                .thenByDescending { it.createdAtEpochMs }
+        )
+    }
+
+    private fun refreshAutofillPasskeyPanel() {
+        val status = AutofillPasskeyFoundation.evaluate(this)
+        val recommendation = if (status.passkeyReady) {
+            getString(R.string.autofill_passkey_reco_ready)
+        } else {
+            getString(R.string.autofill_passkey_reco_setup)
+        }
+        binding.autofillPasskeySummaryLabel.text = getString(
+            R.string.autofill_passkey_ready_template,
+            status.summary(),
+            recommendation
+        )
     }
 
     private fun setCredentialBusy(busy: Boolean) {
@@ -953,6 +1249,136 @@ class CredentialDefenseActivity : AppCompatActivity() {
         binding.runPrimaryBreachScanButton.isEnabled = !busy
         binding.openServiceActionButton.isEnabled = !busy
         binding.refreshQueueButton.isEnabled = !busy
+        binding.queueFilterButton.isEnabled = !busy
+        binding.openAutofillSettingsButton.isEnabled = !busy
+        binding.openPasskeySettingsButton.isEnabled = !busy
+        binding.lionModeToggleButton.isEnabled = !busy
+        if (busy) {
+            beginLionProcessingAnimation()
+        } else {
+            completeLionProcessingAnimation()
+        }
+    }
+
+    private fun cycleLionFillMode() {
+        lionFillMode = lionFillMode.next()
+        LionThemePrefs.writeFillMode(this, lionFillMode)
+        refreshLionHeroVisuals()
+        Toast.makeText(
+            this,
+            getString(R.string.lion_mode_status_template, getString(lionFillMode.labelRes)),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun refreshLionHeroVisuals() {
+        lionFillMode = LionThemePrefs.readFillMode(this)
+        val access = PricingPolicy.resolveFeatureAccess(this)
+        val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
+        val themeState = LionThemeCatalog.resolveState(
+            context = this,
+            paidAccess = access.paidAccess,
+            selectedLionBitmap = selectedBitmap
+        )
+        applyCredentialTheme(themeState.palette, themeState.isDark)
+        binding.lionHeroView.setFillMode(lionFillMode)
+        binding.lionHeroView.setSurfaceTone(themeState.isDark)
+        binding.lionHeroView.setLionBitmap(selectedBitmap)
+        binding.lionHeroView.setAccentColor(themeState.palette.accent)
+        binding.lionModeToggleButton.text = getString(R.string.action_guardian_settings)
+    }
+
+    private fun applyCredentialTheme(
+        palette: LionThemePalette,
+        isDarkTone: Boolean
+    ) {
+        window.statusBarColor = palette.backgroundEnd
+        window.navigationBarColor = palette.backgroundEnd
+        val systemBarController = WindowCompat.getInsetsController(window, binding.root)
+        systemBarController.isAppearanceLightStatusBars = !isDarkTone
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            systemBarController.isAppearanceLightNavigationBars = !isDarkTone
+        }
+        binding.root.background = GradientDrawable().apply {
+            orientation = GradientDrawable.Orientation.TOP_BOTTOM
+            colors = intArrayOf(
+                palette.backgroundStart,
+                palette.backgroundCenter,
+                palette.backgroundEnd
+            )
+        }
+        binding.toolbar.setBackgroundColor(palette.backgroundEnd)
+        binding.toolbar.setTitleTextColor(palette.textPrimary)
+        binding.toolbar.navigationIcon?.mutate()?.setTint(palette.accent)
+        binding.lionModeToggleButton.setTextColor(palette.accent)
+        applyPaletteToMaterialCards(binding.root, palette)
+    }
+
+    private fun applyPaletteToMaterialCards(view: View, palette: LionThemePalette) {
+        if (view is com.google.android.material.card.MaterialCardView) {
+            val current = view.cardBackgroundColor.defaultColor
+            if (Color.alpha(current) > 0) {
+                view.setCardBackgroundColor(palette.panelAlt)
+            }
+            view.strokeColor = palette.stroke
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                applyPaletteToMaterialCards(view.getChildAt(index), palette)
+            }
+        }
+    }
+
+    private fun beginLionProcessingAnimation() {
+        if (lionBusyInProgress) {
+            return
+        }
+        lionBusyInProgress = true
+        lionIdleResetRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionIdleResetRunnable = null
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = ValueAnimator.ofFloat(0f, 0.92f).apply {
+            duration = 2200L
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
+            }
+            start()
+        }
+    }
+
+    private fun completeLionProcessingAnimation() {
+        if (!lionBusyInProgress) {
+            return
+        }
+        lionBusyInProgress = false
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = null
+        binding.lionHeroView.setScanComplete()
+        val resetRunnable = Runnable {
+            if (!lionBusyInProgress) {
+                binding.lionHeroView.setIdleState()
+            }
+        }
+        lionIdleResetRunnable = resetRunnable
+        binding.lionHeroView.postDelayed(resetRunnable, 1400L)
+    }
+
+    private fun cancelLionProcessingAnimations(resetToIdle: Boolean) {
+        lionProgressAnimator?.cancel()
+        lionProgressAnimator = null
+        lionIdleResetRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionIdleResetRunnable = null
+        lionBusyInProgress = false
+        if (resetToIdle) {
+            binding.lionHeroView.setIdleState()
+        }
     }
 
     private fun runWithSecondFactorConfirmation(

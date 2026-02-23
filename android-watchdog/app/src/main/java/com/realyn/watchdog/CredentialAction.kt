@@ -12,7 +12,10 @@ data class CredentialAction(
     val actionType: String,
     val status: String,
     val createdAtEpochMs: Long,
-    val updatedAtEpochMs: Long
+    val updatedAtEpochMs: Long,
+    val dueAtEpochMs: Long,
+    val completedAtEpochMs: Long,
+    val receiptId: String
 ) {
     fun toJson(): JSONObject {
         return JSONObject()
@@ -26,10 +29,15 @@ data class CredentialAction(
             .put("status", status)
             .put("createdAtEpochMs", createdAtEpochMs)
             .put("updatedAtEpochMs", updatedAtEpochMs)
+            .put("dueAtEpochMs", dueAtEpochMs)
+            .put("completedAtEpochMs", completedAtEpochMs)
+            .put("receiptId", receiptId)
     }
 
     companion object {
         fun fromJson(item: JSONObject): CredentialAction {
+            val createdAt = item.optLong("createdAtEpochMs", System.currentTimeMillis())
+            val updatedAt = item.optLong("updatedAtEpochMs", createdAt)
             return CredentialAction(
                 actionId = item.optString("actionId"),
                 owner = CredentialPolicy.canonicalOwnerId(item.optString("owner")),
@@ -39,8 +47,11 @@ data class CredentialAction(
                 url = item.optString("url"),
                 actionType = item.optString("actionType", "rotate_password"),
                 status = item.optString("status", "pending"),
-                createdAtEpochMs = item.optLong("createdAtEpochMs", System.currentTimeMillis()),
-                updatedAtEpochMs = item.optLong("updatedAtEpochMs", System.currentTimeMillis())
+                createdAtEpochMs = createdAt,
+                updatedAtEpochMs = updatedAt,
+                dueAtEpochMs = item.optLong("dueAtEpochMs", createdAt + (3L * 24L * 60L * 60L * 1000L)),
+                completedAtEpochMs = item.optLong("completedAtEpochMs", 0L).coerceAtLeast(0L),
+                receiptId = item.optString("receiptId").trim()
             )
         }
     }

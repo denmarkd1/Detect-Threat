@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.RealynWatchdog" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.RealynWatchdog" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand_accent</item>
         <item name="colorOnPrimary">@color/brand_bg_dark</item>
         <item name="colorSecondary">@color/brand_stroke</item>

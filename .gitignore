@@ -23,6 +23,7 @@ tools/android-sdk/
 tools/jdk/
 tools/gradle/
 state/*.json
+state/gemini_bridge/
 alerts/*.md
 logs/*.log
 android-watchdog/.gradle/
@@ -44,3 +45,7 @@ systems/D_T_System/phase_tracking/phase_progress.json
 
 # Local GitHub CLI bundle
 tools/gh/
+
+# Local Android Studio installation (development-only, never commit)
+android-studio-panda1-patch1-linux/
+android-watchdog/.idea/

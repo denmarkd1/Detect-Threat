@@ -49,16 +49,24 @@ object CredentialPolicy {
         )
     }
 
-    fun detectOwner(username: String, policy: WorkspacePolicy): String {
+    fun detectOwner(
+        username: String,
+        policy: WorkspacePolicy,
+        fallbackOwnerId: String = OWNER_PARENT
+    ): String {
         val value = username.trim().lowercase(Locale.US)
+        val fallback = resolveFallbackOwner(policy, fallbackOwnerId)
+        if (value.isBlank()) {
+            return fallback
+        }
         policy.owners.forEach { owner ->
             owner.emailPatterns.forEach { pattern ->
-                if (pattern.isNotBlank() && value.contains(pattern.lowercase(Locale.US))) {
+                if (ownerPatternMatches(value, pattern)) {
                     return canonicalOwnerId(owner.id)
                 }
             }
         }
-        return canonicalOwnerId(policy.owners.firstOrNull()?.id ?: OWNER_PARENT)
+        return fallback
     }
 
     fun canonicalOwnerId(raw: String): String {
@@ -103,6 +111,35 @@ object CredentialPolicy {
     fun categorySortKey(category: String, policy: WorkspacePolicy): Int {
         val index = policy.priorityCategories.indexOf(category)
         return if (index >= 0) index else policy.priorityCategories.size
+    }
+
+    private fun resolveFallbackOwner(policy: WorkspacePolicy, fallbackOwnerId: String): String {
+        val preferred = canonicalOwnerId(fallbackOwnerId)
+        if (policy.owners.any { canonicalOwnerId(it.id) == preferred }) {
+            return preferred
+        }
+        return canonicalOwnerId(policy.owners.firstOrNull()?.id ?: OWNER_PARENT)
+    }
+
+    private fun ownerPatternMatches(username: String, rawPattern: String): Boolean {
+        val pattern = rawPattern.trim().lowercase(Locale.US)
+        if (pattern.isBlank()) {
+            return false
+        }
+        val domain = username.substringAfter("@", missingDelimiterValue = "").trim()
+        if (pattern.startsWith("@")) {
+            return domain == pattern.removePrefix("@")
+        }
+        if (!pattern.contains("*")) {
+            return if (pattern.contains("@")) {
+                username == pattern
+            } else {
+                username.contains(pattern)
+            }
+        }
+        val regex = pattern.split("*")
+            .joinToString(".*") { Regex.escape(it) }
+        return Regex("^$regex$").matches(username)
     }
 
     private fun domainFromUrl(url: String): String {

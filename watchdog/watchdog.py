@@ -154,7 +154,12 @@ def require_connected_device() -> Dict[str, str]:
 
 
 def run_shell(command: str) -> str:
-    return run_adb(["shell", "sh", "-c", command]).strip()
+    normalized = command.strip()
+    if not normalized:
+        raise ADBError("empty shell command")
+    # Use a single adb-shell argument to preserve command tokenization.
+    # `adb shell sh -c <cmd>` can break argument parsing on some devices.
+    return run_adb(["shell", normalized]).strip()
 
 
 def getprop(name: str) -> str:
@@ -169,6 +174,27 @@ def parse_pm_packages(output: str) -> List[str]:
             continue
         packages.append(line.removeprefix("package:"))
     return sorted(set(packages))
+
+
+def list_third_party_packages() -> List[str]:
+    commands = [
+        "pm list packages -3",
+        "cmd package list packages -3",
+        "pm list packages",
+        "cmd package list packages",
+    ]
+    errors: List[str] = []
+    for command in commands:
+        try:
+            packages = parse_pm_packages(run_shell(command))
+        except ADBError as exc:
+            errors.append(f"{command}: {exc}")
+            continue
+        if packages:
+            return packages
+        errors.append(f"{command}: empty package list")
+    detail = "; ".join(errors) if errors else "no package commands attempted"
+    raise ADBError(f"unable to collect package list ({detail})")
 
 
 def parse_accessibility_services(raw: str) -> List[str]:
@@ -238,7 +264,7 @@ def get_security_settings() -> Dict[str, str]:
 
 def collect_snapshot() -> Dict[str, object]:
     device = require_connected_device()
-    third_party_packages = parse_pm_packages(run_shell("pm list packages -3"))
+    third_party_packages = list_third_party_packages()
 
     accessibility = parse_accessibility_services(
         run_shell("settings get secure enabled_accessibility_services")
@@ -537,4 +563,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

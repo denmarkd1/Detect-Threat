@@ -326,5 +326,34 @@
     "enabled": true,
     "allow_manual_clipboard_intake": true,
     "high_risk_auto_alert": true
+  },
+  "device_locator_links": {
+    "enabled": true,
+    "providers": [
+      {
+        "id": "google_find_my_device",
+        "label": "Google Find My Device",
+        "uri": "https://www.google.com/android/find/",
+        "fallback_uri": "https://www.google.com/android/find/",
+        "setup_uri": "https://support.google.com/android/answer/3265955",
+        "package_name": "com.google.android.apps.adm"
+      },
+      {
+        "id": "samsung_smartthings_find",
+        "label": "Samsung SmartThings Find",
+        "uri": "https://smartthingsfind.samsung.com/",
+        "fallback_uri": "https://smartthingsfind.samsung.com/",
+        "setup_uri": "https://www.samsung.com/us/support/answer/ANS00088182/",
+        "package_name": "com.samsung.android.oneconnect"
+      },
+      {
+        "id": "xiaomi_find_device",
+        "label": "Xiaomi Find Device",
+        "uri": "https://i.mi.com/",
+        "fallback_uri": "https://i.mi.com/",
+        "setup_uri": "https://www.mi.com/global/support/article/KA-19417/",
+        "package_name": "com.miui.cloudservice"
+      }
+    ]
   }
 }

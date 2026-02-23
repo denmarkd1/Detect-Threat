@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="home_lion_hero_height">284dp</dimen>
+    <dimen name="intro_lion_hero_size">380dp</dimen>
+    <dimen name="home_intro_welcome_bottom_margin">220dp</dimen>
+</resources>
