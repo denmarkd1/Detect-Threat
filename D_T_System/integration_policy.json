@@ -14,6 +14,68 @@
   "council_logging": true,
   "clarification_confidence_floor": "high",
   "manual_override_mode": "local_only",
+  "mcp_server_policy": {
+    "local_first_servers": [
+      "memory",
+      "sequential-thinking",
+      "filesystem",
+      "time",
+      "zen",
+      "zen-mcp"
+    ],
+    "issue_type_preferences": {
+      "configuration": [
+        "claude-context-awareness",
+        "nighttrek",
+        "context7",
+        "memory",
+        "sequential-thinking",
+        "filesystem"
+      ],
+      "integration": [
+        "nighttrek",
+        "lastmile-ai",
+        "claude-context-awareness",
+        "memory",
+        "sequential-thinking",
+        "filesystem"
+      ],
+      "error_bug": [
+        "claude-context-awareness",
+        "context7",
+        "memory",
+        "sequential-thinking",
+        "filesystem",
+        "zen",
+        "zen-mcp"
+      ],
+      "general": [
+        "claude-context-awareness",
+        "nighttrek",
+        "lastmile-ai",
+        "memory",
+        "sequential-thinking",
+        "filesystem"
+      ],
+      "security": [
+        "memory",
+        "sequential-thinking",
+        "filesystem",
+        "time",
+        "zen",
+        "zen-mcp"
+      ]
+    },
+    "security_deprioritized_servers": [
+      "nighttrek",
+      "lastmile-ai",
+      "claude-context-awareness",
+      "context7",
+      "brave-search",
+      "tavily"
+    ],
+    "allow_remote_for_security": false
+  },
   "workflow": {
     "memory_first": true,
     "code_review_first_for_reviews": true,

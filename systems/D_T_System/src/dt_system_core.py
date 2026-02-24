@@ -16,6 +16,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,55 @@ TRIGGER_PHRASES = (
     "DT_AUTORUN",
     "COMPLETE_DT",
 )
+
+DEFAULT_MCP_POLICY = {
+    "local_first_servers": ["memory", "sequential-thinking", "filesystem", "time", "zen", "zen-mcp"],
+    "issue_type_preferences": {
+        "configuration": [
+            "claude-context-awareness",
+            "nighttrek",
+            "context7",
+            "memory",
+            "sequential-thinking",
+            "filesystem",
+        ],
+        "integration": [
+            "nighttrek",
+            "lastmile-ai",
+            "claude-context-awareness",
+            "memory",
+            "sequential-thinking",
+            "filesystem",
+        ],
+        "error_bug": [
+            "claude-context-awareness",
+            "context7",
+            "memory",
+            "sequential-thinking",
+            "filesystem",
+            "zen",
+            "zen-mcp",
+        ],
+        "general": [
+            "claude-context-awareness",
+            "nighttrek",
+            "lastmile-ai",
+            "memory",
+            "sequential-thinking",
+            "filesystem",
+        ],
+        "security": ["memory", "sequential-thinking", "filesystem", "time", "zen", "zen-mcp"],
+    },
+    "security_deprioritized_servers": [
+        "nighttrek",
+        "lastmile-ai",
+        "claude-context-awareness",
+        "context7",
+        "brave-search",
+        "tavily",
+    ],
+    "allow_remote_for_security": False,
+}
 
 
 def _utc_now() -> datetime:
@@ -70,15 +120,165 @@ def _extract_trigger(issue_input: str) -> tuple[str, bool]:
 
 def _guess_issue_type(issue_text: str) -> str:
     lower = issue_text.lower()
+    if any(token in lower for token in ("security", "breach", "watchdog", "credential", "android")):
+        return "security"
     if any(token in lower for token in ("merge", "merged", "integration", "integrate")):
         return "integration"
     if any(token in lower for token in ("config", "setting", "policy", "profile")):
         return "configuration"
     if any(token in lower for token in ("error", "traceback", "exception", "crash", "fail")):
         return "error_bug"
-    if any(token in lower for token in ("security", "breach", "watchdog", "credential", "android")):
-        return "security"
     return "general"
+
+
+def _load_json_file(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _load_integration_policy(workspace_root: Path) -> dict[str, Any]:
+    candidates = (
+        workspace_root / "D_T_System" / "integration_policy.json",
+        workspace_root / "systems" / "D_T_System" / "integration_policy.json",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            data = _load_json_file(candidate)
+            if isinstance(data, dict):
+                data["_policy_path"] = str(candidate)
+                return data
+    return {"_policy_path": None}
+
+
+def _extract_mcp_servers_from_toml_text(raw_text: str) -> set[str]:
+    names: set[str] = set()
+    pattern = re.compile(
+        r'^\[(?:mcp_servers|mcp\.servers)\.(?:"([^"]+)"|([A-Za-z0-9_-]+))(?:\.env)?\]\s*$',
+        flags=re.MULTILINE,
+    )
+    for match in pattern.finditer(raw_text):
+        name = (match.group(1) or match.group(2) or "").strip()
+        if name:
+            names.add(name)
+    return names
+
+
+def _load_codex_mcp_servers() -> set[str]:
+    path = Path.home() / ".codex" / "config.toml"
+    if not path.exists():
+        return set()
+
+    raw_text = path.read_text(encoding="utf-8")
+    try:
+        import tomllib  # Python 3.11+
+
+        parsed = tomllib.loads(raw_text)
+        servers = set()
+        new_schema = parsed.get("mcp_servers", {})
+        if isinstance(new_schema, dict):
+            servers.update(new_schema.keys())
+        legacy_schema = parsed.get("mcp", {}).get("servers", {})
+        if isinstance(legacy_schema, dict):
+            servers.update(legacy_schema.keys())
+        return {str(name) for name in servers}
+    except Exception:
+        return _extract_mcp_servers_from_toml_text(raw_text)
+
+
+def _load_darkcoder_mcp_servers(workspace_root: Path) -> set[str]:
+    candidates = [
+        workspace_root / "mcp_config.json",
+        workspace_root / "backend" / "config" / "mcp_config.json",
+        Path.home() / "Dark_Coder" / "local-ai-coding-assistant" / "mcp_config.json",
+        Path.home() / "Dark_Coder" / "local-ai-coding-assistant" / "backend" / "config" / "mcp_config.json",
+    ]
+
+    names: set[str] = set()
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        payload = _load_json_file(candidate)
+        servers = payload.get("mcpServers", {})
+        if isinstance(servers, dict):
+            names.update(str(name) for name in servers.keys())
+    return names
+
+
+def _collect_mcp_inventory(workspace_root: Path) -> dict[str, Any]:
+    codex_servers = _load_codex_mcp_servers()
+    darkcoder_servers = _load_darkcoder_mcp_servers(workspace_root)
+    available = sorted(codex_servers | darkcoder_servers)
+    return {
+        "available_servers": available,
+        "sources": {
+            "codex": sorted(codex_servers),
+            "darkcoder": sorted(darkcoder_servers),
+        },
+    }
+
+
+def _as_string_list(value: Any, default: list[str]) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return list(default)
+
+
+def _derive_mcp_guidance(workspace_root: Path, issue_type: str) -> dict[str, Any]:
+    policy = _load_integration_policy(workspace_root)
+    mcp_policy = policy.get("mcp_server_policy", {})
+    if not isinstance(mcp_policy, dict):
+        mcp_policy = {}
+
+    inventory = _collect_mcp_inventory(workspace_root)
+    available = inventory["available_servers"]
+
+    local_first = _as_string_list(
+        mcp_policy.get("local_first_servers"),
+        DEFAULT_MCP_POLICY["local_first_servers"],
+    )
+    security_deprioritized = _as_string_list(
+        mcp_policy.get("security_deprioritized_servers"),
+        DEFAULT_MCP_POLICY["security_deprioritized_servers"],
+    )
+    allow_remote_for_security = bool(
+        mcp_policy.get(
+            "allow_remote_for_security",
+            DEFAULT_MCP_POLICY["allow_remote_for_security"],
+        )
+    )
+
+    preferences = dict(DEFAULT_MCP_POLICY["issue_type_preferences"])
+    policy_preferences = mcp_policy.get("issue_type_preferences", {})
+    if isinstance(policy_preferences, dict):
+        for key, value in policy_preferences.items():
+            preferences[str(key)] = _as_string_list(value, preferences.get(str(key), []))
+
+    preferred_order = preferences.get(issue_type, preferences.get("general", []))
+    recommended = [name for name in preferred_order if name in available]
+    deprioritized: list[str] = []
+    rationale = "Issue-type server preference order applied."
+
+    if issue_type == "security" and not allow_remote_for_security:
+        deprioritized = [name for name in available if name in security_deprioritized]
+        recommended = [name for name in recommended if name not in deprioritized]
+        for name in local_first:
+            if name in available and name not in recommended:
+                recommended.append(name)
+        rationale = (
+            "Security issue detected; local-first MCP policy enforced and remote/context servers deprioritized."
+        )
+
+    return {
+        "issue_type": issue_type,
+        "policy_path": policy.get("_policy_path"),
+        "available_servers": available,
+        "recommended_servers": recommended,
+        "non_beneficial_servers": deprioritized,
+        "rationale": rationale,
+        "source_inventory": inventory["sources"],
+    }
 
 
 def _load_module_from_path(module_path: Path, module_name: str):
@@ -212,7 +412,12 @@ class DTResolution:
         return payload
 
 
-def _build_handoff(issue_input: str, issue_type: str, route_error: Optional[str]) -> str:
+def _build_handoff(
+    issue_input: str,
+    issue_type: str,
+    route_error: Optional[str],
+    mcp_guidance: Optional[dict[str, Any]] = None,
+) -> str:
     lines = [
         "# D_T SYSTEM - CODE REVIEW HANDOFF",
         "",
@@ -229,6 +434,20 @@ def _build_handoff(issue_input: str, issue_type: str, route_error: Optional[str]
                 "## Routing Note",
                 "Satellite routing was unavailable; local fallback context/resolution was recorded.",
                 f"Details: {route_error}",
+                "",
+            ]
+        )
+
+    if mcp_guidance:
+        recommended = ", ".join(mcp_guidance.get("recommended_servers", [])) or "(none)"
+        non_beneficial = ", ".join(mcp_guidance.get("non_beneficial_servers", [])) or "(none)"
+        rationale = str(mcp_guidance.get("rationale", "")).strip() or "Issue-specific MCP guidance applied."
+        lines.extend(
+            [
+                "## MCP Server Guidance",
+                f"Recommended: {recommended}",
+                f"Non-beneficial for this issue: {non_beneficial}",
+                f"Rationale: {rationale}",
                 "",
             ]
         )
@@ -287,6 +506,7 @@ def _persist_local_resolution(
 
     issue_id = f"DT_{_utc_now().strftime('%Y%m%d_%H%M%S')}"
     issue_type = _guess_issue_type(issue_input)
+    mcp_guidance = _derive_mcp_guidance(workspace_root, issue_type)
 
     clarifying_questions = [
         "What exact action or result should happen after autorun?",
@@ -297,6 +517,7 @@ def _persist_local_resolution(
         "original_input": issue_input,
         "user_notes": user_notes,
         "issue_type": issue_type,
+        "mcp_guidance": mcp_guidance,
         "affected_components": [],
         "error_signatures": [],
         "reproduction_steps": [],
@@ -330,10 +551,13 @@ def _persist_local_resolution(
         certainty_assessment=certainty,
         is_existing_problem=False,
         memory_references=[],
-        required_resources=[],
-        todo_list=[],
+        required_resources=[f"mcp:{name}" for name in mcp_guidance.get("recommended_servers", [])],
+        todo_list=[
+            "Use recommended MCP servers first when building triage context.",
+            "Skip non-beneficial MCP servers for this issue type unless explicitly needed.",
+        ],
         task_steps=[],
-        code_review_handoff=_build_handoff(issue_input, issue_type, route_error),
+        code_review_handoff=_build_handoff(issue_input, issue_type, route_error, mcp_guidance),
         testing_requirements=[],
         phase_impact={},
         completion_status=completion_status,
@@ -397,6 +621,7 @@ def _resolution_from_route_payload(
     payload: dict[str, Any],
     *,
     automation_requested: bool,
+    workspace_root: Optional[Path] = None,
 ) -> DTResolution:
     issue_id = str(
         payload.get("issue_id")
@@ -405,6 +630,7 @@ def _resolution_from_route_payload(
     )
 
     issue_type = _guess_issue_type(issue_input)
+    mcp_guidance = _derive_mcp_guidance(workspace_root, issue_type) if workspace_root else None
     completion = payload.get("completion_status")
     if not isinstance(completion, dict):
         completion = {"status": payload.get("status", "routed")}
@@ -419,7 +645,7 @@ def _resolution_from_route_payload(
 
     handoff = payload.get("code_review_handoff")
     if not isinstance(handoff, str):
-        handoff = _build_handoff(issue_input, issue_type, None)
+        handoff = _build_handoff(issue_input, issue_type, None, mcp_guidance)
 
     return DTResolution(
         issue_id=issue_id,
@@ -428,11 +654,13 @@ def _resolution_from_route_payload(
             "user_notes": user_notes,
             "issue_type": issue_type,
             "route_payload": payload,
+            "mcp_guidance": mcp_guidance,
         },
         certainty_assessment=certainty,
         is_existing_problem=bool(payload.get("is_existing_problem", False)),
         memory_references=list(payload.get("memory_references", [])),
-        required_resources=list(payload.get("required_resources", [])),
+        required_resources=list(payload.get("required_resources", []))
+        or [f"mcp:{name}" for name in (mcp_guidance or {}).get("recommended_servers", [])],
         todo_list=list(payload.get("todo_list", [])),
         task_steps=list(payload.get("task_steps", [])),
         code_review_handoff=handoff,
@@ -472,6 +700,7 @@ def process_issue_with_dt(
             user_notes,
             payload,
             automation_requested=trigger_detected,
+            workspace_root=workspace,
         )
 
     print("[DT] Satellite routing unavailable; using local fallback.")
