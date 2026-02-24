@@ -24,6 +24,7 @@ import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
 import com.realyn.watchdog.databinding.DialogServiceActionBinding
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
+import com.realyn.watchdog.theme.LionThemeViewStyler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -310,7 +311,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         refreshTwoFactorInputs()
         refreshFamilyInputs()
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = LionAlertDialogBuilder(this)
             .setTitle(if (isOnboarding) R.string.identity_onboarding_title else R.string.identity_dialog_title)
             .setMessage(if (isOnboarding) getString(R.string.identity_onboarding_message) else null)
             .setView(dialogBinding.root)
@@ -432,10 +433,11 @@ class CredentialDefenseActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
     }
 
     private fun promptLinkEmailNow(email: String) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.link_email_prompt_title)
             .setMessage(getString(R.string.link_email_prompt_message_template, email))
             .setPositiveButton(R.string.action_link_now) { _, _ ->
@@ -469,7 +471,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
     }
 
     private fun showEmailLinkCompletionPrompt(email: String) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.link_email_complete_title)
             .setMessage(getString(R.string.link_email_complete_message_template, email))
             .setPositiveButton(R.string.action_mark_linked) { _, _ ->
@@ -479,7 +481,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     R.string.identity_status_linked_template,
                     formatDateTime(System.currentTimeMillis())
                 )
-                AlertDialog.Builder(this)
+                LionAlertDialogBuilder(this)
                     .setTitle(R.string.breach_scan_prompt_title)
                     .setMessage(R.string.breach_scan_prompt_message)
                     .setPositiveButton(R.string.action_run_primary_breach_scan) { _, _ -> runPrimaryBreachScan() }
@@ -591,6 +593,14 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private fun openServiceActionDialog() {
         val dialogBinding = DialogServiceActionBinding.inflate(layoutInflater)
+        val featureAccess = PricingPolicy.resolveFeatureAccess(this)
+        val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
+        val themeState = LionThemeCatalog.resolveState(
+            context = this,
+            paidAccess = featureAccess.paidAccess,
+            selectedLionBitmap = selectedBitmap
+        )
+        LionThemeViewStyler.applyMaterialButtonPalette(dialogBinding.root, themeState.palette)
         val profile = PrimaryIdentityStore.readProfile(this)
         val profileControl = PricingPolicy.resolveProfileControl(this)
 
@@ -1004,7 +1014,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             }
         }
 
-        val dialog = AlertDialog.Builder(this)
+        val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.service_action_dialog_title)
             .setView(dialogBinding.root)
             .setPositiveButton(android.R.string.ok, null)
@@ -1024,6 +1034,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
         refreshDialogState()
         dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
     }
 
     private fun renderVaultSummaryForCurrentDraft() {
@@ -1282,7 +1293,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
         )
         applyCredentialTheme(themeState.palette, themeState.isDark)
         binding.lionHeroView.setFillMode(lionFillMode)
-        binding.lionHeroView.setSurfaceTone(themeState.isDark)
+        binding.lionHeroView.setImageOffsetY(0f)
+        binding.lionHeroView.setSurfaceTone(
+            LionThemePrefs.shouldUseDarkLionPresentation(themeState.isDark)
+        )
         binding.lionHeroView.setLionBitmap(selectedBitmap)
         binding.lionHeroView.setAccentColor(themeState.palette.accent)
         binding.lionModeToggleButton.text = getString(R.string.action_guardian_settings)
@@ -1312,6 +1326,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         binding.toolbar.navigationIcon?.mutate()?.setTint(palette.accent)
         binding.lionModeToggleButton.setTextColor(palette.accent)
         applyPaletteToMaterialCards(binding.root, palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
     }
 
     private fun applyPaletteToMaterialCards(view: View, palette: LionThemePalette) {
@@ -1420,7 +1435,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             getString(R.string.two_factor_owner_confirmation_note)
         }
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.two_factor_confirm_title)
             .setMessage(
                 getString(
@@ -1450,7 +1465,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             onAllowed()
             return
         }
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.root_hardening_sensitive_confirm_title)
             .setMessage(
                 getString(
@@ -1479,7 +1494,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             onAllowed()
             return
         }
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.root_hardening_sensitive_confirm_title)
             .setMessage(
                 getString(
@@ -1510,7 +1525,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             onAllowed()
             return
         }
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.root_hardening_sensitive_confirm_title)
             .setMessage(
                 getString(
@@ -1529,7 +1544,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         message: String,
         titleRes: Int = R.string.root_hardening_block_title
     ) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(titleRes)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
@@ -1561,7 +1576,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
     }
 
     private fun showLockedFeatureDialog(title: String, message: String) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(R.string.action_open_billing) { _, _ ->

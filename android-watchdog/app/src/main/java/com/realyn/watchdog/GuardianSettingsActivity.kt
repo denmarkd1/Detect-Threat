@@ -13,11 +13,14 @@ import androidx.core.view.WindowCompat
 import com.realyn.watchdog.databinding.ActivityGuardianSettingsBinding
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
+import com.realyn.watchdog.theme.LionThemeToneMode
+import com.realyn.watchdog.theme.LionThemeViewStyler
 
 class GuardianSettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityGuardianSettingsBinding
     private var accessGateBootstrapped: Boolean = false
+    private var syncingIntroSwitches: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,9 +29,10 @@ class GuardianSettingsActivity : AppCompatActivity() {
 
         binding.settingsToolbar.setNavigationOnClickListener { finish() }
         binding.cycleThemeShadeButton.setOnClickListener { cycleThemeShade() }
-        binding.cycleThemeToneButton.setOnClickListener { cycleThemeTone() }
         binding.cycleFillModeButton.setOnClickListener { cycleFillMode() }
-        binding.cycleLionAssetButton.setOnClickListener { cycleLionAsset() }
+        binding.cycleIdentityProfileButton.setOnClickListener { cycleIdentityProfile() }
+        binding.previewAccentSwatch.setOnClickListener { cycleThemeShade() }
+        binding.previewToneSwatch.setOnClickListener { toggleLightDarkTone() }
         binding.openPlanBillingButton.setOnClickListener {
             openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_PLAN_BILLING)
         }
@@ -41,6 +45,36 @@ class GuardianSettingsActivity : AppCompatActivity() {
         }
         binding.openCredentialCenterButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
+        }
+        binding.settingsIntroReplaySwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (syncingIntroSwitches) {
+                return@setOnCheckedChangeListener
+            }
+            MainActivity.setHomeIntroReplayEveryLaunch(this, isChecked)
+            showSettingsStatus(
+                getString(
+                    if (isChecked) {
+                        R.string.guardian_settings_intro_mode_every_launch
+                    } else {
+                        R.string.guardian_settings_intro_mode_first_launch
+                    }
+                )
+            )
+        }
+        binding.settingsIntroWidgetMotionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (syncingIntroSwitches) {
+                return@setOnCheckedChangeListener
+            }
+            MainActivity.setHomeIntroWidgetMotionEnabled(this, isChecked)
+            showSettingsStatus(
+                getString(
+                    if (isChecked) {
+                        R.string.guardian_settings_intro_motion_enabled
+                    } else {
+                        R.string.guardian_settings_intro_motion_disabled
+                    }
+                )
+            )
         }
     }
 
@@ -67,7 +101,7 @@ class GuardianSettingsActivity : AppCompatActivity() {
             onUnlocked = {
                 if (!accessGateBootstrapped) {
                     accessGateBootstrapped = true
-                    binding.settingsStatusLabel.text = getString(R.string.guardian_settings_ready)
+                    binding.settingsStatusLabel.visibility = View.GONE
                 }
                 refreshSettingsUi()
             },
@@ -80,9 +114,10 @@ class GuardianSettingsActivity : AppCompatActivity() {
         val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
         val fillMode = LionThemePrefs.readFillMode(this)
         val toneMode = LionThemePrefs.readToneMode(this)
-        val activeAsset = LionThemePrefs.readSelectedProLionAsset(this)
-            ?.takeIf { it.isNotBlank() }
-            ?: getString(R.string.guardian_settings_lion_asset_default)
+        val identityProfile = LionThemePrefs.readIdentityProfile(
+            context = this,
+            paidAccess = access.paidAccess
+        )
         val themeState = LionThemeCatalog.resolveState(
             context = this,
             paidAccess = access.paidAccess,
@@ -90,72 +125,93 @@ class GuardianSettingsActivity : AppCompatActivity() {
         )
 
         applySettingsTheme(themeState.palette, themeState.isDark)
-
-        binding.settingTierValue.text = if (access.paidAccess) {
-            getString(R.string.action_pro_active)
-        } else {
-            getString(R.string.action_go_pro)
-        }
         binding.settingThemeShadeValue.text = getString(themeState.variant.labelRes)
         binding.settingThemeToneValue.text = getString(toneMode.labelRes)
         binding.settingFillModeValue.text = getString(fillMode.labelRes)
-        binding.settingLionAssetValue.text = activeAsset
+        binding.settingLionAssetValue.text = getString(identityProfile.labelRes)
 
         binding.settingsLionPreview.setFillMode(fillMode)
-        binding.settingsLionPreview.setSurfaceTone(themeState.isDark)
+        binding.settingsLionPreview.setImageOffsetY(0f)
+        binding.settingsLionPreview.setSurfaceTone(
+            LionThemePrefs.shouldUseDarkLionPresentation(themeState.isDark)
+        )
         binding.settingsLionPreview.setLionBitmap(selectedBitmap)
         binding.settingsLionPreview.setAccentColor(themeState.palette.accent)
         binding.settingsLionPreview.setIdleState()
+        binding.previewToneSwatch.setBackgroundColor(
+            if (themeState.isDark) themeState.palette.backgroundEnd else Color.WHITE
+        )
+        binding.previewToneSwatch.contentDescription = getString(
+            if (themeState.isDark) {
+                R.string.guardian_settings_preview_tone_toggle_dark
+            } else {
+                R.string.guardian_settings_preview_tone_toggle_light
+            }
+        )
 
-        binding.cycleLionAssetButton.isEnabled = access.paidAccess
-        binding.cycleLionAssetButton.alpha = if (access.paidAccess) 1f else 0.60f
+        val availableProfiles = LionThemePrefs.LionIdentityProfile.availableFor(access.paidAccess)
+        binding.cycleIdentityProfileButton.isEnabled = availableProfiles.size > 1
+        binding.cycleIdentityProfileButton.alpha = if (availableProfiles.size > 1) 1f else 0.60f
+        syncingIntroSwitches = true
+        binding.settingsIntroReplaySwitch.isChecked = MainActivity.isHomeIntroReplayEveryLaunch(this)
+        binding.settingsIntroWidgetMotionSwitch.isChecked = MainActivity.isHomeIntroWidgetMotionEnabled(this)
+        syncingIntroSwitches = false
     }
 
     private fun cycleThemeShade() {
         val access = PricingPolicy.resolveFeatureAccess(this)
         val next = LionThemePrefs.cycleThemeVariant(this, access.paidAccess)
         refreshSettingsUi()
-        binding.settingsStatusLabel.text = getString(
+        showSettingsStatus(getString(
             R.string.lion_theme_variant_status_template,
             getString(next.labelRes)
-        )
+        ))
     }
 
-    private fun cycleThemeTone() {
-        val next = LionThemePrefs.cycleToneMode(this)
-        refreshSettingsUi()
-        binding.settingsStatusLabel.text = getString(
-            R.string.lion_theme_tone_status_template,
-            getString(next.labelRes)
+    private fun toggleLightDarkTone() {
+        val access = PricingPolicy.resolveFeatureAccess(this)
+        val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
+        val currentState = LionThemeCatalog.resolveState(
+            context = this,
+            paidAccess = access.paidAccess,
+            selectedLionBitmap = selectedBitmap
         )
+        val nextTone = if (currentState.isDark) {
+            LionThemeToneMode.LIGHT
+        } else {
+            LionThemeToneMode.DARK
+        }
+        LionThemePrefs.writeToneMode(this, nextTone)
+        refreshSettingsUi()
+        showSettingsStatus(getString(
+            R.string.lion_theme_tone_status_template,
+            getString(nextTone.labelRes)
+        ))
     }
 
     private fun cycleFillMode() {
         val next = LionThemePrefs.readFillMode(this).next()
         LionThemePrefs.writeFillMode(this, next)
         refreshSettingsUi()
-        binding.settingsStatusLabel.text = getString(
+        showSettingsStatus(getString(
             R.string.lion_mode_status_template,
             getString(next.labelRes)
-        )
+        ))
     }
 
-    private fun cycleLionAsset() {
+    private fun cycleIdentityProfile() {
         val access = PricingPolicy.resolveFeatureAccess(this)
-        if (!access.paidAccess) {
-            binding.settingsStatusLabel.text = getString(R.string.lion_asset_selection_locked)
-            return
-        }
-        val selected = LionThemePrefs.cycleProLionAsset(this)
+        val next = LionThemePrefs.cycleIdentityProfile(
+            context = this,
+            paidAccess = access.paidAccess
+        )
         refreshSettingsUi()
-        binding.settingsStatusLabel.text = if (selected == null) {
+        showSettingsStatus(
             getString(
-                R.string.lion_assets_path_template,
-                LionThemePrefs.PRO_LION_ASSET_WORKSPACE_PATH
+                R.string.lion_identity_profile_status_template,
+                getString(next.labelRes)
             )
-        } else {
-            getString(R.string.lion_asset_status_template, selected)
-        }
+        )
     }
 
     private fun openLanguageSettings() {
@@ -167,7 +223,12 @@ class GuardianSettingsActivity : AppCompatActivity() {
             Intent(Settings.ACTION_LOCALE_SETTINGS)
         }
         runCatching { startActivity(intent) }
-            .onFailure { binding.settingsStatusLabel.text = getString(R.string.translation_settings_open_failed) }
+            .onFailure { showSettingsStatus(getString(R.string.translation_settings_open_failed)) }
+    }
+
+    private fun showSettingsStatus(message: CharSequence) {
+        binding.settingsStatusLabel.visibility = View.VISIBLE
+        binding.settingsStatusLabel.text = message
     }
 
     private fun openMainForSettingsAction(action: String) {
@@ -200,20 +261,15 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.settingsToolbar.setBackgroundColor(palette.backgroundEnd)
         binding.settingsToolbar.setTitleTextColor(palette.textPrimary)
         binding.settingsToolbar.navigationIcon?.mutate()?.setTint(palette.accent)
-        binding.settingsTitleLabel.setTextColor(palette.textPrimary)
-        binding.settingsSummaryLabel.setTextColor(palette.textSecondary)
         binding.settingsStatusLabel.setTextColor(palette.textSecondary)
-        binding.settingTierValue.setTextColor(palette.accent)
         binding.settingThemeShadeValue.setTextColor(palette.textPrimary)
         binding.settingThemeToneValue.setTextColor(palette.textPrimary)
         binding.settingFillModeValue.setTextColor(palette.textPrimary)
         binding.settingLionAssetValue.setTextColor(palette.textPrimary)
         applyPaletteToMaterialCards(binding.root, palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
 
-        binding.previewBackgroundSwatch.setBackgroundColor(palette.backgroundCenter)
-        binding.previewPanelSwatch.setBackgroundColor(palette.panelAlt)
         binding.previewAccentSwatch.setBackgroundColor(palette.accent)
-        binding.previewTextSwatch.setBackgroundColor(palette.textPrimary)
     }
 
     private fun applyPaletteToMaterialCards(view: View, palette: LionThemePalette) {
@@ -230,4 +286,5 @@ class GuardianSettingsActivity : AppCompatActivity() {
             }
         }
     }
+
 }

@@ -51,12 +51,6 @@ enum class LionThemeVariant(
         tier = LionThemeTier.PRO,
         labelRes = R.string.lion_theme_variant_pro_asset_nebula,
         adaptiveFromLionAsset = true
-    ),
-    PRO_ASSET_HARMONIC(
-        raw = "pro_asset_harmonic",
-        tier = LionThemeTier.PRO,
-        labelRes = R.string.lion_theme_variant_pro_asset_harmonic,
-        adaptiveFromLionAsset = true
     );
 
     val requiresPro: Boolean
@@ -74,11 +68,13 @@ enum class LionThemeVariant(
             PRO_AURORA_CIRCUIT,
             PRO_SOLAR_FLARE,
             PRO_OBSIDIAN_PRISM,
-            PRO_ASSET_NEBULA,
-            PRO_ASSET_HARMONIC
+            PRO_ASSET_NEBULA
         )
 
         fun fromRaw(raw: String?): LionThemeVariant {
+            if (raw == "pro_asset_harmonic") {
+                return PRO_ASSET_NEBULA
+            }
             return values().firstOrNull { it.raw == raw } ?: FREE_GUARDIAN_BRONZE
         }
 
@@ -276,11 +272,6 @@ object LionThemeCatalog {
                 seedAccent = seedAccent,
                 hueShift = 26f
             )
-
-            LionThemeVariant.PRO_ASSET_HARMONIC -> buildAdaptivePalette(
-                seedAccent = seedAccent,
-                hueShift = -33f
-            )
         }
     }
 
@@ -316,21 +307,21 @@ object LionThemeCatalog {
     }
 
     private fun buildLightCompanionPalette(dark: LionThemePalette): LionThemePalette {
-        val accentInk = blend(dark.accent, Color.BLACK, 0.08f)
-        val textPrimary = blend(accentInk, Color.BLACK, 0.78f)
-        val textSecondary = blend(textPrimary, Color.WHITE, 0.30f)
-        val textMuted = blend(textSecondary, Color.WHITE, 0.24f)
+        val accentInk = blend(dark.accent, Color.BLACK, 0.36f)
+        val textPrimary = blend(dark.textPrimary, Color.BLACK, 0.84f)
+        val textSecondary = blend(textPrimary, Color.WHITE, 0.22f)
+        val textMuted = blend(textSecondary, Color.WHITE, 0.20f)
         return dark.copy(
-            backgroundStart = blend(dark.backgroundStart, Color.WHITE, 0.70f),
-            backgroundCenter = blend(dark.backgroundCenter, Color.WHITE, 0.76f),
-            backgroundEnd = blend(dark.backgroundEnd, Color.WHITE, 0.84f),
-            navShellStart = ColorUtils.setAlphaComponent(blend(dark.navShellStart, Color.WHITE, 0.48f), 248),
-            navShellEnd = ColorUtils.setAlphaComponent(blend(dark.navShellEnd, Color.WHITE, 0.55f), 236),
-            panel = blend(dark.panel, Color.WHITE, 0.62f),
-            panelAlt = blend(dark.panelAlt, Color.WHITE, 0.56f),
-            stroke = blend(dark.stroke, Color.BLACK, 0.26f),
+            backgroundStart = blend(dark.backgroundStart, Color.WHITE, 0.94f),
+            backgroundCenter = blend(dark.backgroundCenter, Color.WHITE, 0.96f),
+            backgroundEnd = blend(dark.backgroundEnd, Color.WHITE, 0.98f),
+            navShellStart = ColorUtils.setAlphaComponent(blend(dark.navShellStart, Color.WHITE, 0.56f), 250),
+            navShellEnd = ColorUtils.setAlphaComponent(blend(dark.navShellEnd, Color.WHITE, 0.62f), 244),
+            panel = blend(dark.panel, Color.WHITE, 0.70f),
+            panelAlt = blend(dark.panelAlt, Color.WHITE, 0.60f),
+            stroke = blend(dark.stroke, Color.BLACK, 0.34f),
             accent = accentInk,
-            alert = blend(dark.alert, Color.BLACK, 0.08f),
+            alert = blend(dark.alert, Color.BLACK, 0.16f),
             textPrimary = textPrimary,
             textSecondary = textSecondary,
             textMuted = textMuted

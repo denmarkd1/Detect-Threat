@@ -27,88 +27,22 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:id="@+id/settingsTitleLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/guardian_settings_hub_title"
-                android:textColor="@color/text_primary"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/settingsSummaryLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/guardian_settings_hub_summary"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+            android:padding="12dp">
 
             <TextView
                 android:id="@+id/settingsStatusLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="4dp"
                 android:text="@string/guardian_settings_ready"
                 android:textColor="@color/text_muted"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:cardBackgroundColor="@color/brand_panel_alt"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/brand_stroke"
-                app:strokeWidth="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="14dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/guardian_settings_section_profile"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/guardian_settings_label_tier"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:id="@+id/settingTierValue"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:textColor="@color/brand_accent"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="4dp"
                 app:cardBackgroundColor="@color/brand_panel_alt"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="0dp"
@@ -139,7 +73,7 @@
                     <com.realyn.watchdog.LionHeroView
                         android:id="@+id/settingsLionPreview"
                         android:layout_width="match_parent"
-                        android:layout_height="200dp"
+                        android:layout_height="@dimen/home_lion_hero_height"
                         android:layout_marginTop="8dp" />
 
                     <LinearLayout
@@ -254,32 +188,13 @@
                         android:orientation="horizontal">
 
                         <View
-                            android:id="@+id/previewBackgroundSwatch"
-                            android:layout_width="0dp"
-                            android:layout_height="22dp"
-                            android:layout_weight="1"
-                            android:background="@color/brand_bg_dark" />
-
-                        <Space
-                            android:layout_width="6dp"
-                            android:layout_height="1dp" />
-
-                        <View
-                            android:id="@+id/previewPanelSwatch"
-                            android:layout_width="0dp"
-                            android:layout_height="22dp"
-                            android:layout_weight="1"
-                            android:background="@color/brand_panel_alt" />
-
-                        <Space
-                            android:layout_width="6dp"
-                            android:layout_height="1dp" />
-
-                        <View
                             android:id="@+id/previewAccentSwatch"
                             android:layout_width="0dp"
                             android:layout_height="22dp"
                             android:layout_weight="1"
+                            android:clickable="true"
+                            android:contentDescription="@string/guardian_settings_preview_accent_toggle"
+                            android:focusable="true"
                             android:background="@color/brand_accent" />
 
                         <Space
@@ -287,10 +202,13 @@
                             android:layout_height="1dp" />
 
                         <View
-                            android:id="@+id/previewTextSwatch"
+                            android:id="@+id/previewToneSwatch"
                             android:layout_width="0dp"
                             android:layout_height="22dp"
                             android:layout_weight="1"
+                            android:clickable="true"
+                            android:contentDescription="@string/guardian_settings_preview_tone_toggle"
+                            android:focusable="true"
                             android:background="@color/text_primary" />
                     </LinearLayout>
 
@@ -303,14 +221,6 @@
                         android:text="@string/guardian_settings_action_next_theme_shade" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/cycleThemeToneButton"
-                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/guardian_settings_action_cycle_theme_tone" />
-
-                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/cycleFillModeButton"
                         style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                         android:layout_width="match_parent"
@@ -319,12 +229,12 @@
                         android:text="@string/guardian_settings_action_cycle_fill_mode" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/cycleLionAssetButton"
+                        android:id="@+id/cycleIdentityProfileButton"
                         style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/guardian_settings_action_cycle_lion_asset" />
+                        android:text="@string/guardian_settings_action_cycle_identity_profile" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -343,6 +253,43 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="14dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/guardian_settings_section_startup_intro"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/guardian_settings_section_startup_intro_subtitle"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/settingsIntroReplaySwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/guardian_settings_intro_replay_every_launch"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/settingsIntroWidgetMotionSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/guardian_settings_intro_widget_motion"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp" />
+
+                    <Space
+                        android:layout_width="match_parent"
+                        android:layout_height="10dp" />
 
                     <TextView
                         android:layout_width="match_parent"

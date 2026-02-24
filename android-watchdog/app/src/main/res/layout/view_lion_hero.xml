@@ -14,23 +14,19 @@
             android:layout_height="0dp"
             android:background="@drawable/bg_lion_aura"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintDimensionRatio="1:1"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_percent="0.86" />
+            app:layout_constraintBottom_toBottomOf="@id/lionIdleImage"
+            app:layout_constraintEnd_toEndOf="@id/lionIdleImage"
+            app:layout_constraintStart_toStartOf="@id/lionIdleImage"
+            app:layout_constraintTop_toTopOf="@id/lionIdleImage" />
 
         <com.realyn.watchdog.LionEyeGlowOverlayView
             android:id="@+id/lionEyeGlowOverlay"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintDimensionRatio="1:1"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_percent="0.82" />
+            app:layout_constraintBottom_toBottomOf="@id/lionIdleImage"
+            app:layout_constraintEnd_toEndOf="@id/lionIdleImage"
+            app:layout_constraintStart_toStartOf="@id/lionIdleImage"
+            app:layout_constraintTop_toTopOf="@id/lionIdleImage" />
 
         <ImageView
             android:id="@+id/lionIdleImage"
@@ -38,13 +34,14 @@
             android:layout_height="0dp"
             android:contentDescription="@string/lion_icon_description"
             android:scaleType="fitCenter"
-            android:src="@drawable/lion_icon"
+            android:src="@drawable/lion_icon_non_binary"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintDimensionRatio="1:1"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_default="percent"
+            app:layout_constraintHeight_percent="0.90"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_percent="0.82" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.realyn.watchdog.LionFillImageView
             android:id="@+id/lionFillImage"
@@ -52,7 +49,7 @@
             android:layout_height="0dp"
             android:contentDescription="@string/lion_icon_description"
             android:scaleType="fitCenter"
-            android:src="@drawable/lion_icon"
+            android:src="@drawable/lion_icon_non_binary"
             app:layout_constraintBottom_toBottomOf="@id/lionIdleImage"
             app:layout_constraintEnd_toEndOf="@id/lionIdleImage"
             app:layout_constraintStart_toStartOf="@id/lionIdleImage"

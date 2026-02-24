@@ -160,7 +160,7 @@ object AppAccessGate {
             addView(confirmInput)
         }
 
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = LionAlertDialogBuilder(activity)
             .setTitle(R.string.app_lock_pin_setup_title)
             .setMessage(R.string.app_lock_pin_setup_message)
             .setView(layout)
@@ -193,6 +193,7 @@ object AppAccessGate {
 
         dialog.setOnCancelListener { onDenied() }
         dialog.show()
+        LionDialogStyler.applyForActivity(activity, dialog)
     }
 
     private fun showPinEntryDialog(
@@ -207,7 +208,7 @@ object AppAccessGate {
         }
 
         var attemptsRemaining = 5
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = LionAlertDialogBuilder(activity)
             .setTitle(R.string.app_lock_pin_entry_title)
             .setMessage(activity.getString(R.string.app_lock_pin_entry_message_template, attemptsRemaining))
             .setView(pinInput)
@@ -242,6 +243,7 @@ object AppAccessGate {
 
         dialog.setOnCancelListener { onDenied() }
         dialog.show()
+        LionDialogStyler.applyForActivity(activity, dialog)
     }
 
     private fun loadSettings(context: AppCompatActivity): AppLockSettings {

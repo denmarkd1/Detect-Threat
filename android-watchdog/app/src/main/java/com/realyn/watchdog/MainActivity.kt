@@ -3,13 +3,19 @@ package com.realyn.watchdog
 import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.content.Context
 import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -42,6 +48,7 @@ import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityMainBinding
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
+import com.realyn.watchdog.theme.LionThemeViewStyler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,8 +64,39 @@ class MainActivity : AppCompatActivity() {
         const val GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP = "open_locator_setup"
 
         private const val UI_PREFS_FILE = "dt_ui_prefs"
-        private const val KEY_HOME_INTRO_SHOWN = "home_intro_shown_v3"
+        private const val KEY_HOME_INTRO_SHOWN = "home_intro_shown_v4"
+        private const val KEY_HOME_INTRO_REPLAY_EVERY_LAUNCH = "home_intro_replay_every_launch_v1"
+        private const val KEY_HOME_INTRO_WIDGET_MOTION = "home_intro_widget_motion_v1"
         private const val KEY_HOME_TUTORIAL_POPUP_SHOWN = "home_tutorial_popup_shown_v1"
+        // Based on grade 4-5 oral reading fluency medians (~120-146 WPM).
+        private const val INTRO_WELCOME_READING_WPM = 130f
+        private const val INTRO_WIDGET_LAUNCH_DURATION_MS = 1450L
+        private const val INTRO_WIDGET_ARC_HEIGHT_DP = 210f
+        private const val INTRO_WIDGET_ARC_DENSITY_DP = 28f
+
+        fun isHomeIntroReplayEveryLaunch(context: Context): Boolean {
+            return context.getSharedPreferences(UI_PREFS_FILE, Context.MODE_PRIVATE)
+                .getBoolean(KEY_HOME_INTRO_REPLAY_EVERY_LAUNCH, false)
+        }
+
+        fun setHomeIntroReplayEveryLaunch(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(UI_PREFS_FILE, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_HOME_INTRO_REPLAY_EVERY_LAUNCH, enabled)
+                .apply()
+        }
+
+        fun isHomeIntroWidgetMotionEnabled(context: Context): Boolean {
+            return context.getSharedPreferences(UI_PREFS_FILE, Context.MODE_PRIVATE)
+                .getBoolean(KEY_HOME_INTRO_WIDGET_MOTION, true)
+        }
+
+        fun setHomeIntroWidgetMotionEnabled(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(UI_PREFS_FILE, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_HOME_INTRO_WIDGET_MOTION, enabled)
+                .apply()
+        }
     }
 
     private enum class SecurityActionRoute {
@@ -129,7 +167,11 @@ class MainActivity : AppCompatActivity() {
     private var homeIntroHandledThisSession: Boolean = false
     private var homeIntroAnimating: Boolean = false
     private var introWordAnimator: ValueAnimator? = null
+    private var introWipeAnimator: ValueAnimator? = null
     private var introSequenceRunnable: Runnable? = null
+    private var widgetLaunchAnimatorSet: AnimatorSet? = null
+    private var widgetHeartbeatAnimatorSet: AnimatorSet? = null
+    private var navRippleAnimatorSet: AnimatorSet? = null
     private var latestSystemBarInsets: Insets = Insets.NONE
     private var activeHomePalette: LionThemePalette? = null
     private var pendingGuardianSettingsAction: String? = null
@@ -256,8 +298,13 @@ class MainActivity : AppCompatActivity() {
         clearHomeIntroTimeline()
         binding.homeIntroOverlay.animate().cancel()
         binding.introLionHero.animate().cancel()
+        binding.introTitleLabel.animate().cancel()
         binding.introWelcomeLabel.animate().cancel()
         binding.introCelebrationView.stopCelebration()
+        binding.widgetTrailView.clear()
+        homeWidgetCards().forEach { it.animate().cancel() }
+        homeNavButtons().forEach { it.animate().cancel() }
+        binding.navLionButton.animate().cancel()
         binding.bottomNavCard.animate().cancel()
         super.onDestroy()
     }
@@ -418,12 +465,20 @@ class MainActivity : AppCompatActivity() {
             profile.compactHeight -> dpToPx(136f)
             else -> resources.getDimensionPixelSize(R.dimen.home_intro_welcome_bottom_margin)
         }
-        binding.introWelcomeLabel.updateLayoutParams<FrameLayout.LayoutParams> {
+        val introMessageBottomMargin = (welcomeBottomMargin - dpToPx(48f)).coerceAtLeast(dpToPx(72f))
+        binding.introTitleLabel.updateLayoutParams<FrameLayout.LayoutParams> {
             bottomMargin = welcomeBottomMargin
         }
+        binding.introWelcomeLabel.updateLayoutParams<FrameLayout.LayoutParams> {
+            bottomMargin = introMessageBottomMargin
+        }
+        binding.introTitleLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.tabletLayout) 26f else if (profile.compactWidth) 21f else 24f
+        )
         binding.introWelcomeLabel.setTextSize(
             TypedValue.COMPLEX_UNIT_SP,
-            if (profile.tabletLayout) 22f else if (profile.compactWidth) 17f else 19f
+            if (profile.tabletLayout) 20f else if (profile.compactWidth) 16f else 18f
         )
 
         val compactControls = profile.compactWidth && profile.compactHeight
@@ -622,7 +677,7 @@ class MainActivity : AppCompatActivity() {
 
             if (result.status == UpdateStatus.UPDATE_AVAILABLE && !result.downloadUrl.isNullOrBlank()) {
                 val notes = result.releaseNotes ?: getString(R.string.update_release_notes_default)
-                AlertDialog.Builder(this@MainActivity)
+                LionAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.update_available_title)
                     .setMessage("${result.message}\n\n$notes")
                     .setPositiveButton(R.string.update_open_download) { _, _ ->
@@ -754,7 +809,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         homeIntroHandledThisSession = true
-        if (isHomeIntroAlreadyShown()) {
+        if (!shouldRunHomeIntroThisLaunch()) {
             showBottomNavImmediate()
             maybeShowHomeTutorialPopup()
             return
@@ -765,11 +820,23 @@ class MainActivity : AppCompatActivity() {
     private fun playHomeIntroSequence() {
         homeIntroAnimating = true
         clearHomeIntroTimeline()
+        resetWidgetCardTransforms()
+        resetBottomNavTransforms()
+        binding.widgetTrailView.clear()
         binding.bottomNavCard.visibility = View.GONE
         binding.homeIntroOverlay.visibility = View.VISIBLE
         binding.homeIntroOverlay.alpha = 1f
+        binding.introTitleLabel.alpha = 0f
+        binding.introTitleLabel.translationX = 0f
+        binding.introTitleLabel.translationY = 0f
+        binding.introTitleLabel.scaleX = 1f
+        binding.introTitleLabel.scaleY = 1f
+        binding.introTitleLabel.text = getString(R.string.screen_title)
         binding.introWelcomeLabel.alpha = 0f
-        binding.introWelcomeLabel.text = ""
+        binding.introWelcomeLabel.text = getString(R.string.home_intro_welcome)
+        binding.introWelcomeLabel.translationX = 0f
+        binding.introWelcomeLabel.translationY = 0f
+        binding.introWelcomeLabel.clipBounds = null
         binding.lionHeroView.alpha = 0f
         binding.introCelebrationView.alpha = 0f
         refreshLionHeroVisuals()
@@ -807,16 +874,87 @@ class MainActivity : AppCompatActivity() {
                 .scaleY(targetScale)
                 .translationX(deltaX)
                 .translationY(deltaY)
-                .setDuration(1850L)
+                .setDuration(2850L)
                 .setInterpolator(AccelerateDecelerateInterpolator())
                 .withEndAction {
                     binding.lionHeroView.alpha = 1f
-                    animateIntroWelcomeMessage {
-                        playIntroCelebrationAndLockIn()
+                    animateIntroTitleRiseIntoHomePosition {
+                        animateIntroWelcomeMessage {
+                            playIntroCelebrationAndLockIn()
+                        }
                     }
                 }
                 .start()
         }
+    }
+
+    private fun animateIntroTitleRiseIntoHomePosition(onComplete: () -> Unit) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val titleLabel = binding.introTitleLabel
+        if (
+            titleLabel.width <= 0 || titleLabel.height <= 0 ||
+            binding.homeFrameTitleLabel.width <= 0 || binding.homeFrameTitleLabel.height <= 0
+        ) {
+            titleLabel.post { animateIntroTitleRiseIntoHomePosition(onComplete) }
+            return
+        }
+        val titleLoc = IntArray(2)
+        val targetLoc = IntArray(2)
+        titleLabel.getLocationOnScreen(titleLoc)
+        binding.homeFrameTitleLabel.getLocationOnScreen(targetLoc)
+
+        val startCenterX = titleLoc[0] + (titleLabel.width / 2f)
+        val startCenterY = titleLoc[1] + (titleLabel.height / 2f)
+        val targetCenterX = targetLoc[0] + (binding.homeFrameTitleLabel.width / 2f)
+        val targetCenterY = targetLoc[1] + (binding.homeFrameTitleLabel.height / 2f)
+        val deltaX = targetCenterX - startCenterX
+        val deltaY = targetCenterY - startCenterY
+
+        titleLabel.animate().cancel()
+        titleLabel.alpha = 0f
+        titleLabel.translationX = 0f
+        titleLabel.translationY = 0f
+        titleLabel.animate()
+            .alpha(1f)
+            .translationX(deltaX)
+            .translationY(deltaY)
+            .setDuration(2100L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                if (isFinishing || isDestroyed) {
+                    return@withEndAction
+                }
+                introSequenceRunnable = Runnable { onComplete() }
+                binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 380L)
+            }
+            .start()
+    }
+
+    private fun positionIntroWelcomeBelowTitle() {
+        val label = binding.introWelcomeLabel
+        val title = binding.introTitleLabel
+        if (
+            label.width <= 0 || label.height <= 0 ||
+            title.width <= 0 || title.height <= 0 ||
+            binding.homeIntroOverlay.width <= 0 || binding.homeIntroOverlay.height <= 0
+        ) {
+            return
+        }
+        val labelLoc = IntArray(2)
+        val titleLoc = IntArray(2)
+        val overlayLoc = IntArray(2)
+        label.getLocationOnScreen(labelLoc)
+        title.getLocationOnScreen(titleLoc)
+        binding.homeIntroOverlay.getLocationOnScreen(overlayLoc)
+
+        val desiredTopRaw = titleLoc[1] + title.height + dpToPx(10f)
+        val minTop = overlayLoc[1] + dpToPx(56f)
+        val maxTop = overlayLoc[1] + binding.homeIntroOverlay.height - label.height - dpToPx(96f)
+        val desiredTop = desiredTopRaw.coerceIn(minTop, maxTop)
+        label.translationY += (desiredTop - labelLoc[1])
+        label.translationX = 0f
     }
 
     private fun animateIntroWelcomeMessage(onComplete: () -> Unit) {
@@ -824,28 +962,33 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val fullText = getString(R.string.home_intro_welcome)
-        val chunks = Regex("\\S+\\s*").findAll(fullText).map { it.value }.toList()
-        if (chunks.isEmpty()) {
+        if (fullText.isBlank()) {
             onComplete()
             return
         }
-
         introWordAnimator?.cancel()
-        binding.introWelcomeLabel.text = ""
+        binding.introWelcomeLabel.animate().cancel()
+        positionIntroWelcomeBelowTitle()
         binding.introWelcomeLabel.alpha = 0f
+        binding.introWelcomeLabel.text = ""
+        binding.introWelcomeLabel.clipBounds = null
         binding.introWelcomeLabel.animate()
             .alpha(1f)
-            .setDuration(420L)
+            .setDuration(520L)
             .setInterpolator(DecelerateInterpolator())
             .start()
 
         var cancelled = false
-        introWordAnimator = ValueAnimator.ofInt(0, chunks.size).apply {
-            duration = chunks.size * 210L
+        var lastCount = -1
+        introWordAnimator = ValueAnimator.ofFloat(0f, fullText.length.toFloat()).apply {
+            duration = computeIntroWelcomeReadDurationMs(fullText)
             interpolator = LinearInterpolator()
             addUpdateListener { animator ->
-                val count = (animator.animatedValue as Int).coerceIn(0, chunks.size)
-                binding.introWelcomeLabel.text = chunks.take(count).joinToString(separator = "")
+                val count = (animator.animatedValue as Float).toInt().coerceIn(0, fullText.length)
+                if (count != lastCount) {
+                    binding.introWelcomeLabel.text = fullText.substring(0, count)
+                    lastCount = count
+                }
             }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationCancel(animation: Animator) {
@@ -857,44 +1000,95 @@ class MainActivity : AppCompatActivity() {
                         return
                     }
                     introSequenceRunnable = Runnable { onComplete() }
-                    binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 1100L)
+                    binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 1400L)
                 }
             })
             start()
         }
     }
 
+    private fun computeIntroWelcomeReadDurationMs(text: String): Long {
+        val words = Regex("\\S+").findAll(text).count().coerceAtLeast(1)
+        val duration = ((words.toFloat() / INTRO_WELCOME_READING_WPM) * 60_000f).toLong()
+        return duration.coerceIn(5600L, 12500L)
+    }
+
     private fun playIntroCelebrationAndLockIn() {
         if (isFinishing || isDestroyed) {
             return
         }
+        val celebrationDurationMs = 3800L
         val accentColor = activeHomePalette?.accent ?: LionThemePrefs.resolveAccentColor(this)
         binding.introCelebrationView.animate().cancel()
         binding.introCelebrationView.alpha = 0f
         binding.introCelebrationView.animate()
             .alpha(1f)
-            .setDuration(240L)
+            .setDuration(420L)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {
-                binding.introCelebrationView.startCelebration(accentColor, 2500L)
+                binding.introCelebrationView.startCelebration(accentColor, celebrationDurationMs)
             }
             .start()
 
         binding.introLionHero.animate()
             .scaleXBy(0.05f)
             .scaleYBy(0.05f)
-            .setDuration(300L)
+            .setDuration(420L)
             .withEndAction {
                 binding.introLionHero.animate()
                     .scaleXBy(-0.05f)
                     .scaleYBy(-0.05f)
-                    .setDuration(300L)
+                    .setDuration(420L)
                     .start()
             }
             .start()
 
-        introSequenceRunnable = Runnable { finalizeHomeIntroTransition() }
-        binding.homeIntroOverlay.postDelayed(introSequenceRunnable, 2600L)
+        introSequenceRunnable = Runnable {
+            animateIntroWelcomeWipeTopToBottom {
+                finalizeHomeIntroTransition()
+            }
+        }
+        binding.homeIntroOverlay.postDelayed(introSequenceRunnable, celebrationDurationMs + 260L)
+    }
+
+    private fun animateIntroWelcomeWipeTopToBottom(onComplete: () -> Unit) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val label = binding.introWelcomeLabel
+        if (label.width <= 0 || label.height <= 0) {
+            label.post { animateIntroWelcomeWipeTopToBottom(onComplete) }
+            return
+        }
+        introWipeAnimator?.cancel()
+        label.alpha = 1f
+        label.clipBounds = Rect(0, 0, label.width, label.height)
+        var cancelled = false
+        introWipeAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1320L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animator ->
+                val progress = animator.animatedFraction
+                val top = (label.height * progress).toInt().coerceIn(0, label.height)
+                label.clipBounds = Rect(0, top, label.width, label.height)
+                label.alpha = (1f - (progress * 0.18f)).coerceIn(0f, 1f)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    introWipeAnimator = null
+                    label.clipBounds = null
+                    label.alpha = 0f
+                    if (!cancelled && !isFinishing && !isDestroyed) {
+                        onComplete()
+                    }
+                }
+            })
+            start()
+        }
     }
 
     private fun finalizeHomeIntroTransition() {
@@ -903,24 +1097,34 @@ class MainActivity : AppCompatActivity() {
         }
         binding.homeIntroOverlay.animate()
             .alpha(0f)
-            .setDuration(540L)
+            .setDuration(620L)
             .setInterpolator(DecelerateInterpolator())
             .withEndAction {
                 binding.homeIntroOverlay.visibility = View.GONE
                 binding.homeIntroOverlay.alpha = 1f
+                binding.introTitleLabel.alpha = 0f
+                binding.introTitleLabel.translationX = 0f
+                binding.introTitleLabel.translationY = 0f
+                binding.introTitleLabel.text = getString(R.string.screen_title)
                 binding.introWelcomeLabel.alpha = 0f
                 binding.introWelcomeLabel.text = getString(R.string.home_intro_welcome)
+                binding.introWelcomeLabel.translationX = 0f
+                binding.introWelcomeLabel.translationY = 0f
+                binding.introWelcomeLabel.clipBounds = null
                 binding.introLionHero.translationX = 0f
                 binding.introLionHero.translationY = 0f
                 binding.introLionHero.scaleX = 1f
                 binding.introLionHero.scaleY = 1f
                 binding.introCelebrationView.alpha = 0f
                 binding.introCelebrationView.stopCelebration()
-                homeIntroAnimating = false
-                animateBottomNavIn()
-                setBusy(false)
-                markHomeIntroShown()
-                maybeShowHomeTutorialPopup()
+                if (isHomeIntroWidgetMotionEnabled(this@MainActivity)) {
+                    animateWidgetCardsArcInThenNavRipple {
+                        completeHomeIntroSequence()
+                    }
+                } else {
+                    applyImmediateBottomNavState()
+                    completeHomeIntroSequence()
+                }
             }
             .start()
     }
@@ -928,48 +1132,363 @@ class MainActivity : AppCompatActivity() {
     private fun clearHomeIntroTimeline() {
         introWordAnimator?.cancel()
         introWordAnimator = null
+        introWipeAnimator?.cancel()
+        introWipeAnimator = null
         introSequenceRunnable?.let { pending ->
             binding.homeIntroOverlay.removeCallbacks(pending)
         }
         introSequenceRunnable = null
         binding.introCelebrationView.animate().cancel()
         binding.introCelebrationView.stopCelebration()
+        widgetLaunchAnimatorSet?.cancel()
+        widgetLaunchAnimatorSet = null
+        widgetHeartbeatAnimatorSet?.cancel()
+        widgetHeartbeatAnimatorSet = null
+        navRippleAnimatorSet?.cancel()
+        navRippleAnimatorSet = null
+        binding.introTitleLabel.animate().cancel()
+        binding.introWelcomeLabel.clipBounds = null
+        binding.introWelcomeLabel.animate().cancel()
+        binding.widgetTrailView.clear()
+        homeWidgetCards().forEach { it.animate().cancel() }
+        homeNavButtons().forEach { it.animate().cancel() }
+        binding.navLionButton.animate().cancel()
     }
 
-    private fun animateBottomNavIn() {
+    private fun animateWidgetCardsArcInThenNavRipple(onComplete: () -> Unit) {
+        val baseCards = homeWidgetCards()
+        if (baseCards.any { it.width <= 0 || it.height <= 0 }) {
+            binding.root.post { animateWidgetCardsArcInThenNavRipple(onComplete) }
+            return
+        }
+        val cards = orderedWidgetCardsForSweep(baseCards)
+        val gridLocation = IntArray(2)
+        binding.homeQuickWidgetsGrid.getLocationOnScreen(gridLocation)
+        val originX = gridLocation[0] + (binding.homeQuickWidgetsGrid.width / 2f)
+        val originY = gridLocation[1] + (binding.homeQuickWidgetsGrid.height * 0.55f)
+        val startScale = 0.08f
+        val baseArcHeight = dpToPx(INTRO_WIDGET_ARC_HEIGHT_DP).toFloat()
+        val densityBias = dpToPx(INTRO_WIDGET_ARC_DENSITY_DP).toFloat()
+        val trailAccent = activeHomePalette?.accent ?: LionThemePrefs.resolveAccentColor(this)
+        binding.widgetTrailView.begin()
+
+        val launchAnimators = cards.mapIndexed { index, card ->
+            val targetLocation = IntArray(2)
+            card.getLocationOnScreen(targetLocation)
+            val targetCenterX = targetLocation[0] + (card.width / 2f)
+            val targetCenterY = targetLocation[1] + (card.height / 2f)
+            val startDx = originX - targetCenterX
+            val startDy = originY - targetCenterY
+            val sideBias = if (targetCenterX <= originX) -1f else 1f
+            val rowBias = if (targetCenterY >= originY) 1f else -1f
+            val controlDx = (startDx * 0.40f) + (sideBias * densityBias)
+            val controlDy = (startDy * 0.70f) - baseArcHeight + (rowBias * dpToPx(12f))
+            card.translationX = startDx
+            card.translationY = startDy
+            card.scaleX = startScale
+            card.scaleY = startScale
+            card.alpha = 0f
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = INTRO_WIDGET_LAUNCH_DURATION_MS
+                startDelay = index * INTRO_WIDGET_LAUNCH_DURATION_MS
+                interpolator = DecelerateInterpolator(1.0f)
+                addUpdateListener { animator ->
+                    val t = animator.animatedFraction.coerceIn(0f, 1f)
+                    val inv = 1f - t
+                    card.translationX = (inv * inv * startDx) + (2f * inv * t * controlDx)
+                    card.translationY = (inv * inv * startDy) + (2f * inv * t * controlDy)
+                    val scale = lerp(startScale, 1f, t)
+                    card.scaleX = scale
+                    card.scaleY = scale
+                    card.alpha = (t * 1.25f).coerceIn(0f, 1f)
+                    binding.widgetTrailView.emitTrailAtScreen(
+                        screenX = targetCenterX + card.translationX,
+                        screenY = targetCenterY + card.translationY,
+                        progress = t,
+                        accentColor = trailAccent
+                    )
+                }
+            }
+        }
+
+        widgetLaunchAnimatorSet?.cancel()
+        widgetLaunchAnimatorSet = AnimatorSet().apply {
+            playTogether(launchAnimators)
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    widgetLaunchAnimatorSet = null
+                    resetWidgetCardTransforms()
+                    if (cancelled || isFinishing || isDestroyed) {
+                        return
+                    }
+                    binding.root.postDelayed(
+                        {
+                            animateWidgetHeartbeat(cards) {
+                                animateBottomNavIn {
+                                    onComplete()
+                                }
+                            }
+                        },
+                        500L
+                    )
+                }
+            })
+            start()
+        }
+    }
+
+    private fun animateWidgetHeartbeat(cards: List<View>, onComplete: () -> Unit) {
+        val heartbeatAnimators = cards.mapIndexed { index, card ->
+            ObjectAnimator.ofPropertyValuesHolder(
+                card,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.14f, 0.95f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.14f, 0.95f, 1f)
+            ).apply {
+                duration = 360L
+                startDelay = index * 90L
+                interpolator = AccelerateDecelerateInterpolator()
+            }
+        }
+        widgetHeartbeatAnimatorSet?.cancel()
+        widgetHeartbeatAnimatorSet = AnimatorSet().apply {
+            playTogether(heartbeatAnimators)
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    widgetHeartbeatAnimatorSet = null
+                    resetWidgetCardTransforms()
+                    if (!cancelled && !isFinishing && !isDestroyed) {
+                        onComplete()
+                    }
+                }
+            })
+            start()
+        }
+    }
+
+    private fun animateBottomNavIn(onComplete: (() -> Unit)? = null) {
+        navRippleAnimatorSet?.cancel()
+        binding.widgetTrailView.endWithFade(1080L)
         binding.bottomNavCard.visibility = View.VISIBLE
         binding.bottomNavCard.alpha = 0f
-        binding.bottomNavCard.translationY = 56f
-        val navItems = listOf(
+        binding.bottomNavCard.translationY = dpToPx(20f).toFloat()
+        val navRippleDistance = dpToPx(24f).toFloat()
+        binding.navLionButton.apply {
+            alpha = 0f
+            scaleX = 0.62f
+            scaleY = 0.62f
+            translationX = 0f
+            translationY = 0f
+        }
+        binding.navGuardButton.apply {
+            alpha = 0f
+            scaleX = 0.86f
+            scaleY = 0.86f
+            translationX = navRippleDistance
+            translationY = 0f
+        }
+        binding.navVaultButton.apply {
+            alpha = 0f
+            scaleX = 0.86f
+            scaleY = 0.86f
+            translationX = -navRippleDistance
+            translationY = 0f
+        }
+        binding.navScanButton.apply {
+            alpha = 0f
+            scaleX = 0.82f
+            scaleY = 0.82f
+            translationX = navRippleDistance * 1.45f
+            translationY = 0f
+        }
+        binding.navSupportButton.apply {
+            alpha = 0f
+            scaleX = 0.82f
+            scaleY = 0.82f
+            translationX = -navRippleDistance * 1.45f
+            translationY = 0f
+        }
+
+        val shellAnimator = AnimatorSet().apply {
+            playTogether(
+                ObjectAnimator.ofFloat(binding.bottomNavCard, View.ALPHA, 0f, 1f),
+                ObjectAnimator.ofFloat(
+                    binding.bottomNavCard,
+                    View.TRANSLATION_Y,
+                    binding.bottomNavCard.translationY,
+                    0f
+                )
+            )
+            duration = 430L
+            interpolator = DecelerateInterpolator()
+        }
+        val lionPulse = ObjectAnimator.ofPropertyValuesHolder(
+            binding.navLionButton,
+            PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 0.62f, 1.16f, 0.96f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.62f, 1.16f, 0.96f, 1f)
+        ).apply {
+            startDelay = 40L
+            duration = 440L
+            interpolator = DecelerateInterpolator()
+        }
+        val innerLeft = createNavPulseAnimator(
+            view = binding.navGuardButton,
+            startTranslationX = navRippleDistance,
+            startDelay = 190L
+        )
+        val innerRight = createNavPulseAnimator(
+            view = binding.navVaultButton,
+            startTranslationX = -navRippleDistance,
+            startDelay = 190L
+        )
+        val outerLeft = createNavPulseAnimator(
+            view = binding.navScanButton,
+            startTranslationX = navRippleDistance * 1.45f,
+            startDelay = 300L
+        )
+        val outerRight = createNavPulseAnimator(
+            view = binding.navSupportButton,
+            startTranslationX = -navRippleDistance * 1.45f,
+            startDelay = 300L
+        )
+        navRippleAnimatorSet = AnimatorSet().apply {
+            playTogether(shellAnimator, lionPulse, innerLeft, innerRight, outerLeft, outerRight)
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    navRippleAnimatorSet = null
+                    binding.bottomNavCard.translationY = 0f
+                    resetBottomNavTransforms()
+                    refreshBottomNavIndicators()
+                    if (!cancelled && !isFinishing && !isDestroyed) {
+                        onComplete?.invoke()
+                    }
+                }
+            })
+            start()
+        }
+    }
+
+    private fun createNavPulseAnimator(
+        view: View,
+        startTranslationX: Float,
+        startDelay: Long
+    ): ObjectAnimator {
+        return ObjectAnimator.ofPropertyValuesHolder(
+            view,
+            PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_X, view.scaleX, 1.09f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, view.scaleY, 1.09f, 1f),
+            PropertyValuesHolder.ofFloat(View.TRANSLATION_X, startTranslationX, 0f)
+        ).apply {
+            this.startDelay = startDelay
+            duration = 360L
+            interpolator = DecelerateInterpolator()
+        }
+    }
+
+    private fun completeHomeIntroSequence() {
+        homeIntroAnimating = false
+        setBusy(false)
+        markHomeIntroShown()
+        maybeShowHomeTutorialPopup()
+    }
+
+    private fun homeWidgetCards(): List<View> {
+        return listOf(
+            binding.widgetSweepCard,
+            binding.widgetThreatsCard,
+            binding.widgetCredentialsCard,
+            binding.widgetServicesCard
+        )
+    }
+
+    private fun orderedWidgetCardsForSweep(cards: List<View>): List<View> {
+        if (cards.size != 4) {
+            return cards
+        }
+        data class WidgetPosition(val view: View, val centerX: Float, val centerY: Float)
+        val positioned = cards.map { view ->
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            WidgetPosition(
+                view = view,
+                centerX = loc[0] + (view.width / 2f),
+                centerY = loc[1] + (view.height / 2f)
+            )
+        }
+        val byY = positioned.sortedBy { it.centerY }
+        val topRow = byY.take(2).sortedBy { it.centerX }
+        val bottomRow = byY.takeLast(2).sortedBy { it.centerX }
+        if (topRow.size < 2 || bottomRow.size < 2) {
+            return cards
+        }
+        val topLeft = topRow[0].view
+        val topRight = topRow[1].view
+        val bottomLeft = bottomRow[0].view
+        val bottomRight = bottomRow[1].view
+        // Diagonal dynamic sequence requested by user.
+        return listOf(topLeft, bottomRight, topRight, bottomLeft)
+    }
+
+    private fun homeNavButtons(): List<View> {
+        return listOf(
             binding.navScanButton,
             binding.navGuardButton,
             binding.navLionButton,
             binding.navVaultButton,
             binding.navSupportButton
         )
-        navItems.forEach {
-            it.alpha = 0f
-            it.translationY = 12f
+    }
+
+    private fun resetWidgetCardTransforms() {
+        homeWidgetCards().forEach { card ->
+            card.alpha = 1f
+            card.scaleX = 1f
+            card.scaleY = 1f
+            card.translationX = 0f
+            card.translationY = 0f
         }
-        binding.bottomNavCard.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(360L)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-        navItems.forEachIndexed { index, view ->
-            view.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setStartDelay((index * 70L) + 110L)
-                .setDuration(250L)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
+    }
+
+    private fun resetBottomNavTransforms() {
+        homeNavButtons().forEach { view ->
+            view.alpha = 1f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.translationX = 0f
+            view.translationY = 0f
         }
-        binding.bottomNavCard.postDelayed(
-            { refreshBottomNavIndicators() },
-            640L
-        )
+    }
+
+    private fun applyImmediateBottomNavState() {
+        binding.widgetTrailView.clear()
+        binding.bottomNavCard.visibility = View.VISIBLE
+        binding.bottomNavCard.alpha = 1f
+        binding.bottomNavCard.translationY = 0f
+        resetBottomNavTransforms()
+        refreshBottomNavIndicators()
+    }
+
+    private fun lerp(start: Float, end: Float, amount: Float): Float {
+        return start + ((end - start) * amount)
     }
 
     private fun showBottomNavImmediate() {
@@ -977,25 +1496,24 @@ class MainActivity : AppCompatActivity() {
         homeIntroAnimating = false
         binding.homeIntroOverlay.visibility = View.GONE
         binding.lionHeroView.alpha = 1f
-        binding.bottomNavCard.visibility = View.VISIBLE
-        binding.bottomNavCard.alpha = 1f
-        binding.bottomNavCard.translationY = 0f
-        val navItems = listOf(
-            binding.navScanButton,
-            binding.navGuardButton,
-            binding.navLionButton,
-            binding.navVaultButton,
-            binding.navSupportButton
-        )
-        navItems.forEach {
-            it.alpha = 1f
-            it.translationY = 0f
-        }
-        refreshBottomNavIndicators()
+        binding.introTitleLabel.alpha = 0f
+        binding.introTitleLabel.translationX = 0f
+        binding.introTitleLabel.translationY = 0f
+        binding.introTitleLabel.text = getString(R.string.screen_title)
+        binding.introWelcomeLabel.alpha = 0f
+        binding.introWelcomeLabel.text = getString(R.string.home_intro_welcome)
+        binding.introWelcomeLabel.clipBounds = null
+        resetWidgetCardTransforms()
+        applyImmediateBottomNavState()
     }
 
     private fun recoverBottomNavIfNeeded() {
-        if (homeIntroAnimating && binding.homeIntroOverlay.visibility != View.VISIBLE) {
+        if (
+            homeIntroAnimating &&
+            binding.homeIntroOverlay.visibility != View.VISIBLE &&
+            binding.bottomNavCard.visibility == View.VISIBLE &&
+            binding.bottomNavCard.alpha >= 0.99f
+        ) {
             homeIntroAnimating = false
         }
         val introReadyForNav = isHomeIntroAlreadyShown() || homeIntroHandledThisSession
@@ -1018,7 +1536,7 @@ class MainActivity : AppCompatActivity() {
         prefs.edit()
             .putBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, true)
             .apply()
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.home_tutorial_popup_title)
             .setMessage(
                 getString(
@@ -1047,7 +1565,7 @@ class MainActivity : AppCompatActivity() {
                 append(headline)
             }
         }.trim()
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.security_hero_title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
@@ -1055,6 +1573,10 @@ class MainActivity : AppCompatActivity() {
                 openSecurityDetailsDialog()
             }
             .show()
+    }
+
+    private fun shouldRunHomeIntroThisLaunch(): Boolean {
+        return isHomeIntroReplayEveryLaunch(this) || !isHomeIntroAlreadyShown()
     }
 
     private fun isHomeIntroAlreadyShown(): Boolean {
@@ -1102,18 +1624,30 @@ class MainActivity : AppCompatActivity() {
             paidAccess = access.paidAccess,
             selectedLionBitmap = selectedBitmap
         )
+        val useDarkLionPresentation = LionThemePrefs.shouldUseDarkLionPresentation(themeState.isDark)
         val accentColor = themeState.palette.accent
         activeHomePalette = themeState.palette
         applyHomeTheme(themeState.palette, themeState.isDark)
         binding.lionHeroView.setFillMode(lionFillMode)
-        binding.lionHeroView.setSurfaceTone(themeState.isDark)
+        binding.lionHeroView.setImageOffsetY(0f)
+        binding.lionHeroView.setSurfaceTone(useDarkLionPresentation)
         binding.lionHeroView.setLionBitmap(selectedBitmap)
         binding.lionHeroView.setAccentColor(accentColor)
         binding.introLionHero.setFillMode(lionFillMode)
-        binding.introLionHero.setSurfaceTone(themeState.isDark)
+        binding.introLionHero.setImageOffsetY(0f)
+        binding.introLionHero.setSurfaceTone(useDarkLionPresentation)
         binding.introLionHero.setLionBitmap(selectedBitmap)
         binding.introLionHero.setAccentColor(accentColor)
+        applyNavLionAsset(selectedBitmap)
         binding.lionModeToggleButton.text = getString(R.string.action_guardian_settings)
+    }
+
+    private fun applyNavLionAsset(selectedBitmap: Bitmap?) {
+        if (selectedBitmap != null) {
+            binding.navLionButton.setImageBitmap(selectedBitmap)
+            return
+        }
+        binding.navLionButton.setImageResource(R.drawable.lion_icon_non_binary)
     }
 
     private fun applyHomeTheme(
@@ -1137,6 +1671,8 @@ class MainActivity : AppCompatActivity() {
         binding.homeIntroOverlay.setBackgroundColor(palette.backgroundEnd)
         binding.homeHeroCard.strokeColor = palette.stroke
         binding.homeFrameTitleLabel.setTextColor(palette.textPrimary)
+        binding.introTitleLabel.setTextColor(palette.textPrimary)
+        binding.introWelcomeLabel.setTextColor(palette.textPrimary)
         binding.lionModeToggleButton.setTextColor(palette.accent)
 
         applyActionButtonPalette(binding.goProButton, palette)
@@ -1146,6 +1682,7 @@ class MainActivity : AppCompatActivity() {
         applyWidgetCardPalette(binding.widgetThreatsCard, palette)
         applyWidgetCardPalette(binding.widgetCredentialsCard, palette)
         applyWidgetCardPalette(binding.widgetServicesCard, palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
 
         binding.widgetSweepValue.setTextColor(palette.textPrimary)
         binding.widgetThreatsValue.setTextColor(palette.textPrimary)
@@ -1164,7 +1701,9 @@ class MainActivity : AppCompatActivity() {
             angle = 90,
             cornerRadiusDp = 22f
         )
-        binding.navLionButton.background = if (isDarkTone) {
+        val useDarkNavLionStyle = LionThemePrefs.shouldUseDarkLionPresentation(isDarkTone)
+        binding.navLionButton.imageTintList = null
+        binding.navLionButton.background = if (useDarkNavLionStyle) {
             GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
@@ -1172,7 +1711,11 @@ class MainActivity : AppCompatActivity() {
         } else {
             GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(blendColors(palette.panel, Color.WHITE, 0.14f))
+                setColor(Color.WHITE)
+                setStroke(
+                    dpToPx(1f),
+                    blendColors(palette.stroke, Color.WHITE, 0.12f)
+                )
             }
         }
         applyBottomNavButtonPalette(binding.navScanButton, palette)
@@ -1469,7 +2012,7 @@ class MainActivity : AppCompatActivity() {
         val currentAccess = PricingPolicy.resolveFeatureAccess(this)
         val profileControl = PricingPolicy.resolveProfileControl(this, currentAccess)
         if (!profileControl.canManagePlan) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.pricing_manage_restricted_title)
                 .setMessage(R.string.pricing_manage_restricted_message)
                 .setPositiveButton(android.R.string.ok, null)
@@ -1479,7 +2022,7 @@ class MainActivity : AppCompatActivity() {
 
         val entitlement = PricingPolicy.entitlement(this)
         if (entitlement.isLifetimePro) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.pricing_dialog_title)
                 .setMessage(
                     getString(
@@ -1525,7 +2068,7 @@ class MainActivity : AppCompatActivity() {
         val planIds = arrayOf("weekly", "monthly", "yearly", "family")
         var selectedIndex = planIds.indexOf(PricingPolicy.selectedPlan(this)).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.pricing_dialog_title)
             .setMessage(getString(R.string.pricing_dialog_note))
             .setSingleChoiceItems(options, selectedIndex) { _, which ->
@@ -1561,7 +2104,7 @@ class MainActivity : AppCompatActivity() {
         )
         var selectedRatingIndex = (feedback.performanceRating.coerceIn(1, 5) - 1).coerceAtLeast(0)
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.feedback_dialog_title)
             .setMessage(R.string.feedback_dialog_message)
             .setSingleChoiceItems(ratingOptions, selectedRatingIndex) { _, which ->
@@ -1582,7 +2125,7 @@ class MainActivity : AppCompatActivity() {
         )
         var selectedRecommendation = if (existing.recommendToFriends) 0 else 1
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.feedback_recommend_title)
             .setMessage(R.string.feedback_recommend_message)
             .setSingleChoiceItems(recommendOptions, selectedRecommendation) { _, which ->
@@ -1716,7 +2259,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showFeatureLockedDialog(title: String, message: String) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(R.string.action_manage_plan) { _, _ ->
@@ -1807,7 +2350,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.wifi_posture_permission_required_title)
             .setMessage(R.string.wifi_posture_permission_required_message)
             .setPositiveButton(R.string.action_confirm) { _, _ ->
@@ -1880,7 +2423,7 @@ class MainActivity : AppCompatActivity() {
     private fun openWifiFindingsDialog() {
         val latest = latestWifiSnapshot ?: WifiScanSnapshotStore.latest(this)
         if (latest == null) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.wifi_posture_findings_title)
                 .setMessage(R.string.wifi_posture_findings_empty)
                 .setPositiveButton(android.R.string.ok, null)
@@ -1913,7 +2456,7 @@ class MainActivity : AppCompatActivity() {
             }
         }.trim()
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.wifi_posture_findings_title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
@@ -2021,7 +2564,7 @@ class MainActivity : AppCompatActivity() {
             refreshMediaVaultPanel()
 
             if (items.isEmpty()) {
-                AlertDialog.Builder(this@MainActivity)
+                LionAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.media_vault_dialog_title)
                     .setMessage(R.string.media_vault_dialog_empty)
                     .setPositiveButton(android.R.string.ok, null)
@@ -2031,7 +2574,7 @@ class MainActivity : AppCompatActivity() {
 
             val labels = items.map { MediaVaultFileStore.formatItemLine(it) }.toTypedArray()
             var selectedIndex = 0
-            AlertDialog.Builder(this@MainActivity)
+            LionAlertDialogBuilder(this@MainActivity)
                 .setTitle(R.string.media_vault_dialog_title)
                 .setSingleChoiceItems(labels, selectedIndex) { _, which ->
                     selectedIndex = which
@@ -2066,7 +2609,7 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.action_restore_vault_item),
                 getString(R.string.action_delete_vault_item_now)
             )
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.media_vault_item_deleted_actions_title)
                 .setItems(options) { _, which ->
                     when (which) {
@@ -2084,7 +2627,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.action_export_vault_item),
             getString(R.string.action_delete_vault_item)
         )
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.media_vault_item_actions_title)
             .setItems(options) { _, which ->
                 when (which) {
@@ -2193,7 +2736,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             getString(R.string.media_vault_delete_confirm_message_template, retentionDays)
         }
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(titleRes)
             .setMessage(message)
             .setPositiveButton(R.string.action_confirm) { _, _ ->
@@ -2393,7 +2936,7 @@ class MainActivity : AppCompatActivity() {
         }.toTypedArray()
         var selectedIndex = 0
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(titleRes)
             .setSingleChoiceItems(options, selectedIndex) { _, which ->
                 selectedIndex = which
@@ -2461,7 +3004,7 @@ class MainActivity : AppCompatActivity() {
             minLines = 4
         }
 
-        val dialogBuilder = AlertDialog.Builder(this)
+        val dialogBuilder = LionAlertDialogBuilder(this)
             .setTitle(R.string.phishing_triage_input_title)
             .setMessage(R.string.phishing_triage_input_message)
             .setView(input)
@@ -2503,6 +3046,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
     }
 
     private fun executePhishingTriage(input: String, sourceRef: String) {
@@ -2564,7 +3108,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPhishingTriageResultDialog(result: PhishingTriageResult) {
         val message = formatPhishingTriageResult(result)
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.phishing_triage_result_title)
             .setMessage(message)
             .setPositiveButton(R.string.action_open_phishing_remediation) { _, _ ->
@@ -2673,7 +3217,7 @@ class MainActivity : AppCompatActivity() {
             append(playbook)
         }.trim()
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.hygiene_cleanup_confirm_title)
             .setMessage(message)
             .setPositiveButton(R.string.action_confirm) { _, _ ->
@@ -2839,7 +3383,7 @@ class MainActivity : AppCompatActivity() {
             }
         }.trim()
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_dialog_title)
             .setMessage(body)
             .setPositiveButton(R.string.copilot_run_top_action) { _, _ ->
@@ -2874,7 +3418,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConnectedActionConfirmation(route: CopilotRoute, onConfirmed: () -> Unit) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_guarded_confirm_title)
             .setMessage(
                 getString(
@@ -2927,7 +3471,7 @@ class MainActivity : AppCompatActivity() {
 
         val policy = ConnectedAiPolicyStore.load(this)
         if (!policy.enabled || !policy.allowUserSubscriptionLink) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.copilot_connect_dialog_title)
                 .setMessage(R.string.copilot_mode_policy_blocked)
                 .setPositiveButton(android.R.string.ok, null)
@@ -2946,7 +3490,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.copilot_manage_refresh_now),
             getString(R.string.copilot_manage_disconnect)
         )
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_connect_dialog_title)
             .setItems(options) { _, which ->
                 when (which) {
@@ -2976,7 +3520,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startConnectedAiLinkFlow(policy: ConnectedAiPolicy) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_connect_dialog_title)
             .setMessage(R.string.copilot_connect_dialog_message)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -3018,7 +3562,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         var selectedIndex = 0
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_connect_provider_title)
             .setSingleChoiceItems(providers.toTypedArray(), selectedIndex) { _, which ->
                 selectedIndex = which
@@ -3033,7 +3577,7 @@ class MainActivity : AppCompatActivity() {
     private fun chooseConnectedAiModel(policy: ConnectedAiPolicy, onSelected: (String) -> Unit) {
         val models = policy.modelAllowlist.ifEmpty { listOf("gpt-4.1-mini") }
         var selectedIndex = 0
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_connect_model_title)
             .setSingleChoiceItems(models.toTypedArray(), selectedIndex) { _, which ->
                 selectedIndex = which
@@ -3051,7 +3595,7 @@ class MainActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             maxLines = 1
         }
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(title)
             .setView(input)
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -3067,7 +3611,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun confirmConnectedAiDisconnect() {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.copilot_disconnect_confirm_title)
             .setMessage(R.string.copilot_disconnect_confirm_message)
             .setPositiveButton(R.string.action_confirm) { _, _ ->
@@ -3097,7 +3641,7 @@ class MainActivity : AppCompatActivity() {
     private fun openGuardianFeedDialog() {
         val profileControl = PricingPolicy.resolveProfileControl(this)
         if (!profileControl.canViewGuardianFeed) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.guardian_feed_restricted_title)
                 .setMessage(R.string.guardian_feed_restricted_message)
                 .setPositiveButton(android.R.string.ok, null)
@@ -3107,7 +3651,7 @@ class MainActivity : AppCompatActivity() {
 
         val entries = GuardianAlertStore.readRecent(this, limit = 15)
         if (entries.isEmpty()) {
-            AlertDialog.Builder(this)
+            LionAlertDialogBuilder(this)
                 .setTitle(R.string.guardian_feed_title)
                 .setMessage(R.string.guardian_feed_empty)
                 .setPositiveButton(android.R.string.ok, null)
@@ -3128,7 +3672,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.guardian_feed_title)
             .setMessage(body)
             .setPositiveButton(android.R.string.ok, null)
@@ -3671,7 +4215,7 @@ class MainActivity : AppCompatActivity() {
             appendLine(detailsBlock)
         }.trim()
 
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.security_action_details_title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
@@ -3733,7 +4277,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRootHardeningBlockedDialog(message: String) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.root_hardening_block_title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
@@ -3745,7 +4289,7 @@ class MainActivity : AppCompatActivity() {
         actionLabel: String,
         onConfirmed: () -> Unit
     ) {
-        AlertDialog.Builder(this)
+        LionAlertDialogBuilder(this)
             .setTitle(R.string.root_hardening_sensitive_confirm_title)
             .setMessage(
                 getString(

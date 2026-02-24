@@ -5,21 +5,66 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.annotation.ColorInt
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.realyn.watchdog.theme.LionThemeToneMode
 import com.realyn.watchdog.theme.LionThemeVariant
-import java.io.IOException
 import kotlin.math.max
 
 object LionThemePrefs {
     private const val PREFS_FILE = "dt_lion_theme_prefs"
     private const val KEY_FILL_MODE = "fill_mode"
+    private const val KEY_IDENTITY_PROFILE = "identity_profile"
     private const val KEY_SELECTED_PRO_LION_ASSET = "selected_pro_lion_asset"
     private const val KEY_THEME_VARIANT = "theme_variant"
     private const val KEY_THEME_TONE_MODE = "theme_tone_mode"
+    private const val LIGHT_MODE_USE_DARK_LION_STANDARD = true
 
     const val PRO_LION_ASSET_DIR = "lion_heads"
     const val PRO_LION_ASSET_WORKSPACE_PATH = "android-watchdog/app/src/main/assets/lion_heads/"
+
+    enum class LionIdentityProfile(
+        val raw: String,
+        @DrawableRes val drawableRes: Int,
+        @StringRes val labelRes: Int
+    ) {
+        MALE(
+            raw = "male",
+            drawableRes = R.drawable.lion_icon,
+            labelRes = R.string.lion_identity_profile_male
+        ),
+        FEMALE(
+            raw = "female",
+            // Free-tier standard lioness (no crown / circular headpiece).
+            drawableRes = R.drawable.lion_icon_non_binary,
+            labelRes = R.string.lion_identity_profile_female
+        ),
+        NON_BINARY(
+            raw = "non_binary",
+            // Pro alternate lioness (with circular headpiece).
+            drawableRes = R.drawable.lion_icon_female,
+            labelRes = R.string.lion_identity_profile_non_binary
+        );
+
+        companion object {
+            fun fromRaw(raw: String?): LionIdentityProfile {
+                return entries.firstOrNull { it.raw == raw } ?: FEMALE
+            }
+
+            fun availableFor(paidAccess: Boolean): List<LionIdentityProfile> {
+                return if (paidAccess) {
+                    entries.toList()
+                } else {
+                    listOf(MALE, FEMALE)
+                }
+            }
+        }
+    }
+
+    fun shouldUseDarkLionPresentation(isDarkTone: Boolean): Boolean {
+        return isDarkTone || LIGHT_MODE_USE_DARK_LION_STANDARD
+    }
 
     fun readFillMode(context: Context): LionFillMode {
         val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
@@ -75,6 +120,38 @@ object LionThemePrefs {
         return next
     }
 
+    fun readIdentityProfile(
+        context: Context,
+        paidAccess: Boolean = PricingPolicy.resolveFeatureAccess(context).paidAccess
+    ): LionIdentityProfile {
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+            .getString(KEY_IDENTITY_PROFILE, LionIdentityProfile.FEMALE.raw)
+        val saved = LionIdentityProfile.fromRaw(raw)
+        val allowed = LionIdentityProfile.availableFor(paidAccess)
+        if (allowed.contains(saved)) {
+            return saved
+        }
+        val fallback = LionIdentityProfile.FEMALE
+        writeIdentityProfile(context, fallback)
+        return fallback
+    }
+
+    fun writeIdentityProfile(context: Context, profile: LionIdentityProfile) {
+        context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_IDENTITY_PROFILE, profile.raw)
+            .apply()
+    }
+
+    fun cycleIdentityProfile(context: Context, paidAccess: Boolean): LionIdentityProfile {
+        val allowed = LionIdentityProfile.availableFor(paidAccess)
+        val current = readIdentityProfile(context, paidAccess)
+        val currentIndex = allowed.indexOf(current).coerceAtLeast(0)
+        val next = allowed[(currentIndex + 1) % allowed.size]
+        writeIdentityProfile(context, next)
+        return next
+    }
+
     fun listAvailableProLionAssets(context: Context): List<String> {
         val fileNames = runCatching {
             context.assets.list(PRO_LION_ASSET_DIR)?.toList().orEmpty()
@@ -116,29 +193,8 @@ object LionThemePrefs {
 
     fun resolveSelectedLionBitmap(context: Context): Bitmap? {
         val featureAccess = PricingPolicy.resolveFeatureAccess(context)
-        if (!featureAccess.paidAccess) {
-            return null
-        }
-
-        val available = listAvailableProLionAssets(context)
-        if (available.isEmpty()) {
-            return null
-        }
-
-        val selected = readSelectedProLionAsset(context)?.takeIf { available.contains(it) }
-            ?: available.first()
-        if (selected != readSelectedProLionAsset(context)) {
-            writeSelectedProLionAsset(context, selected)
-        }
-
-        val assetPath = "$PRO_LION_ASSET_DIR/$selected"
-        return try {
-            context.assets.open(assetPath).use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
-        } catch (_: IOException) {
-            null
-        }
+        val profile = readIdentityProfile(context, featureAccess.paidAccess)
+        return BitmapFactory.decodeResource(context.resources, profile.drawableRes)
     }
 
     @ColorInt
@@ -154,7 +210,7 @@ object LionThemePrefs {
         val fallback = ContextCompat.getColor(context, R.color.brand_accent)
         val bitmap = selectedBitmap
             ?: resolveSelectedLionBitmap(context)
-            ?: BitmapFactory.decodeResource(context.resources, R.drawable.lion_icon)
+            ?: BitmapFactory.decodeResource(context.resources, LionIdentityProfile.FEMALE.drawableRes)
         val extracted = extractAccentFromBitmap(bitmap)
         return extracted ?: fallback
     }

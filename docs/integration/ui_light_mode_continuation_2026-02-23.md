@@ -1,5 +1,26 @@
 # UI Continuation (Paused) - February 23, 2026
 
+## Session update - February 23, 2026 (continuation pass)
+- Resumed from this note and compared against the two provided screenshots.
+- Implemented a dedicated light-mode hero rendering preset in `LionHeroView`:
+  - strict grayscale idle rendering
+  - stronger light-mode contrast curve
+  - adjusted idle alpha behavior for clearer edges
+- Tightened light palette hierarchy in `LionThemeCatalog`:
+  - brighter background ramp
+  - deeper panel/card separation
+  - darker accent/text tones for readability
+- Updated bottom nav center lion treatment in `MainActivity`:
+  - explicit full-color lion icon
+  - clean white circular background + subtle stroke in light mode
+- Verification completed:
+  - `./gradlew :app:compileDebugKotlin`
+  - `./gradlew :app:installDebug`
+  - `bash scripts/ops/check_adb_connection.sh`
+- Latest on-device capture after patch:
+  - `state/ui_after_light_patch_20260223_141134.png`
+- Status: awaiting user acceptance review for light mode polish.
+
 ## Current pause state
 - Work is paused by request.
 - Last completed build/install succeeded on device.
@@ -40,4 +61,3 @@
 - `android-watchdog/app/src/main/java/com/realyn/watchdog/MainActivity.kt`
 - `android-watchdog/app/src/main/java/com/realyn/watchdog/GuardianSettingsActivity.kt`
 - `android-watchdog/app/src/main/java/com/realyn/watchdog/CredentialDefenseActivity.kt`
-

@@ -14,6 +14,7 @@ import android.widget.ImageView
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.core.graphics.ColorUtils
+import kotlin.math.abs
 
 class LionHeroView @JvmOverloads constructor(
     context: Context,
@@ -27,6 +28,25 @@ class LionHeroView @JvmOverloads constructor(
     private val eyeGlowView: LionEyeGlowOverlayView
     private var eyeGlowAnimator: ValueAnimator? = null
     private var darkSurfaceTone: Boolean = true
+    private var imageOffsetYPx: Float = 0f
+    private val darkIdlePreset = IdleTonePreset(
+        saturation = 0f,
+        contrast = 1.08f,
+        lift = 16f,
+        baseAlpha = 0.40f,
+        dropAlpha = 0.18f,
+        minAlpha = 0.18f,
+        scanCompleteAlpha = 0.18f
+    )
+    private val lightIdlePreset = IdleTonePreset(
+        saturation = 0f,
+        contrast = 1.16f,
+        lift = -6f,
+        baseAlpha = 0.90f,
+        dropAlpha = 0.26f,
+        minAlpha = 0.22f,
+        scanCompleteAlpha = 0.18f
+    )
 
     init {
         LayoutInflater.from(context).inflate(R.layout.view_lion_hero, this, true)
@@ -42,9 +62,20 @@ class LionHeroView @JvmOverloads constructor(
         fillImageView.fillMode = mode
     }
 
-    fun setLionDrawable(@DrawableRes drawableRes: Int = R.drawable.lion_icon) {
+    fun setLionDrawable(@DrawableRes drawableRes: Int = R.drawable.lion_icon_non_binary) {
         idleImageView.setImageResource(drawableRes)
         fillImageView.setImageResource(drawableRes)
+    }
+
+    fun setImageOffsetY(offsetPx: Float) {
+        if (abs(imageOffsetYPx - offsetPx) < 0.5f) {
+            return
+        }
+        imageOffsetYPx = offsetPx
+        idleImageView.translationY = offsetPx
+        fillImageView.translationY = offsetPx
+        eyeGlowView.translationY = offsetPx * 0.92f
+        auraView.translationY = offsetPx * 0.88f
     }
 
     fun setLionBitmap(bitmap: Bitmap?) {
@@ -87,7 +118,7 @@ class LionHeroView @JvmOverloads constructor(
     fun setScanComplete() {
         fillImageView.fillProgress = 1f
         idleImageView.colorFilter = null
-        idleImageView.alpha = if (darkSurfaceTone) 0.18f else 0.30f
+        idleImageView.alpha = activeIdlePreset().scanCompleteAlpha
         startEyeGlowPulse()
     }
 
@@ -104,15 +135,13 @@ class LionHeroView @JvmOverloads constructor(
     }
 
     private fun applyIdleMatrix() {
-        val saturationLevel = if (darkSurfaceTone) 0f else 0.45f
-        val saturation = ColorMatrix().apply { setSaturation(saturationLevel) }
-        val contrast = if (darkSurfaceTone) 1.08f else 1.03f
-        val lift = if (darkSurfaceTone) 16f else -10f
+        val preset = activeIdlePreset()
+        val saturation = ColorMatrix().apply { setSaturation(preset.saturation) }
         val contrastAndLift = ColorMatrix(
             floatArrayOf(
-                contrast, 0f, 0f, 0f, lift,
-                0f, contrast, 0f, 0f, lift,
-                0f, 0f, contrast, 0f, lift,
+                preset.contrast, 0f, 0f, 0f, preset.lift,
+                0f, preset.contrast, 0f, 0f, preset.lift,
+                0f, 0f, preset.contrast, 0f, preset.lift,
                 0f, 0f, 0f, 1f, 0f
             )
         )
@@ -121,10 +150,14 @@ class LionHeroView @JvmOverloads constructor(
     }
 
     private fun resolveIdleAlpha(progress: Float): Float {
+        val preset = activeIdlePreset()
         val normalized = progress.coerceIn(0f, 1f)
-        val base = if (darkSurfaceTone) 0.40f else 0.74f
-        val drop = if (darkSurfaceTone) 0.18f else 0.24f
-        return (base - (normalized * drop)).coerceIn(0.18f, 0.90f)
+        return (preset.baseAlpha - (normalized * preset.dropAlpha))
+            .coerceIn(preset.minAlpha, 0.95f)
+    }
+
+    private fun activeIdlePreset(): IdleTonePreset {
+        return if (darkSurfaceTone) darkIdlePreset else lightIdlePreset
     }
 
     private fun startEyeGlowPulse() {
@@ -148,4 +181,14 @@ class LionHeroView @JvmOverloads constructor(
         eyeGlowAnimator = null
         eyeGlowView.setIntensity(0f)
     }
+
+    private data class IdleTonePreset(
+        val saturation: Float,
+        val contrast: Float,
+        val lift: Float,
+        val baseAlpha: Float,
+        val dropAlpha: Float,
+        val minAlpha: Float,
+        val scanCompleteAlpha: Float
+    )
 }

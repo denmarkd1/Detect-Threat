@@ -91,7 +91,7 @@ object GuardianOverridePolicy {
                 outcome = "blocked_missing_guardian",
                 reasonCode = reasonCode
             )
-            AlertDialog.Builder(activity)
+            LionAlertDialogBuilder(activity)
                 .setTitle(R.string.guardian_override_missing_title)
                 .setMessage(R.string.guardian_override_missing_message)
                 .setPositiveButton(android.R.string.ok, null)
@@ -126,7 +126,7 @@ object GuardianOverridePolicy {
 
         val guardianEmailLabel = guardianEmail.ifBlank { activity.getString(R.string.identity_guardian_not_set) }
 
-        AlertDialog.Builder(activity)
+        LionAlertDialogBuilder(activity)
             .setTitle(R.string.guardian_override_confirm_title)
             .setMessage(
                 activity.getString(

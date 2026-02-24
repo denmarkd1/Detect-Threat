@@ -1489,7 +1489,7 @@
                     android:contentDescription="@string/nav_lion_content_description"
                     android:padding="1dp"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/lion_icon" />
+                    android:src="@drawable/lion_icon_non_binary" />
             </FrameLayout>
 
             <LinearLayout
@@ -1564,6 +1564,15 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <com.realyn.watchdog.WidgetArcTrailView
+        android:id="@+id/widgetTrailView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <FrameLayout
         android:id="@+id/homeIntroOverlay"
         android:layout_width="match_parent"
@@ -1587,7 +1596,7 @@
             android:importantForAccessibility="no" />
 
         <TextView
-            android:id="@+id/introWelcomeLabel"
+            android:id="@+id/introTitleLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal|bottom"
@@ -1596,9 +1605,25 @@
             android:layout_marginBottom="@dimen/home_intro_welcome_bottom_margin"
             android:alpha="0"
             android:gravity="center"
+            android:text="@string/screen_title"
+            android:textColor="@color/text_primary"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/introWelcomeLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal|bottom"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:layout_marginBottom="@dimen/home_intro_welcome_bottom_margin"
+            android:alpha="0"
+            android:gravity="start"
+            android:maxLines="5"
             android:text="@string/home_intro_welcome"
             android:textColor="@color/text_primary"
-            android:textSize="19sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
     </FrameLayout>
 
