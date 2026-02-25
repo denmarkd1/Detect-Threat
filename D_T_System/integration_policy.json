@@ -81,6 +81,14 @@
     "code_review_first_for_reviews": true,
     "dt_autorun_if_available": true
   },
+  "precommit_review": {
+    "primary_tool": "zen.precommit",
+    "primary_timeout_seconds": 60,
+    "fallback_required_on_timeout": true,
+    "fallback_script": "scripts/ops/precommit_guard.sh",
+    "default_scope": "staged_only",
+    "notes": "Use deterministic local fallback checks when zen precommit exceeds transport timeout."
+  },
   "security_constraints": {
     "defensive_only": true,
     "no_destructive_actions": true,

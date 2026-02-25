@@ -47,3 +47,4 @@
 - `python3 watchdog/watchdog.py --help`
 - `bash scripts/setup/install_platform_tools.sh`
 - `bash scripts/ops/check_adb_connection.sh`
+- `bash scripts/ops/precommit_guard.sh`

@@ -179,6 +179,18 @@ Ensure Zen MCP code-review threading is available (starts local Redis dependency
 bash scripts/ops/ensure_zen_redis.sh
 ```
 
+Run resilient precommit checks (fallback workflow when `zen precommit` times out):
+
+```bash
+bash scripts/ops/precommit_guard.sh
+```
+
+Include unstaged changes as well:
+
+```bash
+bash scripts/ops/precommit_guard.sh --include-unstaged
+```
+
 Refresh the single D_T hub runtime source used by all MCP launcher wrappers:
 
 ```bash
