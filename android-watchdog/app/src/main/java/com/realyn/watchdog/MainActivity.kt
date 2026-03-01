@@ -1169,9 +1169,6 @@ class MainActivity : AppCompatActivity() {
         val startScale = 0.08f
         val baseArcHeight = dpToPx(INTRO_WIDGET_ARC_HEIGHT_DP).toFloat()
         val densityBias = dpToPx(INTRO_WIDGET_ARC_DENSITY_DP).toFloat()
-        val trailAccent = activeHomePalette?.accent ?: LionThemePrefs.resolveAccentColor(this)
-        binding.widgetTrailView.begin()
-
         val launchAnimators = cards.mapIndexed { index, card ->
             val targetLocation = IntArray(2)
             card.getLocationOnScreen(targetLocation)
@@ -1201,12 +1198,6 @@ class MainActivity : AppCompatActivity() {
                     card.scaleX = scale
                     card.scaleY = scale
                     card.alpha = (t * 1.25f).coerceIn(0f, 1f)
-                    binding.widgetTrailView.emitTrailAtScreen(
-                        screenX = targetCenterX + card.translationX,
-                        screenY = targetCenterY + card.translationY,
-                        progress = t,
-                        accentColor = trailAccent
-                    )
                 }
             }
         }
@@ -1694,6 +1685,7 @@ class MainActivity : AppCompatActivity() {
         binding.widgetServicesHint.setTextColor(palette.textMuted)
 
         binding.bottomNavCard.strokeColor = palette.stroke
+        binding.bottomNavCard.strokeWidth = dpToPx(1f)
         binding.bottomNavRow.background = gradientBackground(
             startColor = palette.navShellStart,
             centerColor = blendColors(palette.navShellStart, palette.navShellEnd, 0.45f),
@@ -1744,6 +1736,7 @@ class MainActivity : AppCompatActivity() {
     ) {
         card.setCardBackgroundColor(palette.panelAlt)
         card.strokeColor = palette.stroke
+        card.strokeWidth = dpToPx(1f)
         val content = card.getChildAt(0) as? LinearLayout ?: return
         val headerRow = content.getChildAt(0) as? LinearLayout ?: return
         (headerRow.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(palette.accent)
@@ -1751,6 +1744,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyBottomNavButtonPalette(button: LinearLayout, palette: LionThemePalette) {
+        val cornerRadiusPx = dpToPx(12f).toFloat()
+        button.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = cornerRadiusPx
+            setColor(Color.TRANSPARENT)
+            setStroke(dpToPx(1f), palette.stroke)
+        }
+        val selectableBackground = TypedValue().also {
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+        }
+        button.foreground = if (selectableBackground.resourceId != 0) {
+            ContextCompat.getDrawable(this, selectableBackground.resourceId)
+        } else {
+            null
+        }
         for (index in 0 until button.childCount) {
             when (val child = button.getChildAt(index)) {
                 is ImageView -> child.imageTintList = ColorStateList.valueOf(palette.textSecondary)
