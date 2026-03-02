@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import com.realyn.watchdog.databinding.ActivityGuardianSettingsBinding
+import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
 import com.realyn.watchdog.theme.LionThemeToneMode
@@ -114,21 +115,21 @@ class GuardianSettingsActivity : AppCompatActivity() {
         val selectedBitmap = LionThemePrefs.resolveSelectedLionBitmap(this)
         val fillMode = LionThemePrefs.readFillMode(this)
         val toneMode = LionThemePrefs.readToneMode(this)
-        val identityProfile = LionThemePrefs.readIdentityProfile(
-            context = this,
-            paidAccess = access.paidAccess
-        )
         val themeState = LionThemeCatalog.resolveState(
             context = this,
             paidAccess = access.paidAccess,
             selectedLionBitmap = selectedBitmap
         )
 
-        applySettingsTheme(themeState.palette, themeState.isDark)
+        applySettingsTheme(
+            palette = themeState.palette,
+            isDarkTone = themeState.isDark,
+            accentStyle = themeState.accentStyle
+        )
         binding.settingThemeShadeValue.text = getString(themeState.variant.labelRes)
         binding.settingThemeToneValue.text = getString(toneMode.labelRes)
         binding.settingFillModeValue.text = getString(fillMode.labelRes)
-        binding.settingLionAssetValue.text = getString(identityProfile.labelRes)
+        binding.settingLionAssetValue.text = themeState.identityProfile.label
 
         binding.settingsLionPreview.setFillMode(fillMode)
         binding.settingsLionPreview.setImageOffsetY(0f)
@@ -149,7 +150,7 @@ class GuardianSettingsActivity : AppCompatActivity() {
             }
         )
 
-        val availableProfiles = LionThemePrefs.LionIdentityProfile.availableFor(access.paidAccess)
+        val availableProfiles = LionThemePrefs.listIdentityProfiles(this, access.paidAccess)
         binding.cycleIdentityProfileButton.isEnabled = availableProfiles.size > 1
         binding.cycleIdentityProfileButton.alpha = if (availableProfiles.size > 1) 1f else 0.60f
         syncingIntroSwitches = true
@@ -209,7 +210,7 @@ class GuardianSettingsActivity : AppCompatActivity() {
         showSettingsStatus(
             getString(
                 R.string.lion_identity_profile_status_template,
-                getString(next.labelRes)
+                next.label
             )
         )
     }
@@ -241,7 +242,8 @@ class GuardianSettingsActivity : AppCompatActivity() {
 
     private fun applySettingsTheme(
         palette: LionThemePalette,
-        isDarkTone: Boolean
+        isDarkTone: Boolean,
+        accentStyle: LionIdentityAccentStyle
     ) {
         window.statusBarColor = palette.backgroundEnd
         window.navigationBarColor = palette.backgroundEnd
@@ -266,23 +268,35 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.settingThemeToneValue.setTextColor(palette.textPrimary)
         binding.settingFillModeValue.setTextColor(palette.textPrimary)
         binding.settingLionAssetValue.setTextColor(palette.textPrimary)
-        applyPaletteToMaterialCards(binding.root, palette)
-        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
+        applyPaletteToMaterialCards(binding.root, palette, accentStyle)
+        LionThemeViewStyler.applyMaterialButtonPalette(
+            root = binding.root,
+            palette = palette,
+            accentStyle = accentStyle
+        )
 
         binding.previewAccentSwatch.setBackgroundColor(palette.accent)
     }
 
-    private fun applyPaletteToMaterialCards(view: View, palette: LionThemePalette) {
+    private fun applyPaletteToMaterialCards(
+        view: View,
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle
+    ) {
         if (view is com.google.android.material.card.MaterialCardView) {
             val current = view.cardBackgroundColor.defaultColor
             if (Color.alpha(current) > 0) {
                 view.setCardBackgroundColor(palette.panelAlt)
             }
-            view.strokeColor = palette.stroke
+            view.strokeColor = androidx.core.graphics.ColorUtils.blendARGB(
+                palette.stroke,
+                palette.accent,
+                accentStyle.buttonStrokeAccentBlend * 0.72f
+            )
         }
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {
-                applyPaletteToMaterialCards(view.getChildAt(index), palette)
+                applyPaletteToMaterialCards(view.getChildAt(index), palette, accentStyle)
             }
         }
     }

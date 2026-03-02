@@ -49,6 +49,7 @@ import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityMainBinding
 import com.realyn.watchdog.theme.LionThemeCatalog
+import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemePalette
 import com.realyn.watchdog.theme.LionThemeViewStyler
 import kotlinx.coroutines.Dispatchers
@@ -1743,7 +1744,11 @@ class MainActivity : AppCompatActivity() {
         val useDarkLionPresentation = LionThemePrefs.shouldUseDarkLionPresentation(themeState.isDark)
         val accentColor = themeState.palette.accent
         activeHomePalette = themeState.palette
-        applyHomeTheme(themeState.palette, themeState.isDark)
+        applyHomeTheme(
+            palette = themeState.palette,
+            isDarkTone = themeState.isDark,
+            accentStyle = themeState.accentStyle
+        )
         binding.lionHeroView.setFillMode(lionFillMode)
         binding.lionHeroView.setImageOffsetY(0f)
         binding.lionHeroView.setSurfaceTone(useDarkLionPresentation)
@@ -1768,7 +1773,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyHomeTheme(
         palette: LionThemePalette,
-        isDarkTone: Boolean
+        isDarkTone: Boolean,
+        accentStyle: LionIdentityAccentStyle
     ) {
         window.statusBarColor = palette.backgroundEnd
         window.navigationBarColor = palette.backgroundEnd
@@ -1785,20 +1791,28 @@ class MainActivity : AppCompatActivity() {
             angle = 90
         )
         binding.homeIntroOverlay.setBackgroundColor(palette.backgroundEnd)
-        binding.homeHeroCard.strokeColor = palette.stroke
+        binding.homeHeroCard.strokeColor = blendColors(
+            palette.stroke,
+            palette.accent,
+            accentStyle.buttonStrokeAccentBlend * 0.45f
+        )
         binding.homeFrameTitleLabel.setTextColor(palette.textPrimary)
         binding.introTitleLabel.setTextColor(palette.textPrimary)
         binding.introWelcomeLabel.setTextColor(palette.textPrimary)
         binding.lionModeToggleButton.setTextColor(palette.accent)
 
-        applyWidgetCardPalette(binding.widgetSweepCard, palette)
-        applyWidgetCardPalette(binding.widgetThreatsCard, palette)
-        applyWidgetCardPalette(binding.widgetCredentialsCard, palette)
-        applyWidgetCardPalette(binding.widgetServicesCard, palette)
-        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
-        applyActionButtonPalette(binding.goProButton, palette)
-        applyActionButtonPalette(binding.securityTopActionButton, palette)
-        applySettingsButtonPalette(binding.lionModeToggleButton, palette)
+        applyWidgetCardPalette(binding.widgetSweepCard, palette, accentStyle)
+        applyWidgetCardPalette(binding.widgetThreatsCard, palette, accentStyle)
+        applyWidgetCardPalette(binding.widgetCredentialsCard, palette, accentStyle)
+        applyWidgetCardPalette(binding.widgetServicesCard, palette, accentStyle)
+        LionThemeViewStyler.applyMaterialButtonPalette(
+            root = binding.root,
+            palette = palette,
+            accentStyle = accentStyle
+        )
+        applyActionButtonPalette(binding.goProButton, palette, accentStyle)
+        applyActionButtonPalette(binding.securityTopActionButton, palette, accentStyle)
+        applySettingsButtonPalette(binding.lionModeToggleButton, palette, accentStyle)
 
         binding.widgetSweepValue.setTextColor(palette.textPrimary)
         binding.widgetThreatsValue.setTextColor(palette.textPrimary)
@@ -1809,7 +1823,11 @@ class MainActivity : AppCompatActivity() {
         binding.widgetCredentialsHint.setTextColor(palette.textMuted)
         binding.widgetServicesHint.setTextColor(palette.textMuted)
 
-        binding.bottomNavCard.strokeColor = palette.stroke
+        binding.bottomNavCard.strokeColor = blendColors(
+            palette.stroke,
+            palette.accent,
+            accentStyle.navButtonStrokeAccentBlend * 0.50f
+        )
         binding.bottomNavCard.strokeWidth = dpToPx(1f)
         binding.bottomNavRow.background = createDepthSurfaceDrawable(
             topColor = ColorUtils.setAlphaComponent(
@@ -1820,23 +1838,41 @@ class MainActivity : AppCompatActivity() {
                 blendColors(palette.navShellEnd, palette.backgroundEnd, 0.24f),
                 214
             ),
-            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 212),
-            cornerRadiusDp = 22f,
+            strokeColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.stroke, palette.accent, accentStyle.navButtonStrokeAccentBlend),
+                accentStyle.navButtonStrokeAlpha.coerceIn(156, 224)
+            ),
+            cornerRadiusDp = 22f * accentStyle.navShellCornerScale,
             glossAlpha = 62,
             shadowAlpha = 94,
-            innerStrokeAlpha = 34
+            innerStrokeAlpha = if (accentStyle.cornerScale < 1f) 30 else 40
         )
         binding.navLionButton.imageTintList = null
-        binding.navLionButton.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(Color.TRANSPARENT)
-        }
+        binding.navLionButton.background = createDepthSurfaceDrawable(
+            topColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.panelAlt, Color.WHITE, 0.16f + accentStyle.navButtonFillLift),
+                if (isDarkTone) accentStyle.lionRingFillAlphaDark else accentStyle.lionRingFillAlphaLight
+            ),
+            bottomColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.panelAlt, palette.backgroundEnd, 0.36f),
+                if (isDarkTone) 26 else 56
+            ),
+            strokeColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.stroke, palette.accent, accentStyle.lionRingStrokeAccentBlend),
+                accentStyle.lionRingStrokeAlpha
+            ),
+            cornerRadiusDp = 26f,
+            glossAlpha = 44,
+            shadowAlpha = 66,
+            innerStrokeAlpha = if (accentStyle.cornerScale < 1f) 28 else 36,
+            oval = true
+        )
         binding.navLionButton.elevation = 0f
         binding.navLionButton.translationZ = 0f
-        applyBottomNavButtonPalette(binding.navScanButton, palette)
-        applyBottomNavButtonPalette(binding.navGuardButton, palette)
-        applyBottomNavButtonPalette(binding.navVaultButton, palette)
-        applyBottomNavButtonPalette(binding.navSupportButton, palette)
+        applyBottomNavButtonPalette(binding.navScanButton, palette, accentStyle)
+        applyBottomNavButtonPalette(binding.navGuardButton, palette, accentStyle)
+        applyBottomNavButtonPalette(binding.navVaultButton, palette, accentStyle)
+        applyBottomNavButtonPalette(binding.navSupportButton, palette, accentStyle)
         tintAlertDot(binding.navScanDot, palette.alert)
         tintAlertDot(binding.navGuardDot, palette.alert)
         tintAlertDot(binding.navVaultDot, palette.alert)
@@ -1845,9 +1881,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyActionButtonPalette(
         button: com.google.android.material.button.MaterialButton,
-        palette: LionThemePalette
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle
     ) {
-        val cornerRadiusDp = if (button === binding.securityTopActionButton) 14f else 12f
+        val baseCornerRadiusDp = if (button === binding.securityTopActionButton) 14f else 12f
+        val cornerRadiusDp = baseCornerRadiusDp * accentStyle.cornerScale
         val topColor = ColorUtils.setAlphaComponent(
             blendColors(palette.panelAlt, Color.WHITE, 0.13f),
             236
@@ -1860,7 +1898,10 @@ class MainActivity : AppCompatActivity() {
         button.background = createDepthSurfaceDrawable(
             topColor = topColor,
             bottomColor = bottomColor,
-            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 216),
+            strokeColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.stroke, palette.accent, accentStyle.buttonStrokeAccentBlend),
+                216
+            ),
             cornerRadiusDp = cornerRadiusDp,
             glossAlpha = 58,
             shadowAlpha = 82,
@@ -1882,7 +1923,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyWidgetCardPalette(
         card: com.google.android.material.card.MaterialCardView,
-        palette: LionThemePalette
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle
     ) {
         val topColor = ColorUtils.setAlphaComponent(
             blendColors(palette.panelAlt, Color.WHITE, 0.13f),
@@ -1895,8 +1937,11 @@ class MainActivity : AppCompatActivity() {
         card.background = createDepthSurfaceDrawable(
             topColor = topColor,
             bottomColor = bottomColor,
-            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 216),
-            cornerRadiusDp = 12f,
+            strokeColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.stroke, palette.accent, accentStyle.buttonStrokeAccentBlend * 0.78f),
+                216
+            ),
+            cornerRadiusDp = 12f * accentStyle.cornerScale,
             glossAlpha = 58,
             shadowAlpha = 82,
             innerStrokeAlpha = 38
@@ -1914,7 +1959,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun applySettingsButtonPalette(
         button: com.google.android.material.button.MaterialButton,
-        palette: LionThemePalette
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle
     ) {
         val topColor = ColorUtils.setAlphaComponent(
             blendColors(palette.panelAlt, Color.WHITE, 0.11f),
@@ -1928,8 +1974,11 @@ class MainActivity : AppCompatActivity() {
         button.background = createDepthSurfaceDrawable(
             topColor = topColor,
             bottomColor = bottomColor,
-            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 214),
-            cornerRadiusDp = 18f,
+            strokeColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.stroke, palette.accent, accentStyle.buttonStrokeAccentBlend * 0.88f),
+                214
+            ),
+            cornerRadiusDp = 18f * accentStyle.cornerScale,
             glossAlpha = 56,
             shadowAlpha = 80,
             innerStrokeAlpha = 34
@@ -1948,11 +1997,27 @@ class MainActivity : AppCompatActivity() {
         button.translationZ = dpToPx(1f).toFloat()
     }
 
-    private fun applyBottomNavButtonPalette(button: LinearLayout, palette: LionThemePalette) {
+    private fun applyBottomNavButtonPalette(
+        button: LinearLayout,
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle
+    ) {
         button.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(12f).toFloat()
-            setColor(Color.TRANSPARENT)
+            cornerRadius = dpToPx(accentStyle.navButtonCornerDp).toFloat()
+            setColor(
+                ColorUtils.setAlphaComponent(
+                    blendColors(palette.panelAlt, Color.WHITE, accentStyle.navButtonFillLift),
+                    48
+                )
+            )
+            setStroke(
+                dpToPx(accentStyle.strokeWidthDp),
+                ColorUtils.setAlphaComponent(
+                    blendColors(palette.stroke, palette.accent, accentStyle.navButtonStrokeAccentBlend),
+                    accentStyle.navButtonStrokeAlpha
+                )
+            )
         }
         button.elevation = 0f
         button.translationZ = 0f

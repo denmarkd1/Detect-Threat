@@ -91,6 +91,13 @@ Any UI change that affects one of these must include a short note in this file:
 - nav model changes
 - hero/intro motion behavior changes
 
+## Post-lock notes
+- 2026-03-02:
+  - Added two steampunk identity profiles (`Steampunk Male`, `Steampunk Lioness`) to the settings cycle.
+  - Introduced profile-driven micro-adjustments that preserve the locked base palettes while applying subtle per-profile tint influence (accent/stroke/panel/nav/text blend nudges).
+  - Added subtle profile-specific border/corner accents for home widgets, nav buttons, and settings buttons/cards to differentiate male/lioness character without changing IA or nav model.
+  - Added JSON-backed profile registry at `android-watchdog/app/src/main/assets/lion_profiles.json` so future lion profiles can be added with config + drawable updates instead of Kotlin enum edits.
+
 ## Sign-off checklist
 - [x] Palette locked
 - [x] Theme/component styles locked

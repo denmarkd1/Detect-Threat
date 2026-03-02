@@ -128,7 +128,9 @@ data class LionThemeState(
     val variant: LionThemeVariant,
     val toneMode: LionThemeToneMode,
     val isDark: Boolean,
-    val palette: LionThemePalette
+    val palette: LionThemePalette,
+    val identityProfile: LionThemePrefs.LionIdentityProfile,
+    val accentStyle: LionIdentityAccentStyle
 )
 
 object LionThemeCatalog {
@@ -145,18 +147,30 @@ object LionThemeCatalog {
         }
         val toneMode = LionThemePrefs.readToneMode(context)
         val darkMode = resolveDarkModeEnabled(context, toneMode)
+        val identityProfile = LionThemePrefs.readIdentityProfile(
+            context = context,
+            paidAccess = paidAccess
+        )
+        val designSpec = LionProfileDesignCatalog.resolve(identityProfile)
         val seedAccent = LionThemePrefs.resolveAccentSeedColor(context, selectedLionBitmap)
         val darkPalette = resolveDarkPalette(variant, seedAccent)
-        val palette = if (darkMode) {
+        val basePalette = if (darkMode) {
             darkPalette
         } else {
             buildLightCompanionPalette(darkPalette)
         }
+        val palette = applyProfilePaletteInfluence(
+            basePalette = basePalette,
+            influence = designSpec.paletteInfluence,
+            darkMode = darkMode
+        )
         return LionThemeState(
             variant = variant,
             toneMode = toneMode,
             isDark = darkMode,
-            palette = palette
+            palette = palette,
+            identityProfile = identityProfile,
+            accentStyle = designSpec.accentStyle
         )
     }
 
@@ -325,6 +339,42 @@ object LionThemeCatalog {
             textPrimary = textPrimary,
             textSecondary = textSecondary,
             textMuted = textMuted
+        )
+    }
+
+    private fun applyProfilePaletteInfluence(
+        basePalette: LionThemePalette,
+        influence: LionProfilePaletteInfluence?,
+        darkMode: Boolean
+    ): LionThemePalette {
+        if (influence == null) {
+            return basePalette
+        }
+        val biasColor = if (darkMode) influence.darkBiasColor else influence.lightBiasColor
+        val accent = normalizeAccent(
+            blend(basePalette.accent, biasColor, influence.accentBlend),
+            minSaturation = if (darkMode) 0.36f else 0.28f,
+            minValue = if (darkMode) 0.68f else 0.54f
+        )
+        return basePalette.copy(
+            panel = blend(basePalette.panel, biasColor, influence.panelBlend),
+            panelAlt = blend(basePalette.panelAlt, biasColor, (influence.panelBlend + 0.02f).coerceAtMost(0.20f)),
+            stroke = blend(basePalette.stroke, biasColor, influence.strokeBlend),
+            accent = accent,
+            navShellStart = ColorUtils.setAlphaComponent(
+                blend(basePalette.navShellStart, biasColor, influence.navBlend),
+                Color.alpha(basePalette.navShellStart)
+            ),
+            navShellEnd = ColorUtils.setAlphaComponent(
+                blend(basePalette.navShellEnd, biasColor, influence.navBlend),
+                Color.alpha(basePalette.navShellEnd)
+            ),
+            textSecondary = blend(basePalette.textSecondary, biasColor, influence.textBlend),
+            textMuted = blend(
+                basePalette.textMuted,
+                biasColor,
+                (influence.textBlend + 0.02f).coerceAtMost(0.20f)
+            )
         )
     }
 

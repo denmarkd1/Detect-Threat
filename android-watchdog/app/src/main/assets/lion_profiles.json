@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "male",
+      "label": "Male",
+      "drawable": "lion_icon",
+      "paid_only": false,
+      "style_key": "default"
+    },
+    {
+      "id": "female",
+      "label": "Female",
+      "drawable": "lion_icon_non_binary",
+      "paid_only": false,
+      "style_key": "default"
+    },
+    {
+      "id": "steampunk_male",
+      "label": "Steampunk Male",
+      "drawable": "lion_icon_steampunk_male",
+      "paid_only": false,
+      "style_key": "steampunk_male"
+    },
+    {
+      "id": "steampunk_lioness",
+      "label": "Steampunk Lioness",
+      "drawable": "lion_icon_steampunk_lioness",
+      "paid_only": false,
+      "style_key": "steampunk_lioness"
+    },
+    {
+      "id": "non_binary",
+      "label": "Non-binary",
+      "drawable": "lion_icon_female",
+      "paid_only": true,
+      "style_key": "default"
+    }
+  ]
+}

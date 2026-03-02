@@ -6,10 +6,11 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import com.realyn.watchdog.theme.LionThemeToneMode
 import com.realyn.watchdog.theme.LionThemeVariant
+import org.json.JSONObject
+import java.util.Locale
 import kotlin.math.max
 
 object LionThemePrefs {
@@ -20,47 +21,24 @@ object LionThemePrefs {
     private const val KEY_THEME_VARIANT = "theme_variant"
     private const val KEY_THEME_TONE_MODE = "theme_tone_mode"
     private const val LIGHT_MODE_USE_DARK_LION_STANDARD = true
+    private const val PROFILE_REGISTRY_ASSET_FILE = "lion_profiles.json"
+    private const val DEFAULT_PROFILE_ID = "female"
 
     const val PRO_LION_ASSET_DIR = "lion_heads"
     const val PRO_LION_ASSET_WORKSPACE_PATH = "android-watchdog/app/src/main/assets/lion_heads/"
 
-    enum class LionIdentityProfile(
-        val raw: String,
+    data class LionIdentityProfile(
+        val id: String,
         @DrawableRes val drawableRes: Int,
-        @StringRes val labelRes: Int
-    ) {
-        MALE(
-            raw = "male",
-            drawableRes = R.drawable.lion_icon,
-            labelRes = R.string.lion_identity_profile_male
-        ),
-        FEMALE(
-            raw = "female",
-            // Free-tier standard lioness (no crown / circular headpiece).
-            drawableRes = R.drawable.lion_icon_non_binary,
-            labelRes = R.string.lion_identity_profile_female
-        ),
-        NON_BINARY(
-            raw = "non_binary",
-            // Pro alternate lioness (with circular headpiece).
-            drawableRes = R.drawable.lion_icon_female,
-            labelRes = R.string.lion_identity_profile_non_binary
-        );
+        val drawableName: String,
+        val label: String,
+        val paidOnly: Boolean,
+        val styleKey: String
+    )
 
-        companion object {
-            fun fromRaw(raw: String?): LionIdentityProfile {
-                return entries.firstOrNull { it.raw == raw } ?: FEMALE
-            }
-
-            fun availableFor(paidAccess: Boolean): List<LionIdentityProfile> {
-                return if (paidAccess) {
-                    entries.toList()
-                } else {
-                    listOf(MALE, FEMALE)
-                }
-            }
-        }
-    }
+    @Volatile
+    private var cachedProfileRegistry: List<LionIdentityProfile>? = null
+    private val profileRegistryLock = Any()
 
     fun shouldUseDarkLionPresentation(isDarkTone: Boolean): Boolean {
         return isDarkTone || LIGHT_MODE_USE_DARK_LION_STANDARD
@@ -120,35 +98,69 @@ object LionThemePrefs {
         return next
     }
 
+    fun listIdentityProfiles(
+        context: Context,
+        paidAccess: Boolean = PricingPolicy.resolveFeatureAccess(context).paidAccess
+    ): List<LionIdentityProfile> {
+        val profiles = loadIdentityProfileRegistry(context)
+        val allowed = profiles.filter { !it.paidOnly || paidAccess }
+        if (allowed.isNotEmpty()) {
+            return allowed
+        }
+        val defaultAllowed = defaultIdentityProfiles(context).filter { !it.paidOnly || paidAccess }
+        return if (defaultAllowed.isNotEmpty()) {
+            defaultAllowed
+        } else {
+            allowed
+        }
+    }
+
     fun readIdentityProfile(
         context: Context,
         paidAccess: Boolean = PricingPolicy.resolveFeatureAccess(context).paidAccess
     ): LionIdentityProfile {
-        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
-            .getString(KEY_IDENTITY_PROFILE, LionIdentityProfile.FEMALE.raw)
-        val saved = LionIdentityProfile.fromRaw(raw)
-        val allowed = LionIdentityProfile.availableFor(paidAccess)
-        if (allowed.contains(saved)) {
-            return saved
+        val allowed = listIdentityProfiles(context, paidAccess)
+        if (allowed.isEmpty()) {
+            val emergencyProfile = LionIdentityProfile(
+                id = DEFAULT_PROFILE_ID,
+                drawableRes = R.drawable.lion_icon_non_binary,
+                drawableName = "lion_icon_non_binary",
+                label = "Lion",
+                paidOnly = false,
+                styleKey = "default"
+            )
+            writeIdentityProfile(context, emergencyProfile.id)
+            return emergencyProfile
         }
-        val fallback = LionIdentityProfile.FEMALE
-        writeIdentityProfile(context, fallback)
-        return fallback
+        val fallback = allowed.firstOrNull { it.id == DEFAULT_PROFILE_ID } ?: allowed.first()
+        val storedId = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+            .getString(KEY_IDENTITY_PROFILE, DEFAULT_PROFILE_ID)
+            ?.trim()
+            .orEmpty()
+        val selected = allowed.firstOrNull { it.id == storedId } ?: fallback
+        if (selected.id != storedId) {
+            writeIdentityProfile(context, selected.id)
+        }
+        return selected
     }
 
     fun writeIdentityProfile(context: Context, profile: LionIdentityProfile) {
+        writeIdentityProfile(context, profile.id)
+    }
+
+    fun writeIdentityProfile(context: Context, profileId: String) {
         context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_IDENTITY_PROFILE, profile.raw)
+            .putString(KEY_IDENTITY_PROFILE, profileId.trim())
             .apply()
     }
 
     fun cycleIdentityProfile(context: Context, paidAccess: Boolean): LionIdentityProfile {
-        val allowed = LionIdentityProfile.availableFor(paidAccess)
+        val allowed = listIdentityProfiles(context, paidAccess)
         val current = readIdentityProfile(context, paidAccess)
-        val currentIndex = allowed.indexOf(current).coerceAtLeast(0)
+        val currentIndex = allowed.indexOfFirst { it.id == current.id }.coerceAtLeast(0)
         val next = allowed[(currentIndex + 1) % allowed.size]
-        writeIdentityProfile(context, next)
+        writeIdentityProfile(context, next.id)
         return next
     }
 
@@ -208,10 +220,13 @@ object LionThemePrefs {
         selectedBitmap: Bitmap? = null
     ): Int {
         val fallback = ContextCompat.getColor(context, R.color.brand_accent)
+        val fallbackProfile = listIdentityProfiles(context, paidAccess = true)
+            .firstOrNull { it.id == DEFAULT_PROFILE_ID }
+            ?: listIdentityProfiles(context, paidAccess = true).firstOrNull()
         val bitmap = selectedBitmap
             ?: resolveSelectedLionBitmap(context)
-            ?: BitmapFactory.decodeResource(context.resources, LionIdentityProfile.FEMALE.drawableRes)
-        val extracted = extractAccentFromBitmap(bitmap)
+            ?: fallbackProfile?.let { BitmapFactory.decodeResource(context.resources, it.drawableRes) }
+        val extracted = bitmap?.let { extractAccentFromBitmap(it) }
         return extracted ?: fallback
     }
 
@@ -264,5 +279,126 @@ object LionThemePrefs {
                 max(0.70f, bestValue)
             )
         )
+    }
+
+    private fun loadIdentityProfileRegistry(context: Context): List<LionIdentityProfile> {
+        cachedProfileRegistry?.let { return it }
+        return synchronized(profileRegistryLock) {
+            cachedProfileRegistry?.let { return it }
+            val parsed = runCatching {
+                context.assets.open(PROFILE_REGISTRY_ASSET_FILE).bufferedReader().use { it.readText() }
+            }.getOrNull()?.let { parseIdentityProfileRegistry(context, it) }.orEmpty()
+            val resolved = if (parsed.isNotEmpty()) {
+                parsed
+            } else {
+                defaultIdentityProfiles(context)
+            }
+            cachedProfileRegistry = resolved
+            resolved
+        }
+    }
+
+    private fun parseIdentityProfileRegistry(
+        context: Context,
+        payload: String
+    ): List<LionIdentityProfile> {
+        val root = runCatching { JSONObject(payload) }.getOrNull() ?: return emptyList()
+        val profilesArray = root.optJSONArray("profiles") ?: return emptyList()
+        val profiles = mutableListOf<LionIdentityProfile>()
+        val seenIds = linkedSetOf<String>()
+        for (index in 0 until profilesArray.length()) {
+            val item = profilesArray.optJSONObject(index) ?: continue
+            val id = item.optString("id").trim().lowercase(Locale.US)
+            if (id.isBlank() || !seenIds.add(id)) {
+                continue
+            }
+            val drawableName = item.optString("drawable").trim()
+            val drawableRes = resolveDrawableResByName(context, drawableName)
+            if (drawableRes == 0) {
+                continue
+            }
+            val label = item.optString("label").trim().ifBlank { humanizeProfileId(id) }
+            profiles += LionIdentityProfile(
+                id = id,
+                drawableRes = drawableRes,
+                drawableName = drawableName,
+                label = label,
+                paidOnly = item.optBoolean("paid_only", false),
+                styleKey = item.optString("style_key").trim().ifBlank { "default" }
+            )
+        }
+        return profiles
+    }
+
+    private fun defaultIdentityProfiles(context: Context): List<LionIdentityProfile> {
+        return listOf(
+            LionIdentityProfile(
+                id = "male",
+                drawableRes = R.drawable.lion_icon,
+                drawableName = "lion_icon",
+                label = context.getString(R.string.lion_identity_profile_male),
+                paidOnly = false,
+                styleKey = "default"
+            ),
+            LionIdentityProfile(
+                id = "female",
+                drawableRes = R.drawable.lion_icon_non_binary,
+                drawableName = "lion_icon_non_binary",
+                label = context.getString(R.string.lion_identity_profile_female),
+                paidOnly = false,
+                styleKey = "default"
+            ),
+            LionIdentityProfile(
+                id = "steampunk_male",
+                drawableRes = R.drawable.lion_icon_steampunk_male,
+                drawableName = "lion_icon_steampunk_male",
+                label = context.getString(R.string.lion_identity_profile_steampunk_male),
+                paidOnly = false,
+                styleKey = "steampunk_male"
+            ),
+            LionIdentityProfile(
+                id = "steampunk_lioness",
+                drawableRes = R.drawable.lion_icon_steampunk_lioness,
+                drawableName = "lion_icon_steampunk_lioness",
+                label = context.getString(R.string.lion_identity_profile_steampunk_lioness),
+                paidOnly = false,
+                styleKey = "steampunk_lioness"
+            ),
+            LionIdentityProfile(
+                id = "non_binary",
+                drawableRes = R.drawable.lion_icon_female,
+                drawableName = "lion_icon_female",
+                label = context.getString(R.string.lion_identity_profile_non_binary),
+                paidOnly = true,
+                styleKey = "default"
+            )
+        )
+    }
+
+    @DrawableRes
+    private fun resolveDrawableResByName(context: Context, drawableName: String): Int {
+        if (drawableName.isBlank()) {
+            return 0
+        }
+        return context.resources.getIdentifier(drawableName, "drawable", context.packageName)
+    }
+
+    private fun humanizeProfileId(profileId: String): String {
+        return profileId
+            .trim()
+            .replace('-', ' ')
+            .replace('_', ' ')
+            .split(' ')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { token ->
+                token.replaceFirstChar { first ->
+                    if (first.isLowerCase()) {
+                        first.titlecase(Locale.US)
+                    } else {
+                        first.toString()
+                    }
+                }
+            }
+            .ifBlank { "Lion" }
     }
 }

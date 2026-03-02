@@ -396,6 +396,8 @@
     <string name="lion_identity_profile_male">Male</string>
     <string name="lion_identity_profile_female">Female</string>
     <string name="lion_identity_profile_non_binary">Non-binary</string>
+    <string name="lion_identity_profile_steampunk_male">Steampunk Male</string>
+    <string name="lion_identity_profile_steampunk_lioness">Steampunk Lioness</string>
     <string name="lion_theme_variant_status_template">Theme shade switched to %1$s.</string>
     <string name="lion_theme_tone_status_template">Theme tone mode: %1$s.</string>
     <string name="lion_theme_tone_system">System</string>
