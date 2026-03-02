@@ -17,6 +17,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -38,6 +39,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -268,6 +270,7 @@ class MainActivity : AppCompatActivity() {
         binding.lionHeroView.setIdleState()
         binding.bottomNavCard.visibility = View.GONE
         applyMinimalHomeSurface()
+        setupDepthMotionSystem()
 
         maybeRequestNotificationPermission()
         applyAdvancedControlsVisibility()
@@ -312,6 +315,78 @@ class MainActivity : AppCompatActivity() {
     override fun onUserInteraction() {
         super.onUserInteraction()
         AppAccessGate.onUserInteraction()
+    }
+
+    private fun setupDepthMotionSystem() {
+        installDepthTouchFeedback()
+    }
+
+    private fun installDepthTouchFeedback() {
+        depthInteractiveViews().forEach { target ->
+            target.setOnTouchListener { view, event ->
+                if (homeIntroAnimating) {
+                    return@setOnTouchListener false
+                }
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN,
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        applyDepthTouchDown(view, event.x, event.y)
+                    }
+
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        clearDepthTouchFeedback(view)
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    private fun depthInteractiveViews(): List<View> {
+        return listOf(
+            binding.goProButton,
+            binding.lionModeToggleButton,
+            binding.widgetSweepCard,
+            binding.widgetThreatsCard,
+            binding.widgetCredentialsCard,
+            binding.widgetServicesCard,
+            binding.securityTopActionButton,
+            binding.navScanButton,
+            binding.navGuardButton,
+            binding.navLionButton,
+            binding.navVaultButton,
+            binding.navSupportButton
+        )
+    }
+
+    private fun applyDepthTouchDown(view: View, touchX: Float, touchY: Float) {
+        if (view.width <= 0 || view.height <= 0) {
+            return
+        }
+        val normalizedX = ((touchX / view.width) - 0.5f).coerceIn(-0.5f, 0.5f) * 2f
+        val normalizedY = ((touchY / view.height) - 0.5f).coerceIn(-0.5f, 0.5f) * 2f
+        val shiftPx = dpToPx(if (view === binding.navLionButton) 2.2f else 1.5f).toFloat()
+        view.animate().cancel()
+        view.scaleX = 0.987f
+        view.scaleY = 0.987f
+        view.translationX = normalizedX * shiftPx
+        view.translationY = normalizedY * shiftPx
+        view.translationZ = dpToPx(if (view === binding.navLionButton) 6f else 3f).toFloat()
+    }
+
+    private fun clearDepthTouchFeedback(view: View) {
+        view.animate()
+            .scaleX(1f)
+            .scaleY(1f)
+            .translationX(0f)
+            .translationY(0f)
+            .setDuration(180L)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                view.translationZ = 0f
+            }
+            .start()
     }
 
     private fun enforceAccessGate() {
@@ -822,6 +897,7 @@ class MainActivity : AppCompatActivity() {
         clearHomeIntroTimeline()
         resetWidgetCardTransforms()
         resetBottomNavTransforms()
+        hideScanTopActionForIntro()
         binding.widgetTrailView.clear()
         binding.bottomNavCard.visibility = View.GONE
         binding.homeIntroOverlay.visibility = View.VISIBLE
@@ -1152,6 +1228,7 @@ class MainActivity : AppCompatActivity() {
         binding.widgetTrailView.clear()
         homeWidgetCards().forEach { it.animate().cancel() }
         homeNavButtons().forEach { it.animate().cancel() }
+        binding.securityTopActionButton.animate().cancel()
         binding.navLionButton.animate().cancel()
     }
 
@@ -1274,6 +1351,11 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavCard.visibility = View.VISIBLE
         binding.bottomNavCard.alpha = 0f
         binding.bottomNavCard.translationY = dpToPx(20f).toFloat()
+        binding.securityTopActionButton.visibility = View.VISIBLE
+        binding.securityTopActionButton.alpha = 0f
+        binding.securityTopActionButton.translationY = dpToPx(16f).toFloat()
+        binding.securityTopActionButton.scaleX = 0.97f
+        binding.securityTopActionButton.scaleY = 0.97f
         val navRippleDistance = dpToPx(24f).toFloat()
         binding.navLionButton.apply {
             alpha = 0f
@@ -1354,8 +1436,27 @@ class MainActivity : AppCompatActivity() {
             startTranslationX = -navRippleDistance * 1.45f,
             startDelay = 300L
         )
+        val scanActionAnimator = ObjectAnimator.ofPropertyValuesHolder(
+            binding.securityTopActionButton,
+            PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+            PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, binding.securityTopActionButton.translationY, 0f),
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 0.97f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.97f, 1f)
+        ).apply {
+            startDelay = 280L
+            duration = 420L
+            interpolator = DecelerateInterpolator()
+        }
         navRippleAnimatorSet = AnimatorSet().apply {
-            playTogether(shellAnimator, lionPulse, innerLeft, innerRight, outerLeft, outerRight)
+            playTogether(
+                shellAnimator,
+                lionPulse,
+                innerLeft,
+                innerRight,
+                outerLeft,
+                outerRight,
+                scanActionAnimator
+            )
             addListener(object : AnimatorListenerAdapter() {
                 private var cancelled = false
 
@@ -1366,6 +1467,10 @@ class MainActivity : AppCompatActivity() {
                 override fun onAnimationEnd(animation: Animator) {
                     navRippleAnimatorSet = null
                     binding.bottomNavCard.translationY = 0f
+                    binding.securityTopActionButton.alpha = 1f
+                    binding.securityTopActionButton.translationY = 0f
+                    binding.securityTopActionButton.scaleX = 1f
+                    binding.securityTopActionButton.scaleY = 1f
                     resetBottomNavTransforms()
                     refreshBottomNavIndicators()
                     if (!cancelled && !isFinishing && !isDestroyed) {
@@ -1474,6 +1579,7 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavCard.visibility = View.VISIBLE
         binding.bottomNavCard.alpha = 1f
         binding.bottomNavCard.translationY = 0f
+        showScanTopActionImmediate()
         resetBottomNavTransforms()
         refreshBottomNavIndicators()
     }
@@ -1508,10 +1614,29 @@ class MainActivity : AppCompatActivity() {
             homeIntroAnimating = false
         }
         val introReadyForNav = isHomeIntroAlreadyShown() || homeIntroHandledThisSession
+        if (!homeIntroAnimating && introReadyForNav) {
+            showScanTopActionImmediate()
+        }
         if (!homeIntroAnimating && introReadyForNav && binding.bottomNavCard.visibility != View.VISIBLE) {
             showBottomNavImmediate()
             maybeShowHomeTutorialPopup()
         }
+    }
+
+    private fun hideScanTopActionForIntro() {
+        binding.securityTopActionButton.visibility = View.INVISIBLE
+        binding.securityTopActionButton.alpha = 0f
+        binding.securityTopActionButton.translationY = dpToPx(16f).toFloat()
+        binding.securityTopActionButton.scaleX = 0.97f
+        binding.securityTopActionButton.scaleY = 0.97f
+    }
+
+    private fun showScanTopActionImmediate() {
+        binding.securityTopActionButton.visibility = View.VISIBLE
+        binding.securityTopActionButton.alpha = 1f
+        binding.securityTopActionButton.translationY = 0f
+        binding.securityTopActionButton.scaleX = 1f
+        binding.securityTopActionButton.scaleY = 1f
     }
 
     private fun maybeShowHomeTutorialPopup() {
@@ -1666,14 +1791,14 @@ class MainActivity : AppCompatActivity() {
         binding.introWelcomeLabel.setTextColor(palette.textPrimary)
         binding.lionModeToggleButton.setTextColor(palette.accent)
 
-        applyActionButtonPalette(binding.goProButton, palette)
-        applyActionButtonPalette(binding.securityTopActionButton, palette)
-
         applyWidgetCardPalette(binding.widgetSweepCard, palette)
         applyWidgetCardPalette(binding.widgetThreatsCard, palette)
         applyWidgetCardPalette(binding.widgetCredentialsCard, palette)
         applyWidgetCardPalette(binding.widgetServicesCard, palette)
         LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
+        applyActionButtonPalette(binding.goProButton, palette)
+        applyActionButtonPalette(binding.securityTopActionButton, palette)
+        applySettingsButtonPalette(binding.lionModeToggleButton, palette)
 
         binding.widgetSweepValue.setTextColor(palette.textPrimary)
         binding.widgetThreatsValue.setTextColor(palette.textPrimary)
@@ -1686,30 +1811,28 @@ class MainActivity : AppCompatActivity() {
 
         binding.bottomNavCard.strokeColor = palette.stroke
         binding.bottomNavCard.strokeWidth = dpToPx(1f)
-        binding.bottomNavRow.background = gradientBackground(
-            startColor = palette.navShellStart,
-            centerColor = blendColors(palette.navShellStart, palette.navShellEnd, 0.45f),
-            endColor = palette.navShellEnd,
-            angle = 90,
-            cornerRadiusDp = 22f
+        binding.bottomNavRow.background = createDepthSurfaceDrawable(
+            topColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.navShellStart, Color.WHITE, 0.10f),
+                228
+            ),
+            bottomColor = ColorUtils.setAlphaComponent(
+                blendColors(palette.navShellEnd, palette.backgroundEnd, 0.24f),
+                214
+            ),
+            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 212),
+            cornerRadiusDp = 22f,
+            glossAlpha = 62,
+            shadowAlpha = 94,
+            innerStrokeAlpha = 34
         )
-        val useDarkNavLionStyle = LionThemePrefs.shouldUseDarkLionPresentation(isDarkTone)
         binding.navLionButton.imageTintList = null
-        binding.navLionButton.background = if (useDarkNavLionStyle) {
-            GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.TRANSPARENT)
-            }
-        } else {
-            GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.WHITE)
-                setStroke(
-                    dpToPx(1f),
-                    blendColors(palette.stroke, Color.WHITE, 0.12f)
-                )
-            }
+        binding.navLionButton.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.TRANSPARENT)
         }
+        binding.navLionButton.elevation = 0f
+        binding.navLionButton.translationZ = 0f
         applyBottomNavButtonPalette(binding.navScanButton, palette)
         applyBottomNavButtonPalette(binding.navGuardButton, palette)
         applyBottomNavButtonPalette(binding.navVaultButton, palette)
@@ -1724,33 +1847,115 @@ class MainActivity : AppCompatActivity() {
         button: com.google.android.material.button.MaterialButton,
         palette: LionThemePalette
     ) {
-        button.backgroundTintList = ColorStateList.valueOf(palette.panelAlt)
-        button.strokeColor = ColorStateList.valueOf(palette.stroke)
+        val cornerRadiusDp = if (button === binding.securityTopActionButton) 14f else 12f
+        val topColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, Color.WHITE, 0.13f),
+            236
+        )
+        val bottomColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, palette.backgroundEnd, 0.28f),
+            222
+        )
+        button.backgroundTintList = null
+        button.background = createDepthSurfaceDrawable(
+            topColor = topColor,
+            bottomColor = bottomColor,
+            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 216),
+            cornerRadiusDp = cornerRadiusDp,
+            glossAlpha = 58,
+            shadowAlpha = 82,
+            innerStrokeAlpha = 38
+        )
+        val selectableBackground = TypedValue().also {
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+        }
+        button.foreground = if (selectableBackground.resourceId != 0) {
+            ContextCompat.getDrawable(this, selectableBackground.resourceId)
+        } else {
+            null
+        }
         button.setTextColor(palette.accent)
         button.iconTint = ColorStateList.valueOf(palette.accent)
+        button.elevation = dpToPx(if (button === binding.securityTopActionButton) 6f else 5f).toFloat()
+        button.translationZ = dpToPx(1f).toFloat()
     }
 
     private fun applyWidgetCardPalette(
         card: com.google.android.material.card.MaterialCardView,
         palette: LionThemePalette
     ) {
-        card.setCardBackgroundColor(palette.panelAlt)
-        card.strokeColor = palette.stroke
-        card.strokeWidth = dpToPx(1f)
+        val topColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, Color.WHITE, 0.13f),
+            236
+        )
+        val bottomColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, palette.backgroundEnd, 0.28f),
+            222
+        )
+        card.background = createDepthSurfaceDrawable(
+            topColor = topColor,
+            bottomColor = bottomColor,
+            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 216),
+            cornerRadiusDp = 12f,
+            glossAlpha = 58,
+            shadowAlpha = 82,
+            innerStrokeAlpha = 38
+        )
+        card.setCardBackgroundColor(Color.TRANSPARENT)
+        card.strokeWidth = 0
+        card.cardElevation = dpToPx(3f).toFloat()
+        card.translationZ = dpToPx(1f).toFloat()
+        card.preventCornerOverlap = false
         val content = card.getChildAt(0) as? LinearLayout ?: return
         val headerRow = content.getChildAt(0) as? LinearLayout ?: return
         (headerRow.getChildAt(0) as? ImageView)?.imageTintList = ColorStateList.valueOf(palette.accent)
         (headerRow.getChildAt(1) as? TextView)?.setTextColor(palette.textSecondary)
     }
 
+    private fun applySettingsButtonPalette(
+        button: com.google.android.material.button.MaterialButton,
+        palette: LionThemePalette
+    ) {
+        val topColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, Color.WHITE, 0.11f),
+            232
+        )
+        val bottomColor = ColorUtils.setAlphaComponent(
+            blendColors(palette.panelAlt, palette.backgroundEnd, 0.30f),
+            214
+        )
+        button.backgroundTintList = null
+        button.background = createDepthSurfaceDrawable(
+            topColor = topColor,
+            bottomColor = bottomColor,
+            strokeColor = ColorUtils.setAlphaComponent(palette.stroke, 214),
+            cornerRadiusDp = 18f,
+            glossAlpha = 56,
+            shadowAlpha = 80,
+            innerStrokeAlpha = 34
+        )
+        val selectableBackground = TypedValue().also {
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
+        }
+        button.foreground = if (selectableBackground.resourceId != 0) {
+            ContextCompat.getDrawable(this, selectableBackground.resourceId)
+        } else {
+            null
+        }
+        button.setTextColor(palette.accent)
+        button.iconTint = ColorStateList.valueOf(palette.accent)
+        button.elevation = dpToPx(4.5f).toFloat()
+        button.translationZ = dpToPx(1f).toFloat()
+    }
+
     private fun applyBottomNavButtonPalette(button: LinearLayout, palette: LionThemePalette) {
-        val cornerRadiusPx = dpToPx(12f).toFloat()
         button.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = cornerRadiusPx
+            cornerRadius = dpToPx(12f).toFloat()
             setColor(Color.TRANSPARENT)
-            setStroke(dpToPx(1f), palette.stroke)
         }
+        button.elevation = 0f
+        button.translationZ = 0f
         val selectableBackground = TypedValue().also {
             theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, it, true)
         }
@@ -1761,9 +1966,83 @@ class MainActivity : AppCompatActivity() {
         }
         for (index in 0 until button.childCount) {
             when (val child = button.getChildAt(index)) {
-                is ImageView -> child.imageTintList = ColorStateList.valueOf(palette.textSecondary)
-                is TextView -> child.setTextColor(palette.textSecondary)
+                is ImageView -> child.imageTintList = ColorStateList.valueOf(
+                    blendColors(palette.textSecondary, palette.textPrimary, 0.12f)
+                )
+                is TextView -> child.setTextColor(
+                    blendColors(palette.textSecondary, palette.textPrimary, 0.08f)
+                )
             }
+        }
+    }
+
+    private fun createDepthSurfaceDrawable(
+        @androidx.annotation.ColorInt topColor: Int,
+        @androidx.annotation.ColorInt bottomColor: Int,
+        @androidx.annotation.ColorInt strokeColor: Int,
+        cornerRadiusDp: Float,
+        glossAlpha: Int = 52,
+        shadowAlpha: Int = 76,
+        innerStrokeAlpha: Int = 32,
+        oval: Boolean = false
+    ): LayerDrawable {
+        val shapeType = if (oval) GradientDrawable.OVAL else GradientDrawable.RECTANGLE
+        val cornerRadiusPx = dpToPx(cornerRadiusDp).toFloat()
+        val base = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(topColor, bottomColor)
+        ).apply {
+            shape = shapeType
+            if (!oval) {
+                cornerRadius = cornerRadiusPx
+            }
+        }
+        val shadow = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                Color.TRANSPARENT,
+                ColorUtils.setAlphaComponent(Color.BLACK, shadowAlpha.coerceIn(0, 255))
+            )
+        ).apply {
+            shape = shapeType
+            if (!oval) {
+                cornerRadius = cornerRadiusPx
+            }
+        }
+        val gloss = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                ColorUtils.setAlphaComponent(Color.WHITE, glossAlpha.coerceIn(0, 255)),
+                Color.TRANSPARENT
+            )
+        ).apply {
+            shape = shapeType
+            if (!oval) {
+                cornerRadius = cornerRadiusPx
+            }
+        }
+        val outerRim = GradientDrawable().apply {
+            shape = shapeType
+            if (!oval) {
+                cornerRadius = cornerRadiusPx
+            }
+            setColor(Color.TRANSPARENT)
+            setStroke(dpToPx(1f), strokeColor)
+        }
+        val innerRim = GradientDrawable().apply {
+            shape = shapeType
+            if (!oval) {
+                cornerRadius = (cornerRadiusPx - dpToPx(1f).toFloat()).coerceAtLeast(0f)
+            }
+            setColor(Color.TRANSPARENT)
+            setStroke(
+                dpToPx(1f),
+                ColorUtils.setAlphaComponent(Color.WHITE, innerStrokeAlpha.coerceIn(0, 255))
+            )
+        }
+        return LayerDrawable(arrayOf(base, shadow, gloss, outerRim, innerRim)).apply {
+            val inset = dpToPx(1f)
+            setLayerInset(4, inset, inset, inset, inset)
         }
     }
 
@@ -1797,7 +2076,7 @@ class MainActivity : AppCompatActivity() {
         @androidx.annotation.ColorInt to: Int,
         fraction: Float
     ): Int {
-        return androidx.core.graphics.ColorUtils.blendARGB(
+        return ColorUtils.blendARGB(
             from,
             to,
             fraction.coerceIn(0f, 1f)
