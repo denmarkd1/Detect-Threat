@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
 import com.realyn.watchdog.theme.LionThemeViewStyler
@@ -35,10 +36,18 @@ object LionDialogStyler {
             paidAccess = access.paidAccess,
             selectedLionBitmap = selectedBitmap
         )
-        apply(dialog, themeState.palette)
+        apply(
+            dialog = dialog,
+            palette = themeState.palette,
+            accentStyle = themeState.accentStyle
+        )
     }
 
-    fun apply(dialog: AlertDialog, palette: LionThemePalette) {
+    fun apply(
+        dialog: AlertDialog,
+        palette: LionThemePalette,
+        accentStyle: LionIdentityAccentStyle = LionIdentityAccentStyle()
+    ) {
         dialog.window?.setBackgroundDrawable(
             GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -56,7 +65,15 @@ object LionDialogStyler {
         styleActionButton(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), palette)
 
         val decor = dialog.window?.decorView ?: return
-        LionThemeViewStyler.applyMaterialButtonPalette(decor, palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(
+            root = decor,
+            palette = palette,
+            accentStyle = accentStyle
+        )
+        LionThemeViewStyler.installMaterialButtonTouchFeedback(
+            root = decor,
+            accentStyle = accentStyle
+        )
         styleInputs(decor, palette)
     }
 

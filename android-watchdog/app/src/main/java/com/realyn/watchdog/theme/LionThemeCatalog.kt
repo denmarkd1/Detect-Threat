@@ -162,7 +162,9 @@ object LionThemeCatalog {
         val palette = applyProfilePaletteInfluence(
             basePalette = basePalette,
             influence = designSpec.paletteInfluence,
-            darkMode = darkMode
+            darkMode = darkMode,
+            profileThemeIntensity = identityProfile.themeIntensity,
+            seedAccent = seedAccent
         )
         return LionThemeState(
             variant = variant,
@@ -345,37 +347,97 @@ object LionThemeCatalog {
     private fun applyProfilePaletteInfluence(
         basePalette: LionThemePalette,
         influence: LionProfilePaletteInfluence?,
-        darkMode: Boolean
+        darkMode: Boolean,
+        profileThemeIntensity: Float,
+        @ColorInt seedAccent: Int
     ): LionThemePalette {
-        if (influence == null) {
+        val intensity = profileThemeIntensity.coerceIn(0.80f, 1.60f)
+        val resolvedInfluence = when {
+            influence != null -> scaleInfluence(influence, intensity)
+            intensity > 1.02f -> synthesizedInfluence(
+                seedAccent = seedAccent,
+                intensity = intensity,
+                darkMode = darkMode
+            )
+            else -> null
+        }
+        if (resolvedInfluence == null) {
             return basePalette
         }
-        val biasColor = if (darkMode) influence.darkBiasColor else influence.lightBiasColor
+        val biasColor = if (darkMode) resolvedInfluence.darkBiasColor else resolvedInfluence.lightBiasColor
         val accent = normalizeAccent(
-            blend(basePalette.accent, biasColor, influence.accentBlend),
+            blend(basePalette.accent, biasColor, resolvedInfluence.accentBlend),
             minSaturation = if (darkMode) 0.36f else 0.28f,
             minValue = if (darkMode) 0.68f else 0.54f
         )
         return basePalette.copy(
-            panel = blend(basePalette.panel, biasColor, influence.panelBlend),
-            panelAlt = blend(basePalette.panelAlt, biasColor, (influence.panelBlend + 0.02f).coerceAtMost(0.20f)),
-            stroke = blend(basePalette.stroke, biasColor, influence.strokeBlend),
+            panel = blend(basePalette.panel, biasColor, resolvedInfluence.panelBlend),
+            panelAlt = blend(
+                basePalette.panelAlt,
+                biasColor,
+                (resolvedInfluence.panelBlend + 0.02f).coerceAtMost(0.24f)
+            ),
+            stroke = blend(basePalette.stroke, biasColor, resolvedInfluence.strokeBlend),
             accent = accent,
             navShellStart = ColorUtils.setAlphaComponent(
-                blend(basePalette.navShellStart, biasColor, influence.navBlend),
+                blend(basePalette.navShellStart, biasColor, resolvedInfluence.navBlend),
                 Color.alpha(basePalette.navShellStart)
             ),
             navShellEnd = ColorUtils.setAlphaComponent(
-                blend(basePalette.navShellEnd, biasColor, influence.navBlend),
+                blend(basePalette.navShellEnd, biasColor, resolvedInfluence.navBlend),
                 Color.alpha(basePalette.navShellEnd)
             ),
-            textSecondary = blend(basePalette.textSecondary, biasColor, influence.textBlend),
+            textSecondary = blend(basePalette.textSecondary, biasColor, resolvedInfluence.textBlend),
             textMuted = blend(
                 basePalette.textMuted,
                 biasColor,
-                (influence.textBlend + 0.02f).coerceAtMost(0.20f)
+                (resolvedInfluence.textBlend + 0.02f).coerceAtMost(0.24f)
             )
         )
+    }
+
+    private fun scaleInfluence(
+        influence: LionProfilePaletteInfluence,
+        intensity: Float
+    ): LionProfilePaletteInfluence {
+        val factor = (1f + ((intensity - 1f) * 0.42f)).coerceIn(0.78f, 1.36f)
+        return influence.copy(
+            accentBlend = scaleBlend(influence.accentBlend, factor, maxValue = 0.40f),
+            strokeBlend = scaleBlend(influence.strokeBlend, factor, maxValue = 0.42f),
+            panelBlend = scaleBlend(influence.panelBlend, factor, maxValue = 0.20f),
+            textBlend = scaleBlend(influence.textBlend, factor, maxValue = 0.18f),
+            navBlend = scaleBlend(influence.navBlend, factor, maxValue = 0.22f)
+        )
+    }
+
+    private fun synthesizedInfluence(
+        @ColorInt seedAccent: Int,
+        intensity: Float,
+        darkMode: Boolean
+    ): LionProfilePaletteInfluence {
+        val normalizedSeed = normalizeAccent(
+            seedAccent,
+            minSaturation = if (darkMode) 0.36f else 0.30f,
+            minValue = if (darkMode) 0.64f else 0.52f
+        )
+        val baseBlend = ((intensity - 1f) * 0.11f).coerceIn(0.02f, 0.12f)
+        return LionProfilePaletteInfluence(
+            darkBiasColor = blend(normalizedSeed, Color.BLACK, 0.28f),
+            lightBiasColor = blend(normalizedSeed, Color.WHITE, 0.18f),
+            accentBlend = (baseBlend * 1.30f).coerceIn(0.03f, 0.20f),
+            strokeBlend = (baseBlend * 1.14f).coerceIn(0.02f, 0.18f),
+            panelBlend = baseBlend,
+            textBlend = (baseBlend * 0.76f).coerceIn(0.01f, 0.13f),
+            navBlend = (baseBlend * 1.12f).coerceIn(0.02f, 0.16f)
+        )
+    }
+
+    private fun scaleBlend(
+        value: Float,
+        factor: Float,
+        maxValue: Float
+    ): Float {
+        return (value * factor).coerceIn(0f, maxValue)
     }
 
     @ColorInt

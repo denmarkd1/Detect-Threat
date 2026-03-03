@@ -276,6 +276,8 @@ class MainActivity : AppCompatActivity() {
         maybeRequestNotificationPermission()
         applyAdvancedControlsVisibility()
         enforceAccessGate()
+
+        IntegrationMeshController.initialize(this)
     }
 
     override fun onResume() {
@@ -1172,6 +1174,10 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed) {
             return
         }
+        val runWidgetMotion = isHomeIntroWidgetMotionEnabled(this)
+        if (runWidgetMotion) {
+            hideWidgetCardsForIntroLaunch()
+        }
         binding.homeIntroOverlay.animate()
             .alpha(0f)
             .setDuration(620L)
@@ -1194,11 +1200,12 @@ class MainActivity : AppCompatActivity() {
                 binding.introLionHero.scaleY = 1f
                 binding.introCelebrationView.alpha = 0f
                 binding.introCelebrationView.stopCelebration()
-                if (isHomeIntroWidgetMotionEnabled(this@MainActivity)) {
+                if (runWidgetMotion) {
                     animateWidgetCardsArcInThenNavRipple {
                         completeHomeIntroSequence()
                     }
                 } else {
+                    resetWidgetCardTransforms()
                     applyImmediateBottomNavState()
                     completeHomeIntroSequence()
                 }
@@ -1565,6 +1572,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun hideWidgetCardsForIntroLaunch() {
+        homeWidgetCards().forEach { card ->
+            card.alpha = 0f
+            card.scaleX = 1f
+            card.scaleY = 1f
+            card.translationX = 0f
+            card.translationY = 0f
+        }
+    }
+
     private fun resetBottomNavTransforms() {
         homeNavButtons().forEach { view ->
             view.alpha = 1f
@@ -1848,31 +1865,13 @@ class MainActivity : AppCompatActivity() {
             innerStrokeAlpha = if (accentStyle.cornerScale < 1f) 30 else 40
         )
         binding.navLionButton.imageTintList = null
-        binding.navLionButton.background = createDepthSurfaceDrawable(
-            topColor = ColorUtils.setAlphaComponent(
-                blendColors(palette.panelAlt, Color.WHITE, 0.16f + accentStyle.navButtonFillLift),
-                if (isDarkTone) accentStyle.lionRingFillAlphaDark else accentStyle.lionRingFillAlphaLight
-            ),
-            bottomColor = ColorUtils.setAlphaComponent(
-                blendColors(palette.panelAlt, palette.backgroundEnd, 0.36f),
-                if (isDarkTone) 26 else 56
-            ),
-            strokeColor = ColorUtils.setAlphaComponent(
-                blendColors(palette.stroke, palette.accent, accentStyle.lionRingStrokeAccentBlend),
-                accentStyle.lionRingStrokeAlpha
-            ),
-            cornerRadiusDp = 26f,
-            glossAlpha = 44,
-            shadowAlpha = 66,
-            innerStrokeAlpha = if (accentStyle.cornerScale < 1f) 28 else 36,
-            oval = true
-        )
+        binding.navLionButton.background = null
         binding.navLionButton.elevation = 0f
         binding.navLionButton.translationZ = 0f
-        applyBottomNavButtonPalette(binding.navScanButton, palette, accentStyle)
-        applyBottomNavButtonPalette(binding.navGuardButton, palette, accentStyle)
-        applyBottomNavButtonPalette(binding.navVaultButton, palette, accentStyle)
-        applyBottomNavButtonPalette(binding.navSupportButton, palette, accentStyle)
+        applyBottomNavButtonPalette(binding.navScanButton, palette)
+        applyBottomNavButtonPalette(binding.navGuardButton, palette)
+        applyBottomNavButtonPalette(binding.navVaultButton, palette)
+        applyBottomNavButtonPalette(binding.navSupportButton, palette)
         tintAlertDot(binding.navScanDot, palette.alert)
         tintAlertDot(binding.navGuardDot, palette.alert)
         tintAlertDot(binding.navVaultDot, palette.alert)
@@ -1999,26 +1998,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyBottomNavButtonPalette(
         button: LinearLayout,
-        palette: LionThemePalette,
-        accentStyle: LionIdentityAccentStyle
+        palette: LionThemePalette
     ) {
-        button.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(accentStyle.navButtonCornerDp).toFloat()
-            setColor(
-                ColorUtils.setAlphaComponent(
-                    blendColors(palette.panelAlt, Color.WHITE, accentStyle.navButtonFillLift),
-                    48
-                )
-            )
-            setStroke(
-                dpToPx(accentStyle.strokeWidthDp),
-                ColorUtils.setAlphaComponent(
-                    blendColors(palette.stroke, palette.accent, accentStyle.navButtonStrokeAccentBlend),
-                    accentStyle.navButtonStrokeAlpha
-                )
-            )
-        }
+        button.background = null
         button.elevation = 0f
         button.translationZ = 0f
         val selectableBackground = TypedValue().also {

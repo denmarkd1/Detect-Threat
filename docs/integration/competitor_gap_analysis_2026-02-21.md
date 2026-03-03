@@ -94,5 +94,16 @@ Scope: top comparable password-locker apps on Android+iOS, what they do well, an
 - keep encrypted recovery lineage,
 - and produce auditable non-secret receipts.
 
+## Addendum (2026-03-03): top-5 mobile security suite expansion
+
+This document remains the password-manager baseline. Expanded top-5 mobile-suite analysis and smart-device integration strategy now lives in:
+
+- `docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md`
+
+Addendum outcomes:
+- The \"none of top five have smart-device integration\" claim is only partially correct.
+- Some vendors already provide limited smart-device-adjacent features (for example smartwatch extension or connected-home/TV tie-ins).
+- There is still a strong gap for user-controlled, non-invasive smart-home + digital-key security orchestration as a primary differentiator.
+
 ## Notes
 - "Top 3" here is based on currently visible store footprint and official feature documentation, not paid market-intelligence datasets.

@@ -305,6 +305,101 @@ def default_settings() -> dict[str, Any]:
                 "session_key_persistence": "memory_only",
             }
         },
+        "integration_mesh": {
+            "enabled": False,
+            "schema_version": 1,
+            "feature_flags": {
+                "smart_home_connector": {
+                    "enabled": False,
+                    "rollout_stage": "internal_test",
+                    "owner_allowlist": ["parent", "child"],
+                    "max_rollout_percent": 0,
+                    "supported_connector_ids": ["smartthings", "google_home"],
+                    "required_scopes": ["home:read", "home:devices:read"],
+                    "require_redemption_proof": True,
+                },
+                "vpn_provider_connector": {
+                    "enabled": False,
+                    "rollout_stage": "internal_test",
+                    "owner_allowlist": ["parent", "child"],
+                    "max_rollout_percent": 0,
+                    "supported_connector_ids": ["partner_vpn"],
+                    "require_redemption_proof": True,
+                },
+                "digital_key_risk_adapter": {
+                    "enabled": False,
+                    "rollout_stage": "internal_test",
+                    "owner_allowlist": ["parent", "child"],
+                    "max_rollout_percent": 0,
+                    "require_redemption_proof": True,
+                },
+            },
+            "rollout": {
+                "enabled": True,
+                "mode": "staged_percentage",
+                "current_stage": "internal_test",
+                "stages": [
+                    {
+                        "name": "internal_test",
+                        "enabled": True,
+                        "max_percent": 10,
+                        "owner_roles": ["parent"],
+                    },
+                    {
+                        "name": "closed_test",
+                        "enabled": False,
+                        "max_percent": 25,
+                        "owner_roles": ["parent", "child"],
+                    },
+                    {
+                        "name": "production",
+                        "enabled": False,
+                        "max_percent": 5,
+                        "owner_roles": ["parent", "child"],
+                    },
+                ],
+            },
+            "audit": {
+                "enabled": True,
+                "event_retention_days": 365,
+                "max_events": 3000,
+                "schema_version": 1,
+                "redact_fields": [
+                    "access_token",
+                    "refresh_token",
+                    "authorization_code",
+                    "id_token",
+                    "device_secret",
+                ],
+            },
+            "connectors": {
+                "smart_home": {
+                    "allowed_connector_ids": ["smartthings"],
+                    "read_only": True,
+                    "max_cached_devices": 250,
+                    "default_scope_set": ["home:read", "lock:read"],
+                },
+                "vpn_brokers": {
+                    "health_ttl_minutes": 30,
+                    "allowed_statuses": [
+                        "connected",
+                        "connecting",
+                        "disconnected",
+                        "unknown",
+                        "error",
+                    ],
+                },
+                "digital_keys": {
+                    "supported_risk_categories": [
+                        "unverified_remote_unlock",
+                        "sudden_privilege_change",
+                        "location_restriction_violation",
+                        "stale_consents",
+                    ],
+                    "require_parent_approval_for_share": True,
+                },
+            },
+        },
     }
 
 

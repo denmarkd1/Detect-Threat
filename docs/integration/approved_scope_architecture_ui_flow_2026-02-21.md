@@ -232,3 +232,14 @@ Target: `config/workspace_settings.json` (and synced Android asset)
 ## 9) Recommended next implementation step
 
 Start Phase 1 first (App lock + Guardian override foundation), because all later modules depend on these policy and session controls.
+
+## 10) Scope extension candidate (2026-03-03)
+
+Planned expansion proposal:
+- `Guardian Mesh Integration Layer` (see `docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md`)
+
+Policy-safe boundaries for this extension:
+1. user-controlled, opt-in connectors only
+2. read/assess/recommend defaults (non-invasive)
+3. no unauthorized remote control claims over third-party smart-home or vehicle systems
+4. no full traffic interception requirement for the baseline release

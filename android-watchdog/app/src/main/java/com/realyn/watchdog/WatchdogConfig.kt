@@ -18,6 +18,8 @@ object WatchdogConfig {
     const val FAMILY_CONTROL_AUDIT_FILE = "dt_family_control_audit.log"
     const val WIFI_POSTURE_HISTORY_FILE = "dt_wifi_posture_history.log"
     const val PHISHING_TRIAGE_HISTORY_FILE = "dt_phishing_triage.log"
+    const val INTEGRATION_MESH_AUDIT_FILE = "dt_integration_mesh_audit.log"
+    const val INTEGRATION_MESH_CONSENT_ARTIFACT_FILE = "dt_integration_mesh_consent.log"
     const val CREDENTIAL_SECRET_VAULT_FILE = "credential_secret_vault.enc"
     const val CREDENTIAL_ACTION_QUEUE_FILE = "credential_action_queue.json"
     const val MEDIA_VAULT_INDEX_FILE = "media_vault_index.enc"

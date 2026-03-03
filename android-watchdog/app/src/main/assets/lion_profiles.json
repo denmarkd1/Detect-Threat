@@ -6,35 +6,123 @@
       "label": "Male",
       "drawable": "lion_icon",
       "paid_only": false,
-      "style_key": "default"
+      "style_key": "default",
+      "audiences": ["male"],
+      "theme_intensity": 1.0
     },
     {
       "id": "female",
       "label": "Female",
-      "drawable": "lion_icon_non_binary",
+      "drawable": "lion_icon_female",
       "paid_only": false,
-      "style_key": "default"
+      "style_key": "default",
+      "audiences": ["female"],
+      "theme_intensity": 1.0
     },
     {
       "id": "steampunk_male",
       "label": "Steampunk Male",
       "drawable": "lion_icon_steampunk_male",
       "paid_only": false,
-      "style_key": "steampunk_male"
+      "style_key": "steampunk_male",
+      "audiences": ["male"],
+      "theme_intensity": 1.08
     },
     {
       "id": "steampunk_lioness",
       "label": "Steampunk Lioness",
       "drawable": "lion_icon_steampunk_lioness",
       "paid_only": false,
-      "style_key": "steampunk_lioness"
+      "style_key": "steampunk_lioness",
+      "audiences": ["female"],
+      "theme_intensity": 1.08
+    },
+    {
+      "id": "full_color_male",
+      "label": "Full Color Male",
+      "drawable": "lion_icon_full_color_male",
+      "paid_only": false,
+      "style_key": "full_color_male",
+      "audiences": ["male"],
+      "theme_intensity": 1.30
+    },
+    {
+      "id": "full_color_lioness",
+      "label": "Full Color Lioness",
+      "drawable": "lion_icon_full_color_lioness",
+      "paid_only": false,
+      "style_key": "full_color_lioness",
+      "audiences": ["female"],
+      "theme_intensity": 1.30
+    },
+    {
+      "id": "child_gold_default",
+      "label": "Child Gold",
+      "drawable": "lion_icon_child_gold_default",
+      "paid_only": false,
+      "style_key": "child_gold_default",
+      "audiences": ["male", "female"],
+      "theme_intensity": 1.12,
+      "child_profile": true
+    },
+    {
+      "id": "child_blue_male_alt",
+      "label": "Child Blue Alt",
+      "drawable": "lion_icon_child_blue_male_alt",
+      "paid_only": true,
+      "style_key": "child_blue_male_alt",
+      "audiences": ["male"],
+      "theme_intensity": 1.24,
+      "child_profile": true
+    },
+    {
+      "id": "child_pink_female_alt",
+      "label": "Child Pink Alt",
+      "drawable": "lion_icon_child_pink_female_alt",
+      "paid_only": true,
+      "style_key": "child_pink_female_alt",
+      "audiences": ["female"],
+      "theme_intensity": 1.24,
+      "child_profile": true
+    },
+    {
+      "id": "child_rainbow_female2_nonbinary",
+      "label": "Child Rainbow Alt",
+      "drawable": "lion_icon_child_rainbow_female2_nonbinary",
+      "paid_only": true,
+      "style_key": "child_rainbow_female2_nonbinary",
+      "audiences": ["female", "non_binary"],
+      "theme_intensity": 1.28,
+      "child_profile": true
     },
     {
       "id": "non_binary",
       "label": "Non-binary",
-      "drawable": "lion_icon_female",
+      "drawable": "lion_icon_non_binary",
       "paid_only": true,
-      "style_key": "default"
+      "style_key": "default",
+      "audiences": ["non_binary"],
+      "theme_intensity": 1.0
+    },
+    {
+      "id": "top_hat_lion",
+      "label": "Top Hat Lion",
+      "drawable": "lion_icon_top_hat",
+      "paid_only": false,
+      "style_key": "cannabis_top_hat",
+      "audiences": ["male"],
+      "theme_intensity": 1.36,
+      "requires_cannabis_legal": true
+    },
+    {
+      "id": "pink_crown_lion",
+      "label": "Pink Crown Lion",
+      "drawable": "lion_icon_pink_crown",
+      "paid_only": false,
+      "style_key": "cannabis_pink_crown",
+      "audiences": ["female", "non_binary"],
+      "theme_intensity": 1.36,
+      "requires_cannabis_legal": true
     }
   ]
 }

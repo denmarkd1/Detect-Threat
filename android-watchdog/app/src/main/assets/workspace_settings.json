@@ -256,6 +256,53 @@
       }
     ]
   },
+  "cannabis_theme_policy": {
+    "enabled": true,
+    "allowed_countries": [
+      "AU",
+      "CA",
+      "CZ",
+      "DE",
+      "GE",
+      "LU",
+      "MT",
+      "MX",
+      "PH",
+      "TH",
+      "US",
+      "UY",
+      "ZA"
+    ],
+    "allowed_us_states": [
+      "AK",
+      "AZ",
+      "CA",
+      "CO",
+      "CT",
+      "DC",
+      "DE",
+      "IL",
+      "MA",
+      "MD",
+      "ME",
+      "MI",
+      "MN",
+      "MO",
+      "MT",
+      "NJ",
+      "NM",
+      "NV",
+      "NY",
+      "OH",
+      "OR",
+      "RI",
+      "VA",
+      "VT",
+      "WA"
+    ],
+    "block_when_us_state_unknown": true,
+    "us_state_override": ""
+  },
   "watchdog": {
     "enable_windows_mount_scan_on_linux": true,
     "windows_mount_candidates": [
@@ -326,6 +373,131 @@
     "enabled": true,
     "allow_manual_clipboard_intake": true,
     "high_risk_auto_alert": true
+  },
+  "integration_mesh": {
+    "enabled": false,
+    "schema_version": 1,
+    "feature_flags": {
+      "smart_home_connector": {
+        "enabled": false,
+        "rollout_stage": "internal_test",
+        "owner_allowlist": [
+          "parent",
+          "child"
+        ],
+        "max_rollout_percent": 0,
+        "supported_connector_ids": [
+          "smartthings",
+          "google_home"
+        ],
+        "required_scopes": [
+          "home:read",
+          "home:devices:read"
+        ],
+        "require_redemption_proof": true
+      },
+      "vpn_provider_connector": {
+        "enabled": false,
+        "rollout_stage": "internal_test",
+        "owner_allowlist": [
+          "parent",
+          "child"
+        ],
+        "max_rollout_percent": 0,
+        "supported_connector_ids": [
+          "partner_vpn"
+        ],
+        "require_redemption_proof": true
+      },
+      "digital_key_risk_adapter": {
+        "enabled": false,
+        "rollout_stage": "internal_test",
+        "owner_allowlist": [
+          "parent",
+          "child"
+        ],
+        "max_rollout_percent": 0,
+        "require_redemption_proof": true
+      }
+    },
+    "rollout": {
+      "enabled": true,
+      "mode": "staged_percentage",
+      "current_stage": "internal_test",
+      "stages": [
+        {
+          "name": "internal_test",
+          "enabled": true,
+          "max_percent": 10,
+          "owner_roles": [
+            "parent"
+          ]
+        },
+        {
+          "name": "closed_test",
+          "enabled": false,
+          "max_percent": 25,
+          "owner_roles": [
+            "parent",
+            "child"
+          ]
+        },
+        {
+          "name": "production",
+          "enabled": false,
+          "max_percent": 5,
+          "owner_roles": [
+            "parent",
+            "child"
+          ]
+        }
+      ]
+    },
+    "audit": {
+      "enabled": true,
+      "event_retention_days": 365,
+      "max_events": 3000,
+      "schema_version": 1,
+      "redact_fields": [
+        "access_token",
+        "refresh_token",
+        "authorization_code",
+        "id_token",
+        "device_secret"
+      ]
+    },
+    "connectors": {
+      "smart_home": {
+        "allowed_connector_ids": [
+          "smartthings"
+        ],
+        "read_only": true,
+        "max_cached_devices": 250,
+        "default_scope_set": [
+          "home:read",
+          "lock:read"
+        ]
+      },
+      "vpn_brokers": {
+        "health_ttl_minutes": 30,
+        "allowed_statuses": [
+          "connected",
+          "connecting",
+          "disconnected",
+          "unknown",
+          "error"
+        ]
+      },
+      "digital_keys": {
+        "supported_risk_categories": [
+          "unverified_remote_unlock",
+          "sudden_privilege_change",
+          "location_restriction_violation",
+          "stale_consents"
+        ],
+        "require_parent_approval_for_share": true
+      }
+    }
   },
   "device_locator_links": {
     "enabled": true,

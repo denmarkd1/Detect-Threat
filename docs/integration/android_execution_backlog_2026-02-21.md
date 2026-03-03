@@ -1,7 +1,9 @@
 # Android Execution Backlog (DT Guardian)
 
 Date: 2026-02-21
-Derived from: `docs/integration/competitor_gap_analysis_2026-02-21.md`
+Derived from:
+- `docs/integration/competitor_gap_analysis_2026-02-21.md`
+- `docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md`
 
 ## Completed in current pass
 
@@ -50,27 +52,32 @@ Derived from: `docs/integration/competitor_gap_analysis_2026-02-21.md`
 
 ## Next high-priority Android items
 
-1. Official Play entitlement enforcement (publish gate)
+1. Guardian Mesh Integration Layer (top feature candidate)
+- Add user-controlled, non-invasive connector architecture for smart-home ecosystems and service partners.
+- Start with connector broker model: SmartThings posture ingestion, VPN provider linking, and digital-key risk guardrails.
+- Keep read/assess/remediate posture by default; no hidden remote control claims.
+
+2. Official Play entitlement enforcement (publish gate)
 - Replace local selected-plan trust with Play Billing purchase-state validation.
 - Bind free/paid feature gates to signed store entitlement status.
 
-2. Official Play referral discounts (publish gate)
+3. Official Play referral discounts (publish gate)
 - Map in-app recommendation flow to Google Play billing offers/promo codes.
 - Enforce store-side discount eligibility and redemption audit trail.
 
-3. Completion receipts and incident linkage
+4. Completion receipts and incident linkage
 - Write non-secret completion receipts whenever a rotation is confirmed.
 - Link receipt IDs to incident lifecycle records (`open`, `in_progress`, `resolved`).
 
-4. Queue deadlines and owner views
+5. Queue deadlines and owner views
 - Add due date, risk reason, and owner filter in credential queue UI.
 - Highlight overdue high-priority account classes (`email`, `banking`) first.
 
-5. Recovery hardening
+6. Recovery hardening
 - Add local encrypted export/import for credential lineage backup (device-to-device transfer).
 - Require local confirmation gate for destructive queue actions.
 
-6. Threat-context tie-in
+7. Threat-context tie-in
 - Add optional posture checks before sensitive rotation flows (overlay abuse indicators, unknown-sources state, accessibility risk).
 
 ## Approved expansion scope (locked 2026-02-21)

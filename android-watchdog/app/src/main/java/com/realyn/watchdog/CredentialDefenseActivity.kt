@@ -16,12 +16,14 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
 import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
 import com.realyn.watchdog.databinding.DialogServiceActionBinding
+import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
 import com.realyn.watchdog.theme.LionThemeViewStyler
@@ -600,7 +602,15 @@ class CredentialDefenseActivity : AppCompatActivity() {
             paidAccess = featureAccess.paidAccess,
             selectedLionBitmap = selectedBitmap
         )
-        LionThemeViewStyler.applyMaterialButtonPalette(dialogBinding.root, themeState.palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(
+            root = dialogBinding.root,
+            palette = themeState.palette,
+            accentStyle = themeState.accentStyle
+        )
+        LionThemeViewStyler.installMaterialButtonTouchFeedback(
+            root = dialogBinding.root,
+            accentStyle = themeState.accentStyle
+        )
         val profile = PrimaryIdentityStore.readProfile(this)
         val profileControl = PricingPolicy.resolveProfileControl(this)
 
@@ -1291,7 +1301,11 @@ class CredentialDefenseActivity : AppCompatActivity() {
             paidAccess = access.paidAccess,
             selectedLionBitmap = selectedBitmap
         )
-        applyCredentialTheme(themeState.palette, themeState.isDark)
+        applyCredentialTheme(
+            palette = themeState.palette,
+            isDarkTone = themeState.isDark,
+            accentStyle = themeState.accentStyle
+        )
         binding.lionHeroView.setFillMode(lionFillMode)
         binding.lionHeroView.setImageOffsetY(0f)
         binding.lionHeroView.setSurfaceTone(
@@ -1304,7 +1318,8 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private fun applyCredentialTheme(
         palette: LionThemePalette,
-        isDarkTone: Boolean
+        isDarkTone: Boolean,
+        accentStyle: LionIdentityAccentStyle
     ) {
         window.statusBarColor = palette.backgroundEnd
         window.navigationBarColor = palette.backgroundEnd
@@ -1324,9 +1339,34 @@ class CredentialDefenseActivity : AppCompatActivity() {
         binding.toolbar.setBackgroundColor(palette.backgroundEnd)
         binding.toolbar.setTitleTextColor(palette.textPrimary)
         binding.toolbar.navigationIcon?.mutate()?.setTint(palette.accent)
+        val heroAccentBlend = (
+            accentStyle.navButtonFillLift.coerceIn(0f, 0.18f) * 1.2f +
+                accentStyle.buttonStrokeAccentBlend.coerceIn(0f, 0.58f) * 0.42f
+            ).coerceIn(0.08f, 0.28f)
+        binding.credentialHeroBackground.background = GradientDrawable().apply {
+            orientation = GradientDrawable.Orientation.TL_BR
+            cornerRadius = resources.getDimension(R.dimen.credential_center_hero_corner_radius)
+            colors = intArrayOf(
+                ColorUtils.blendARGB(
+                    palette.panelAlt,
+                    palette.accent,
+                    heroAccentBlend
+                ),
+                ColorUtils.blendARGB(palette.backgroundCenter, palette.panelAlt, 0.64f),
+                ColorUtils.blendARGB(palette.backgroundEnd, palette.panelAlt, 0.78f)
+            )
+        }
         binding.lionModeToggleButton.setTextColor(palette.accent)
         applyPaletteToMaterialCards(binding.root, palette)
-        LionThemeViewStyler.applyMaterialButtonPalette(binding.root, palette)
+        LionThemeViewStyler.applyMaterialButtonPalette(
+            root = binding.root,
+            palette = palette,
+            accentStyle = accentStyle
+        )
+        LionThemeViewStyler.installMaterialButtonTouchFeedback(
+            root = binding.root,
+            accentStyle = accentStyle
+        )
     }
 
     private fun applyPaletteToMaterialCards(view: View, palette: LionThemePalette) {
