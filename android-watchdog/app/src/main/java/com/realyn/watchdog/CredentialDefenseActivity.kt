@@ -873,47 +873,64 @@ class CredentialDefenseActivity : AppCompatActivity() {
                         return@runWithSecondFactorConfirmation
                     }
 
-                    val updated = CredentialVaultStore.prepareRotation(
-                        context = this,
-                        owner = owner,
-                        category = category,
-                        service = form.service,
-                        username = form.username,
-                        url = form.url,
-                        currentPassword = form.currentPassword,
-                        nextPassword = nextPassword
-                    )
+                    val policyDecision = VpnCategoryPolicyGate.evaluate(this, category)
 
-                    val now = System.currentTimeMillis()
-                    val dueAt = now + (3L * 24L * 60L * 60L * 1000L)
-                    val appended = CredentialActionStore.appendAction(
-                        this,
-                        CredentialAction(
-                            actionId = actionId,
+                    fun continueQueueAppend() {
+                        val updated = CredentialVaultStore.prepareRotation(
+                            context = this,
                             owner = owner,
                             category = category,
                             service = form.service,
                             username = form.username,
                             url = form.url,
-                            actionType = actionType,
-                            status = "pending",
-                            createdAtEpochMs = now,
-                            updatedAtEpochMs = now,
-                            dueAtEpochMs = dueAt,
-                            completedAtEpochMs = 0L,
-                            receiptId = ""
+                            currentPassword = form.currentPassword,
+                            nextPassword = nextPassword
                         )
-                    )
-                    if (!appended) {
-                        Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
+
+                        val now = System.currentTimeMillis()
+                        val dueAt = now + (3L * 24L * 60L * 60L * 1000L)
+                        val appended = CredentialActionStore.appendAction(
+                            this,
+                            CredentialAction(
+                                actionId = actionId,
+                                owner = owner,
+                                category = category,
+                                service = form.service,
+                                username = form.username,
+                                url = form.url,
+                                actionType = actionType,
+                                status = "pending",
+                                createdAtEpochMs = now,
+                                updatedAtEpochMs = now,
+                                dueAtEpochMs = dueAt,
+                                completedAtEpochMs = 0L,
+                                receiptId = ""
+                            )
+                        )
+                        if (!appended) {
+                            Toast.makeText(this, R.string.queue_duplicate_action, Toast.LENGTH_SHORT).show()
+                            return
+                        }
+
+                        binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(updated)
+                        dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(updated)
+                        renderQueue()
+                        Toast.makeText(this, R.string.queue_action_saved, Toast.LENGTH_SHORT).show()
+                        refreshDialogState()
+                    }
+
+                    if (policyDecision.requirement != VpnPolicyRequirement.NONE && !policyDecision.meetsRequirement) {
+                        if (policyDecision.blocked) {
+                            showVpnPolicyBlockedDialog(policyDecision)
+                        } else {
+                            showVpnPolicyWarningDialog(policyDecision) {
+                                continueQueueAppend()
+                            }
+                        }
                         return@runWithSecondFactorConfirmation
                     }
 
-                    binding.vaultSummaryLabel.text = CredentialVaultStore.formatRecordSummary(updated)
-                    dialogBinding.dialogStatusLabel.text = CredentialVaultStore.formatRecordSummary(updated)
-                    renderQueue()
-                    Toast.makeText(this, R.string.queue_action_saved, Toast.LENGTH_SHORT).show()
-                    refreshDialogState()
+                    continueQueueAppend()
                 }
             }
         }
@@ -1220,7 +1237,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private fun isHighPriorityCategory(category: String): Boolean {
         val normalized = category.trim().lowercase(Locale.US)
-        return normalized == "email" || normalized == "banking"
+        return normalized == "email" || normalized == "banking" || normalized == "developer"
     }
 
     private fun queueUrgencyRank(item: CredentialAction, nowEpochMs: Long): Int {
@@ -1496,6 +1513,61 @@ class CredentialDefenseActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun showVpnPolicyBlockedDialog(decision: VpnCategoryPolicyDecision) {
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.vpn_policy_blocked_title)
+            .setMessage(
+                getString(
+                    R.string.vpn_policy_blocked_message_template,
+                    decision.category,
+                    vpnRequirementLabel(decision.requirement),
+                    vpnAssertionLabel(decision.assertion.assertion),
+                    decision.assertion.providerLabel.ifBlank { decision.assertion.providerId }
+                )
+            )
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun showVpnPolicyWarningDialog(
+        decision: VpnCategoryPolicyDecision,
+        onContinue: () -> Unit
+    ) {
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.vpn_policy_warning_title)
+            .setMessage(
+                getString(
+                    R.string.vpn_policy_warning_message_template,
+                    decision.category,
+                    vpnRequirementLabel(decision.requirement),
+                    vpnAssertionLabel(decision.assertion.assertion),
+                    decision.assertion.providerLabel.ifBlank { decision.assertion.providerId }
+                )
+            )
+            .setPositiveButton(R.string.action_continue_anyway) { _, _ ->
+                onContinue()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun vpnRequirementLabel(requirement: VpnPolicyRequirement): String {
+        return when (requirement) {
+            VpnPolicyRequirement.NONE -> getString(R.string.vpn_policy_requirement_none)
+            VpnPolicyRequirement.CONFIGURED -> getString(R.string.vpn_policy_requirement_configured)
+            VpnPolicyRequirement.CONNECTED -> getString(R.string.vpn_policy_requirement_connected)
+        }
+    }
+
+    private fun vpnAssertionLabel(assertion: VpnAssertionState): String {
+        return when (assertion) {
+            VpnAssertionState.CONFIGURED -> getString(R.string.vpn_assertion_configured)
+            VpnAssertionState.CONNECTED -> getString(R.string.vpn_assertion_connected)
+            VpnAssertionState.STALE -> getString(R.string.vpn_assertion_stale)
+            VpnAssertionState.UNKNOWN -> getString(R.string.vpn_assertion_unknown)
+        }
     }
 
     private fun withSensitiveRootHardening(actionLabel: String, onAllowed: () -> Unit) {

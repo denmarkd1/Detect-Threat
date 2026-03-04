@@ -84,6 +84,9 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.openHomeRiskSetupButton.setOnClickListener {
             openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP)
         }
+        binding.openVpnSetupButton.setOnClickListener {
+            openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_VPN_SETUP)
+        }
         binding.openCredentialCenterButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
         }

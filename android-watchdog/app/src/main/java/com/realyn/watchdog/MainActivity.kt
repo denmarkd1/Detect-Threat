@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
         const val GUARDIAN_SETTINGS_ACTION_OPEN_AI_CONNECTION = "open_ai_connection"
         const val GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP = "open_locator_setup"
         const val GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP = "open_home_risk_setup"
+        const val GUARDIAN_SETTINGS_ACTION_OPEN_VPN_SETUP = "open_vpn_setup"
 
         private const val UI_PREFS_FILE = "dt_ui_prefs"
         private const val KEY_HOME_INTRO_SHOWN = "home_intro_shown_v4"
@@ -197,10 +198,45 @@ class MainActivity : AppCompatActivity() {
     )
 
     private data class VpnStatusLookupResult(
+        val assertion: VpnAssertionState,
         val providerId: String,
+        val providerLabel: String,
         val state: String,
         val details: String,
-        val checkedAtIso: String
+        val checkedAtIso: String,
+        val reasonCode: String,
+        val brokerNotice: String,
+        val providerDataNotice: String,
+        val paidTierNotice: String,
+        val paidRequired: Boolean
+    )
+
+    private enum class VpnSetupStatus {
+        READY,
+        ROLLOUT_DISABLED,
+        CONNECTOR_UNAVAILABLE,
+        CONSENT_FAILED,
+        PAID_TIER_REQUIRED,
+        LAUNCH_FAILED
+    }
+
+    private data class VpnSetupResult(
+        val status: VpnSetupStatus,
+        val providerId: String = "",
+        val providerLabel: String = "",
+        val assertion: VpnAssertionState = VpnAssertionState.UNKNOWN,
+        val state: String = "",
+        val details: String = "",
+        val checkedAtIso: String = "",
+        val launchMode: String = "",
+        val ownerRole: String = "",
+        val rolloutStage: String = "",
+        val rolloutPercent: Int = 0,
+        val paidTierRequired: Boolean = false,
+        val brokerNotice: String = "",
+        val providerDataNotice: String = "",
+        val paidTierNotice: String = "",
+        val errorMessage: String = ""
     )
 
     private data class GuidedSuggestion(
@@ -263,6 +299,7 @@ class MainActivity : AppCompatActivity() {
         val homeRiskConsent: ConnectorConsentArtifact?,
         val vpnEnabled: Boolean,
         val vpnConsent: ConnectorConsentArtifact?,
+        val vpnAssertion: VpnStatusAssertion,
         val digitalKeyEnabled: Boolean,
         val rootPosture: RootPosture,
         val guardianEntries: List<GuardianAlertEntry>,
@@ -905,7 +942,7 @@ class MainActivity : AppCompatActivity() {
             HomeNavDestination.CREDENTIALS -> openCredentialCenter()
             HomeNavDestination.SERVICES -> openSecurityDetailsDialog()
             HomeNavDestination.HOME_RISK -> openHomeRiskEntryPoint()
-            HomeNavDestination.VPN -> openVpnStatusDialog()
+            HomeNavDestination.VPN -> openVpnEntryPoint()
             HomeNavDestination.DIGITAL_KEY -> openDigitalKeyGuardrailsDialog()
             HomeNavDestination.TIMELINE -> openTimelineReportDialog()
         }
@@ -984,6 +1021,7 @@ class MainActivity : AppCompatActivity() {
             connectorId = meshState.vpnConnectorId,
             ownerId = meshState.ownerId
         )
+        val vpnAssertion = VpnStatusAssertions.resolveCached(this)
         val digitalKeyEnabled = IntegrationMeshController.isModuleEnabled(
             this,
             IntegrationMeshModule.DIGITAL_KEY_RISK_ADAPTER
@@ -1004,7 +1042,11 @@ class MainActivity : AppCompatActivity() {
             HomeNavDestination.CREDENTIALS to queueHasPending,
             HomeNavDestination.SERVICES to serviceNeedsAction,
             HomeNavDestination.HOME_RISK to (!homeRiskEnabled || homeRiskConsent == null),
-            HomeNavDestination.VPN to (!vpnEnabled || vpnConsent == null),
+            HomeNavDestination.VPN to (
+                !vpnEnabled ||
+                    vpnConsent == null ||
+                    vpnAssertion.assertion != VpnAssertionState.CONNECTED
+                ),
             HomeNavDestination.DIGITAL_KEY to (
                 !digitalKeyEnabled ||
                     rootRisk == RootRiskTier.COMPROMISED ||
@@ -2521,7 +2563,7 @@ class MainActivity : AppCompatActivity() {
             .setItems(actions) { _, which ->
                 when (which) {
                     0 -> openHomeRiskEntryPoint()
-                    1 -> openVpnStatusDialog()
+                    1 -> openVpnEntryPoint()
                     2 -> openTimelineReportDialog()
                     3 -> openSecurityDetailsDialog()
                     4 -> openGuardianSettingsDialog()
@@ -2933,6 +2975,239 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun openVpnEntryPoint() {
+        val assertion = VpnStatusAssertions.resolveCached(this)
+        if (assertion.reasonCode == "rollout_disabled" ||
+            assertion.reasonCode == "connector_missing" ||
+            assertion.reasonCode == "consent_missing"
+        ) {
+            openVpnSetupFlow()
+            return
+        }
+        openVpnStatusDialog()
+    }
+
+    private fun openVpnSetupFlow() {
+        if (homeIntroAnimating) {
+            return
+        }
+        setBusy(true, getString(R.string.vpn_setup_loading))
+        lifecycleScope.launch {
+            try {
+                val result = resolveVpnSetup()
+                if (isFinishing || isDestroyed) {
+                    return@launch
+                }
+                val dialogBuilder = LionAlertDialogBuilder(this@MainActivity)
+                    .setTitle(R.string.vpn_setup_dialog_title)
+                    .setMessage(buildVpnSetupDialogMessage(result))
+                    .setPositiveButton(android.R.string.ok, null)
+
+                when (result.status) {
+                    VpnSetupStatus.READY -> {
+                        dialogBuilder.setNeutralButton(R.string.lion_nav_action_vpn_status) { _, _ ->
+                            openVpnStatusDialog()
+                        }
+                    }
+                    VpnSetupStatus.PAID_TIER_REQUIRED -> {
+                        dialogBuilder.setNeutralButton(R.string.action_open_billing) { _, _ ->
+                            openPlanSelectionDialog()
+                        }
+                    }
+                    VpnSetupStatus.ROLLOUT_DISABLED,
+                    VpnSetupStatus.CONNECTOR_UNAVAILABLE,
+                    VpnSetupStatus.CONSENT_FAILED,
+                    VpnSetupStatus.LAUNCH_FAILED -> {
+                        dialogBuilder.setNeutralButton(R.string.action_guardian_settings) { _, _ ->
+                            openGuardianSettingsDialog()
+                        }
+                    }
+                }
+
+                dialogBuilder.show()
+                if (result.status == VpnSetupStatus.READY) {
+                    refreshUiState()
+                }
+            } finally {
+                if (!isFinishing && !isDestroyed) {
+                    setBusy(false)
+                }
+            }
+        }
+    }
+
+    private suspend fun resolveVpnSetup(): VpnSetupResult {
+        IntegrationMeshController.refresh(this)
+        val state = IntegrationMeshController.snapshot(this)
+        val config = IntegrationMeshController.readConfig(this)
+        val vpnConfig = config.connectors.vpnBrokers
+        val provider = VpnProviderRegistry.resolveProvider(vpnConfig, state.vpnConnectorId)
+        val activeStage = config.rollout.activeStageForOwner(state.ownerRole)
+        val rolloutStage = activeStage?.name ?: config.rollout.currentStage
+        val rolloutPercent = minOf(
+            config.featureFlags.vpnProviderConnector.maxRolloutPercent,
+            activeStage?.maxPercent ?: config.featureFlags.vpnProviderConnector.maxRolloutPercent
+        ).coerceAtLeast(0)
+
+        val enabled = IntegrationMeshController.isModuleEnabled(
+            context = this,
+            module = IntegrationMeshModule.VPN_PROVIDER_CONNECTOR
+        )
+        if (!enabled) {
+            return VpnSetupResult(
+                status = VpnSetupStatus.ROLLOUT_DISABLED,
+                providerId = provider.id,
+                providerLabel = provider.label,
+                ownerRole = state.ownerRole,
+                rolloutStage = rolloutStage,
+                rolloutPercent = rolloutPercent,
+                brokerNotice = vpnConfig.disclosurePolicy.brokerNotice,
+                providerDataNotice = vpnConfig.disclosurePolicy.providerDataNotice,
+                paidTierNotice = vpnConfig.disclosurePolicy.paidTierNotice
+            )
+        }
+
+        val connector = IntegrationMeshController.getActiveVpnConnector(this)
+            ?: return VpnSetupResult(
+                status = VpnSetupStatus.CONNECTOR_UNAVAILABLE,
+                providerId = provider.id,
+                providerLabel = provider.label,
+                ownerRole = state.ownerRole,
+                brokerNotice = vpnConfig.disclosurePolicy.brokerNotice,
+                providerDataNotice = vpnConfig.disclosurePolicy.providerDataNotice,
+                paidTierNotice = vpnConfig.disclosurePolicy.paidTierNotice
+            )
+
+        val access = PricingPolicy.resolveFeatureAccess(this)
+        val paidTierRequired = VpnProviderRegistry.isPaidTierRequired(vpnConfig, provider)
+        if (paidTierRequired && !access.paidAccess) {
+            return VpnSetupResult(
+                status = VpnSetupStatus.PAID_TIER_REQUIRED,
+                providerId = provider.id,
+                providerLabel = provider.label,
+                ownerRole = state.ownerRole,
+                paidTierRequired = true,
+                brokerNotice = vpnConfig.disclosurePolicy.brokerNotice,
+                providerDataNotice = vpnConfig.disclosurePolicy.providerDataNotice,
+                paidTierNotice = vpnConfig.disclosurePolicy.paidTierNotice
+            )
+        }
+
+        val consent = IntegrationMeshAuditStore.latestActiveConsent(
+            context = this,
+            connectorId = state.vpnConnectorId,
+            ownerId = state.ownerId
+        ) ?: connector.ensureConsent(this, state.ownerRole)
+            ?: return VpnSetupResult(
+                status = VpnSetupStatus.CONSENT_FAILED,
+                providerId = provider.id,
+                providerLabel = provider.label,
+                ownerRole = state.ownerRole,
+                brokerNotice = vpnConfig.disclosurePolicy.brokerNotice,
+                providerDataNotice = vpnConfig.disclosurePolicy.providerDataNotice,
+                paidTierNotice = vpnConfig.disclosurePolicy.paidTierNotice,
+                errorMessage = "consent_artifact_unavailable"
+            )
+
+        val launchResult = connector.launchProvider(this, consent)
+        val assertion = VpnStatusAssertions.resolve(this)
+        val status = if (launchResult.opened) VpnSetupStatus.READY else VpnSetupStatus.LAUNCH_FAILED
+        val checkedAtIso = if (assertion.checkedAtEpochMs > 0L) {
+            toIsoUtc(assertion.checkedAtEpochMs)
+        } else {
+            ""
+        }
+
+        return VpnSetupResult(
+            status = status,
+            providerId = assertion.providerId.ifBlank { provider.id },
+            providerLabel = assertion.providerLabel.ifBlank { provider.label },
+            assertion = assertion.assertion,
+            state = assertion.rawState,
+            details = assertion.details,
+            checkedAtIso = checkedAtIso,
+            launchMode = launchResult.launchMode,
+            ownerRole = state.ownerRole,
+            paidTierRequired = paidTierRequired,
+            brokerNotice = vpnConfig.disclosurePolicy.brokerNotice,
+            providerDataNotice = vpnConfig.disclosurePolicy.providerDataNotice,
+            paidTierNotice = vpnConfig.disclosurePolicy.paidTierNotice,
+            errorMessage = if (launchResult.opened) "" else launchResult.launchMode
+        )
+    }
+
+    private fun buildVpnSetupDialogMessage(result: VpnSetupResult): String {
+        return when (result.status) {
+            VpnSetupStatus.READY -> buildString {
+                append(
+                    getString(
+                        R.string.vpn_setup_ready_template,
+                        result.providerLabel.ifBlank { result.providerId },
+                        vpnAssertionLabel(result.assertion),
+                        result.state.ifBlank { getString(R.string.vpn_status_state_unknown) },
+                        result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
+                        result.details.ifBlank { getString(R.string.vpn_status_details_none) },
+                        result.launchMode.ifBlank { getString(R.string.vpn_status_details_none) }
+                    )
+                )
+                if (result.brokerNotice.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+                }
+                if (result.providerDataNotice.isNotBlank()) {
+                    appendLine()
+                    append(getString(R.string.vpn_status_disclosure_provider_template, result.providerDataNotice))
+                }
+            }.trim()
+
+            VpnSetupStatus.ROLLOUT_DISABLED -> getString(
+                R.string.vpn_setup_rollout_disabled_template,
+                result.ownerRole.ifBlank { "owner" },
+                result.rolloutStage.ifBlank { "unassigned" },
+                result.rolloutPercent
+            )
+
+            VpnSetupStatus.CONNECTOR_UNAVAILABLE -> getString(
+                R.string.vpn_setup_connector_missing_template,
+                result.providerId.ifBlank { "vpn_provider" }
+            )
+
+            VpnSetupStatus.CONSENT_FAILED -> buildString {
+                append(getString(R.string.vpn_setup_consent_failed))
+                if (result.errorMessage.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(result.errorMessage)
+                }
+            }
+
+            VpnSetupStatus.PAID_TIER_REQUIRED -> buildString {
+                append(
+                    getString(
+                        R.string.vpn_setup_paid_required_template,
+                        result.providerLabel.ifBlank { result.providerId },
+                        result.paidTierNotice.ifBlank { getString(R.string.vpn_status_paid_required_default) }
+                    )
+                )
+                if (result.brokerNotice.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+                }
+            }
+
+            VpnSetupStatus.LAUNCH_FAILED -> buildString {
+                append(getString(R.string.vpn_setup_launch_failed))
+                if (result.errorMessage.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(result.errorMessage)
+                }
+            }
+        }
+    }
+
     private fun openVpnStatusDialog() {
         if (homeIntroAnimating) {
             return
@@ -2942,19 +3217,22 @@ class MainActivity : AppCompatActivity() {
             try {
                 val result = withContext(Dispatchers.Default) { resolveVpnStatusLookup() }
                 if (!isFinishing && !isDestroyed) {
-                    LionAlertDialogBuilder(this@MainActivity)
+                    val dialogBuilder = LionAlertDialogBuilder(this@MainActivity)
                         .setTitle(R.string.vpn_status_dialog_title)
-                        .setMessage(
-                            getString(
-                                R.string.vpn_status_summary_template,
-                                result.providerId,
-                                result.state,
-                                result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
-                                result.details
-                            )
-                        )
+                        .setMessage(buildVpnStatusDialogMessage(result))
                         .setPositiveButton(android.R.string.ok, null)
-                        .show()
+                        .setNeutralButton(R.string.action_vpn_setup) { _, _ ->
+                            openVpnSetupFlow()
+                        }
+
+                    val access = PricingPolicy.resolveFeatureAccess(this@MainActivity)
+                    if (result.paidRequired && !access.paidAccess) {
+                        dialogBuilder.setNegativeButton(R.string.action_open_billing) { _, _ ->
+                            openPlanSelectionDialog()
+                        }
+                    }
+
+                    dialogBuilder.show()
                 }
             } finally {
                 if (!isFinishing && !isDestroyed) {
@@ -2965,45 +3243,66 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun resolveVpnStatusLookup(): VpnStatusLookupResult {
-        val state = IntegrationMeshController.snapshot(this)
-        val enabled = IntegrationMeshController.isModuleEnabled(
-            context = this,
-            module = IntegrationMeshModule.VPN_PROVIDER_CONNECTOR
-        )
-        if (!enabled) {
-            return VpnStatusLookupResult(
-                providerId = state.vpnConnectorId,
-                state = getString(R.string.vpn_status_state_not_configured),
-                details = getString(R.string.vpn_status_not_configured),
-                checkedAtIso = ""
-            )
+        val assertion = VpnStatusAssertions.resolve(this)
+        val config = IntegrationMeshController.readConfig(this).connectors.vpnBrokers
+        val provider = VpnProviderRegistry.resolveProvider(config, assertion.providerId.ifBlank { config.defaultProviderId })
+        val paidRequired = VpnProviderRegistry.isPaidTierRequired(config, provider)
+        val details = when (assertion.reasonCode) {
+            "rollout_disabled" -> getString(R.string.vpn_status_not_configured)
+            "connector_missing" -> getString(R.string.vpn_status_connector_missing)
+            "consent_missing" -> getString(R.string.vpn_status_consent_missing)
+            else -> assertion.details.ifBlank { getString(R.string.vpn_status_details_none) }
         }
-        val connector = IntegrationMeshController.getActiveVpnConnector(this)
-            ?: return VpnStatusLookupResult(
-                providerId = state.vpnConnectorId,
-                state = getString(R.string.vpn_status_state_unavailable),
-                details = getString(R.string.vpn_status_connector_missing),
-                checkedAtIso = ""
-            )
-
-        val consent = IntegrationMeshAuditStore.latestActiveConsent(
-            context = this,
-            connectorId = state.vpnConnectorId,
-            ownerId = state.ownerId
-        ) ?: return VpnStatusLookupResult(
-            providerId = state.vpnConnectorId,
-            state = getString(R.string.vpn_status_state_authorization_needed),
-            details = getString(R.string.vpn_status_consent_missing),
-            checkedAtIso = ""
-        )
-
-        val connection = connector.queryConnectionState(this, consent)
         return VpnStatusLookupResult(
-            providerId = connection.providerId,
-            state = connection.state,
-            details = connection.details,
-            checkedAtIso = toIsoUtc(connection.checkedAtEpochMs)
+            assertion = assertion.assertion,
+            providerId = assertion.providerId.ifBlank { provider.id },
+            providerLabel = assertion.providerLabel.ifBlank { provider.label },
+            state = assertion.rawState.ifBlank { getString(R.string.vpn_status_state_unknown) },
+            details = details,
+            checkedAtIso = if (assertion.checkedAtEpochMs > 0L) toIsoUtc(assertion.checkedAtEpochMs) else "",
+            reasonCode = assertion.reasonCode,
+            brokerNotice = config.disclosurePolicy.brokerNotice,
+            providerDataNotice = config.disclosurePolicy.providerDataNotice,
+            paidTierNotice = config.disclosurePolicy.paidTierNotice,
+            paidRequired = paidRequired
         )
+    }
+
+    private fun buildVpnStatusDialogMessage(result: VpnStatusLookupResult): String {
+        return buildString {
+            append(
+                getString(
+                    R.string.vpn_status_summary_template,
+                    result.providerLabel.ifBlank { result.providerId },
+                    vpnAssertionLabel(result.assertion),
+                    result.state,
+                    result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
+                    result.details
+                )
+            )
+            if (result.brokerNotice.isNotBlank()) {
+                appendLine()
+                appendLine()
+                append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+            }
+            if (result.providerDataNotice.isNotBlank()) {
+                appendLine()
+                append(getString(R.string.vpn_status_disclosure_provider_template, result.providerDataNotice))
+            }
+            if (result.paidRequired && result.paidTierNotice.isNotBlank()) {
+                appendLine()
+                append(getString(R.string.vpn_status_disclosure_paid_template, result.paidTierNotice))
+            }
+        }.trim()
+    }
+
+    private fun vpnAssertionLabel(assertion: VpnAssertionState): String {
+        return when (assertion) {
+            VpnAssertionState.CONFIGURED -> getString(R.string.vpn_assertion_configured)
+            VpnAssertionState.CONNECTED -> getString(R.string.vpn_assertion_connected)
+            VpnAssertionState.STALE -> getString(R.string.vpn_assertion_stale)
+            VpnAssertionState.UNKNOWN -> getString(R.string.vpn_assertion_unknown)
+        }
     }
 
     private fun openDigitalKeyGuardrailsDialog() {
@@ -3094,6 +3393,7 @@ class MainActivity : AppCompatActivity() {
             GUARDIAN_SETTINGS_ACTION_OPEN_AI_CONNECTION -> openConnectedAiDialog()
             GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP -> openDeviceLocatorSetupDialog()
             GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP -> openHomeRiskSetupFlow()
+            GUARDIAN_SETTINGS_ACTION_OPEN_VPN_SETUP -> openVpnSetupFlow()
         }
     }
 
@@ -5571,6 +5871,7 @@ class MainActivity : AppCompatActivity() {
             connectorId = meshState.vpnConnectorId,
             ownerId = meshState.ownerId
         )
+        val vpnAssertion = VpnStatusAssertions.resolveCached(this)
 
         val digitalKeyEnabled = IntegrationMeshController.isModuleEnabled(
             this,
@@ -5602,6 +5903,7 @@ class MainActivity : AppCompatActivity() {
             homeRiskConsent = homeRiskConsent,
             vpnEnabled = vpnEnabled,
             vpnConsent = vpnConsent,
+            vpnAssertion = vpnAssertion,
             digitalKeyEnabled = digitalKeyEnabled,
             rootPosture = rootPosture,
             guardianEntries = guardianEntries,
@@ -5679,11 +5981,14 @@ class MainActivity : AppCompatActivity() {
             widgetVpnValue = when {
                 !inputs.vpnEnabled -> getString(R.string.home_widget_vpn_setup_needed)
                 inputs.vpnConsent == null -> getString(R.string.home_widget_vpn_authorize)
-                else -> getString(R.string.home_widget_vpn_ready)
+                inputs.vpnAssertion.assertion == VpnAssertionState.CONNECTED -> getString(R.string.home_widget_vpn_connected)
+                inputs.vpnAssertion.assertion == VpnAssertionState.STALE -> getString(R.string.home_widget_vpn_stale)
+                inputs.vpnAssertion.assertion == VpnAssertionState.CONFIGURED -> getString(R.string.home_widget_vpn_configured)
+                else -> getString(R.string.home_widget_vpn_unknown)
             },
             widgetVpnHint = getString(
                 R.string.home_widget_vpn_hint_template,
-                inputs.meshState.vpnConnectorId
+                inputs.vpnAssertion.providerLabel.ifBlank { inputs.meshState.vpnConnectorId }
             ),
             widgetDigitalKeyValue = if (inputs.digitalKeyEnabled) {
                 getString(R.string.home_widget_digital_key_enabled)
@@ -5764,7 +6069,11 @@ class MainActivity : AppCompatActivity() {
             HomeNavDestination.CREDENTIALS to queueHasPending,
             HomeNavDestination.SERVICES to serviceNeedsAction,
             HomeNavDestination.HOME_RISK to (!inputs.homeRiskEnabled || inputs.homeRiskConsent == null),
-            HomeNavDestination.VPN to (!inputs.vpnEnabled || inputs.vpnConsent == null),
+            HomeNavDestination.VPN to (
+                !inputs.vpnEnabled ||
+                    inputs.vpnConsent == null ||
+                    inputs.vpnAssertion.assertion != VpnAssertionState.CONNECTED
+                ),
             HomeNavDestination.DIGITAL_KEY to (
                 !inputs.digitalKeyEnabled ||
                     rootRisk == RootRiskTier.COMPROMISED ||

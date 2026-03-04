@@ -1,37 +1,88 @@
 package com.realyn.watchdog
 
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import android.net.NetworkInfo
 import android.os.Build
-import android.provider.Settings
 import java.util.Locale
 import java.util.UUID
 
 class PartnerVpnProviderConnector(
     private val providerConfig: IntegrationMeshVpnConfig,
     override val providerId: String,
-    override val providerLabel: String = "Partner VPN Provider Connector"
+    override val providerLabel: String = "Partner VPN Provider Connector",
+    private val requiredScopes: List<String> = listOf("vpn:launch", "vpn:status")
 ) : VpnProviderConnector {
 
-    private val prefsKeyState = "integration_mesh_vpn_state_"
-    private val prefsKeyDetails = "integration_mesh_vpn_details_"
-    private val prefsKeyCheckedAt = "integration_mesh_vpn_checked_at_"
     private val allowedStatuses = providerConfig.allowedStatuses.ifEmpty {
         listOf("connected", "connecting", "disconnected", "unknown", "error")
+    }
+    private val consentScopes = requiredScopes
+        .map { it.trim().lowercase(Locale.US) }
+        .filter { it.isNotBlank() }
+        .ifEmpty { listOf("vpn:launch", "vpn:status") }
+
+    override suspend fun ensureConsent(
+        context: Context,
+        ownerRole: String
+    ): ConnectorConsentArtifact? {
+        val normalizedOwnerRole = IntegrationMeshController.resolveOwnerRole(context, ownerRole)
+        val ownerId = resolveOwnerId(context, normalizedOwnerRole)
+        val now = System.currentTimeMillis()
+        val previous = IntegrationMeshAuditStore.latestActiveConsent(context, providerId, ownerId)
+
+        if (isConsentActive(previous, now)) {
+            return previous
+        }
+
+        if (previous != null && previous.status.equals("active", ignoreCase = true) && previous.revokedAtEpochMs == 0L) {
+            revokeArtifact(context, previous, now)
+        }
+
+        val artifact = ConnectorConsentArtifact(
+            schemaVersion = INTEGRATION_MESH_SCHEMA_VERSION,
+            artifactId = UUID.randomUUID().toString(),
+            connectorId = providerId,
+            connectorType = "vpn_provider",
+            ownerRole = normalizedOwnerRole,
+            ownerId = ownerId,
+            grantedAtEpochMs = now,
+            grantedAtIso = toIsoUtc(now),
+            expiresAtEpochMs = now + CONSENT_TTL_MS,
+            revokedAtEpochMs = 0L,
+            status = "active",
+            proofHash = createHash("$providerId|$ownerId|vpn_provider|$now"),
+            grantedBy = normalizedOwnerRole,
+            appVersion = appVersion(context),
+            consentScopes = consentScopes,
+            actionRef = "PartnerVpnProviderConnector.ensureConsent"
+        )
+        IntegrationMeshAuditStore.appendConsentArtifact(context, artifact)
+
+        logConnectorEvent(
+            context = context,
+            connectorId = providerId,
+            connectorType = "vpn_provider",
+            ownerRole = normalizedOwnerRole,
+            ownerId = ownerId,
+            actorRole = normalizedOwnerRole,
+            actorId = ownerId,
+            consentArtifactId = artifact.artifactId,
+            eventType = "vpn_provider.consent.issued",
+            recordType = CONSENT_ARTIFACT_RECORD_TYPE,
+            outcome = "success",
+            sourceModule = "integration_mesh_controller",
+            details = "VPN provider consent issued"
+        )
+
+        return artifact
     }
 
     override suspend fun queryConnectionState(
         context: Context,
         consentArtifact: ConnectorConsentArtifact
     ): VpnProviderConnectionState {
-        val stateStore = readState(context, consentArtifact.ownerId)
         val now = System.currentTimeMillis()
         val consentActive = isConsentActive(consentArtifact, now)
-
         if (!consentActive) {
             return VpnProviderConnectionState(
                 providerId = providerId,
@@ -41,22 +92,39 @@ class PartnerVpnProviderConnector(
             )
         }
 
-        val vpnActive = isVpnTransportActive(context)
-        val status = when {
-            isStateCacheStale(stateStore.checkedAtEpochMs, now) -> "unknown"
-            stateStore.state.equals("connecting", ignoreCase = true) -> "connecting"
-            stateStore.state.equals("error", ignoreCase = true) -> "error"
-            vpnActive -> "connected"
-            else -> sanitizeState(stateStore.state).ifBlank { "disconnected" }
+        val cached = VpnStateStore.read(context, consentArtifact.ownerId)
+        val hasTransport = VpnStatusAssertions.isVpnTransportActive(context)
+        val staleMillis = providerConfig.staleAfterMinutes.coerceAtLeast(1).toLong() * 60L * 1000L
+        val stale = cached.checkedAtEpochMs > 0L && now - cached.checkedAtEpochMs > staleMillis
+
+        val baseState = when {
+            hasTransport -> "connected"
+            cached.state.isBlank() -> "disconnected"
+            else -> cached.state
         }
 
-        val details = when (status) {
-            "connecting" -> stateStore.details.ifBlank { "partner_vpn_launch_in_progress" }
-            "error" -> stateStore.details.ifBlank { "vpn_state_query_error" }
-            "unknown" -> "state_cache_stale"
-            "connected" -> "system_vpn_transport_detected"
-            else -> stateStore.details.ifBlank { "partner_vpn_state_disconnected" }
+        val normalizedState = when {
+            stale -> "unknown"
+            else -> sanitizeState(baseState)
         }
+
+        val details = when {
+            stale -> "state_cache_stale"
+            hasTransport -> "system_vpn_transport_detected"
+            normalizedState == "connecting" -> cached.details.ifBlank { "provider_launch_in_progress" }
+            normalizedState == "error" -> cached.details.ifBlank { "vpn_state_query_error" }
+            normalizedState == "disconnected" -> cached.details.ifBlank { "provider_disconnected" }
+            else -> cached.details.ifBlank { "provider_state_unknown" }
+        }
+
+        VpnStateStore.write(
+            context = context,
+            ownerId = consentArtifact.ownerId,
+            providerId = providerId,
+            state = normalizedState,
+            details = details,
+            checkedAtEpochMs = now
+        )
 
         logConnectorEvent(
             context = context,
@@ -69,20 +137,23 @@ class PartnerVpnProviderConnector(
             consentArtifactId = consentArtifact.artifactId,
             eventType = "vpn_provider.connection.state",
             recordType = CONNECTOR_AUDIT_EVENT_TYPE,
-            outcome = if (status == "error") "failed" else "success",
+            outcome = if (normalizedState == "error") "failed" else "success",
             sourceModule = "integration_mesh_controller",
-            details = "provider_state=$status, details=$details"
+            details = "provider_state=$normalizedState, details=$details"
         )
 
         return VpnProviderConnectionState(
             providerId = providerId,
-            state = status,
+            state = normalizedState,
             checkedAtEpochMs = now,
             details = details
         )
     }
 
-    override suspend fun launchProvider(context: Context, consentArtifact: ConnectorConsentArtifact) {
+    override suspend fun launchProvider(
+        context: Context,
+        consentArtifact: ConnectorConsentArtifact
+    ): VpnProviderLaunchResult {
         val now = System.currentTimeMillis()
         if (!isConsentActive(consentArtifact, now)) {
             logConnectorEvent(
@@ -98,19 +169,30 @@ class PartnerVpnProviderConnector(
                 recordType = CONNECTOR_AUDIT_EVENT_TYPE,
                 outcome = "blocked",
                 sourceModule = "integration_mesh_controller",
-                details = "Partner VPN launch blocked: consent inactive"
+                details = "Launch blocked: consent inactive"
             )
-            return
+            return VpnProviderLaunchResult(
+                opened = false,
+                launchMode = "blocked_consent",
+                launchTarget = "",
+                providerId = providerId,
+                providerLabel = providerLabel
+            )
         }
 
-        writeState(context, consentArtifact.ownerId, "connecting", "partner_vpn_launch_requested")
-
-        val launched = launchPartnerPackage(context)
-        if (launched) {
-            writeState(context, consentArtifact.ownerId, "connected", "partner_vpn_app_launched")
+        val provider = VpnProviderRegistry.resolveProvider(providerConfig, providerId)
+        val access = PricingPolicy.resolveFeatureAccess(context)
+        if (!VpnProviderRegistry.canUseProviderForTier(providerConfig, provider, access)) {
+            VpnStateStore.write(
+                context = context,
+                ownerId = consentArtifact.ownerId,
+                providerId = provider.id,
+                state = "error",
+                details = "paid_tier_required"
+            )
             logConnectorEvent(
                 context = context,
-                connectorId = providerId,
+                connectorId = provider.id,
                 connectorType = "vpn_provider",
                 ownerRole = consentArtifact.ownerRole,
                 ownerId = consentArtifact.ownerId,
@@ -119,18 +201,39 @@ class PartnerVpnProviderConnector(
                 consentArtifactId = consentArtifact.artifactId,
                 eventType = "vpn_provider.launch",
                 recordType = CONNECTOR_AUDIT_EVENT_TYPE,
-                outcome = "success",
+                outcome = "blocked",
                 sourceModule = "integration_mesh_controller",
-                details = "partner_vpn_app_launched"
+                details = "Launch blocked: paid tier required"
             )
-            return
+            return VpnProviderLaunchResult(
+                opened = false,
+                launchMode = "blocked_paid_tier",
+                launchTarget = provider.id,
+                providerId = provider.id,
+                providerLabel = provider.label
+            )
         }
 
-        if (launchVpnSystemSettings(context)) {
-            writeState(context, consentArtifact.ownerId, "connected", "partner_vpn_provider_launched")
+        VpnStateStore.write(
+            context = context,
+            ownerId = consentArtifact.ownerId,
+            providerId = provider.id,
+            state = "connecting",
+            details = "provider_launch_requested"
+        )
+
+        val launchResult = VpnProviderLaunchRouter.openProvider(context, provider)
+        if (!launchResult.opened) {
+            VpnStateStore.write(
+                context = context,
+                ownerId = consentArtifact.ownerId,
+                providerId = provider.id,
+                state = "error",
+                details = "launch_failed"
+            )
             logConnectorEvent(
                 context = context,
-                connectorId = providerId,
+                connectorId = provider.id,
                 connectorType = "vpn_provider",
                 ownerRole = consentArtifact.ownerRole,
                 ownerId = consentArtifact.ownerId,
@@ -139,14 +242,57 @@ class PartnerVpnProviderConnector(
                 consentArtifactId = consentArtifact.artifactId,
                 eventType = "vpn_provider.launch",
                 recordType = CONNECTOR_AUDIT_EVENT_TYPE,
-                outcome = "success",
+                outcome = "failed",
                 sourceModule = "integration_mesh_controller",
-                details = "partner_vpn_settings_opened"
+                details = "Unable to launch provider app or fallback URI"
             )
+            return launchResult
+        }
+
+        val hasTransport = VpnStatusAssertions.isVpnTransportActive(context)
+        val resolvedState = if (hasTransport) "connected" else "connecting"
+        val resolvedDetails = if (hasTransport) {
+            "system_vpn_transport_detected"
+        } else {
+            "provider_launched"
+        }
+
+        VpnStateStore.write(
+            context = context,
+            ownerId = consentArtifact.ownerId,
+            providerId = provider.id,
+            state = resolvedState,
+            details = resolvedDetails
+        )
+
+        logConnectorEvent(
+            context = context,
+            connectorId = provider.id,
+            connectorType = "vpn_provider",
+            ownerRole = consentArtifact.ownerRole,
+            ownerId = consentArtifact.ownerId,
+            actorRole = consentArtifact.ownerRole,
+            actorId = consentArtifact.ownerId,
+            consentArtifactId = consentArtifact.artifactId,
+            eventType = "vpn_provider.launch",
+            recordType = CONNECTOR_AUDIT_EVENT_TYPE,
+            outcome = "success",
+            sourceModule = "integration_mesh_controller",
+            details = "provider launched mode=${launchResult.launchMode} target=${launchResult.launchTarget}"
+        )
+
+        return launchResult
+    }
+
+    override suspend fun revoke(context: Context, consentArtifact: ConnectorConsentArtifact) {
+        val now = System.currentTimeMillis()
+        if (!isConsentActive(consentArtifact, now)) {
             return
         }
 
-        writeState(context, consentArtifact.ownerId, "error", "launch_failed")
+        revokeArtifact(context, consentArtifact, now)
+        VpnStateStore.clear(context, consentArtifact.ownerId)
+
         logConnectorEvent(
             context = context,
             connectorId = providerId,
@@ -156,144 +302,60 @@ class PartnerVpnProviderConnector(
             actorRole = consentArtifact.ownerRole,
             actorId = consentArtifact.ownerId,
             consentArtifactId = consentArtifact.artifactId,
-            eventType = "vpn_provider.launch",
-            recordType = CONNECTOR_AUDIT_EVENT_TYPE,
-            outcome = "failed",
+            eventType = "vpn_provider.consent.revoked",
+            recordType = CONSENT_ARTIFACT_RECORD_TYPE,
+            outcome = "success",
             sourceModule = "integration_mesh_controller",
-            details = "Unable to launch Partner VPN provider or open VPN settings"
+            details = "VPN consent revoked and state cleared"
         )
     }
 
-    override suspend fun revoke(context: Context, consentArtifact: ConnectorConsentArtifact) {
-        val now = System.currentTimeMillis()
-        if (!isConsentActive(consentArtifact, now)) {
-            return
-        }
+    private fun revokeArtifact(context: Context, consentArtifact: ConnectorConsentArtifact, now: Long) {
         val revokedArtifact = consentArtifact.copy(
             status = "revoked",
             revokedAtEpochMs = now
         )
         IntegrationMeshAuditStore.appendConsentArtifact(context, revokedArtifact)
-        writeState(context, consentArtifact.ownerId, "disconnected", "consent_revoked")
-        logConnectorEvent(
-            context = context,
-            connectorId = providerId,
-            connectorType = "vpn_provider",
-            ownerRole = consentArtifact.ownerRole,
-            ownerId = consentArtifact.ownerId,
-            actorRole = consentArtifact.ownerRole,
-            actorId = consentArtifact.ownerId,
-            consentArtifactId = revokedArtifact.artifactId,
-            eventType = "vpn_provider.consent.revoked",
-            recordType = CONSENT_ARTIFACT_RECORD_TYPE,
-            outcome = "success",
-            sourceModule = "integration_mesh_controller",
-            details = "Partner VPN consent revoked and state cleared"
-        )
     }
 
-    private fun launchVpnSystemSettings(context: Context): Boolean {
-        val settingsIntent = Intent(Settings.ACTION_VPN_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val canResolve = runCatching {
-            context.packageManager.resolveActivity(settingsIntent, PackageManager.MATCH_DEFAULT_ONLY) != null
-        }.getOrElse { false }
-        if (!canResolve) {
+    private fun isConsentActive(consentArtifact: ConnectorConsentArtifact?, now: Long): Boolean {
+        if (consentArtifact == null) {
             return false
         }
-        return runCatching {
-            context.startActivity(settingsIntent)
-            true
-        }.getOrDefault(false)
-    }
-
-    private fun launchPartnerPackage(context: Context): Boolean {
-        val packageName = firstInstalledPartnerPackage(context)
-            ?: return false
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName) ?: return false
-        return runCatching {
-            context.startActivity(
-                launchIntent.apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
-            true
-        }.getOrDefault(false)
-    }
-
-    private fun firstInstalledPartnerPackage(context: Context): String? {
-        return partnerVpnPackages.firstOrNull { isPackageInstalled(context, it) }
-    }
-
-    private fun isPackageInstalled(context: Context, packageName: String): Boolean {
-        return runCatching {
-            context.packageManager.getPackageInfo(packageName, 0)
-            true
-        }.getOrElse { false }
-    }
-
-    private fun isVpnTransportActive(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val activeNetwork = connectivityManager.activeNetwork ?: return false
-            val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-            return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-        }
-        @Suppress("DEPRECATION")
-        val networkInfo: NetworkInfo? = connectivityManager.activeNetworkInfo
-        return networkInfo?.type == ConnectivityManager.TYPE_VPN
-    }
-
-    private fun readState(context: Context, ownerId: String): VpnState {
-        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
-        val keyOwner = normalizedOwner(ownerId)
-        val keyState = prefs.getString("$prefsKeyState$keyOwner", "disconnected")?.trim().orEmpty()
-        val keyDetails = prefs.getString("$prefsKeyDetails$keyOwner", "")?.trim().orEmpty()
-        val keyCheckedAt = prefs.getLong("$prefsKeyCheckedAt$keyOwner", 0L)
-        return VpnState(
-            state = sanitizeState(keyState),
-            details = keyDetails,
-            checkedAtEpochMs = keyCheckedAt
-        )
-    }
-
-    private fun writeState(context: Context, ownerId: String, state: String, details: String) {
-        val prefs = context.getSharedPreferences(WatchdogConfig.PREFS_FILE, Context.MODE_PRIVATE)
-        val safeState = sanitizeState(state)
-        val now = System.currentTimeMillis()
-        val keyOwner = normalizedOwner(ownerId)
-
-        prefs.edit()
-            .putString("$prefsKeyState$keyOwner", safeState)
-            .putString("$prefsKeyDetails$keyOwner", details)
-            .putLong("$prefsKeyCheckedAt$keyOwner", now)
-            .apply()
-    }
-
-    private fun isConsentActive(consentArtifact: ConnectorConsentArtifact, now: Long): Boolean {
         return consentArtifact.status.equals("active", ignoreCase = true) &&
             consentArtifact.revokedAtEpochMs == 0L &&
             consentArtifact.grantedAtEpochMs <= now &&
             (consentArtifact.expiresAtEpochMs == 0L || consentArtifact.expiresAtEpochMs >= now)
     }
 
-    private fun isStateCacheStale(lastCheckedAtMs: Long, now: Long): Boolean {
-        val ttlMillis = providerConfig.healthTtlMinutes.coerceAtLeast(1).toLong() * 60L * 1000L
-        return lastCheckedAtMs > 0L && now - lastCheckedAtMs > ttlMillis
-    }
-
     private fun sanitizeState(raw: String): String {
         val lower = raw.trim().lowercase(Locale.US)
-        return when {
-            allowedStatuses.any { it.equals(lower, ignoreCase = true) } -> lower
-            else -> "unknown"
+        return if (allowedStatuses.any { it.equals(lower, ignoreCase = true) }) {
+            lower
+        } else {
+            "unknown"
         }
     }
 
-    private fun normalizedOwner(ownerId: String): String {
-        return ownerId.ifBlank { "default_owner" }.trim().lowercase(Locale.US)
+    private fun resolveOwnerId(context: Context, ownerRole: String): String {
+        val profile = PrimaryIdentityStore.readProfile(context)
+        if (ownerRole.equals(profile.familyRole, ignoreCase = true) && profile.primaryEmail.isNotBlank()) {
+            return profile.primaryEmail
+        }
+        return profile.identityLabel.ifBlank { ownerRole.ifBlank { "owner" } }
+    }
+
+    private fun appVersion(context: Context): String {
+        val packageManager = context.packageManager
+        val packageInfo = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageManager.getPackageInfo(context.packageName, 0).longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(context.packageName, 0).versionCode
+            }
+        }.getOrElse { 0L }
+        return packageInfo.toString()
     }
 
     private fun logConnectorEvent(
@@ -335,19 +397,7 @@ class PartnerVpnProviderConnector(
         IntegrationMeshAuditStore.appendConnectorEvent(context, event)
     }
 
-    private data class VpnState(
-        val state: String,
-        val details: String,
-        val checkedAtEpochMs: Long
-    )
-
     companion object {
-        private val partnerVpnPackages = listOf(
-            "com.nordvpn.android",
-            "com.privateinternetaccess.android",
-            "com.expressvpn.vpn",
-            "com.pia",
-            "org.protonvpn.android"
-        )
+        private const val CONSENT_TTL_MS = 30L * 24L * 60L * 60L * 1000L
     }
 }

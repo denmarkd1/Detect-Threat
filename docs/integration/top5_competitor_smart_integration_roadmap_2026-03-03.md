@@ -306,6 +306,9 @@ The product is locked to **broker-first** for this roadmap.
 3. Add policy controls for `banking` and `developer` account classes.
 4. Add paid-tier controls and transparent disclosures.
 
+Implementation status (2026-03-04):
+- Delivered in `android-watchdog` with provider registry + launch router, assertion resolver, credential queue policy gate for `banking`/`developer`, and paid-tier/disclosure messaging in setup/status surfaces.
+
 ## Phase 4 - Digital key risk guardrails (2 weeks)
 1. Add wallet/manufacturer setup guidance and key-risk checklist.
 2. Add lock-screen/biometric/integrity prerequisite checks for high-risk actions.

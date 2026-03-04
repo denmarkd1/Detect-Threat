@@ -397,17 +397,24 @@
         "require_redemption_proof": true
       },
       "vpn_provider_connector": {
-        "enabled": false,
+        "enabled": true,
         "rollout_stage": "internal_test",
         "owner_allowlist": [
           "parent",
-          "child"
+          "child",
+          "son"
         ],
-        "max_rollout_percent": 0,
+        "max_rollout_percent": 100,
         "supported_connector_ids": [
-          "partner_vpn"
+          "partner_vpn",
+          "protonvpn",
+          "system_vpn"
         ],
-        "require_redemption_proof": true
+        "require_redemption_proof": true,
+        "required_scopes": [
+          "vpn:launch",
+          "vpn:status"
+        ]
       },
       "digital_key_risk_adapter": {
         "enabled": false,
@@ -487,7 +494,65 @@
           "disconnected",
           "unknown",
           "error"
-        ]
+        ],
+        "stale_after_minutes": 30,
+        "default_provider_id": "partner_vpn",
+        "providers": [
+          {
+            "id": "partner_vpn",
+            "label": "Partner VPN",
+            "package_names": [
+              "com.nordvpn.android",
+              "com.privateinternetaccess.android",
+              "com.expressvpn.vpn",
+              "com.pia",
+              "org.protonvpn.android"
+            ],
+            "fallback_uri": "https://play.google.com/store/search?q=vpn&c=apps",
+            "setup_uri": "https://support.google.com/android/answer/9089766",
+            "paid_tier_required": true
+          },
+          {
+            "id": "protonvpn",
+            "label": "Proton VPN",
+            "package_names": [
+              "org.protonvpn.android"
+            ],
+            "deep_link_uri": "https://play.google.com/store/apps/details?id=org.protonvpn.android",
+            "fallback_uri": "https://play.google.com/store/apps/details?id=org.protonvpn.android",
+            "setup_uri": "https://protonvpn.com/support",
+            "paid_tier_required": false
+          },
+          {
+            "id": "system_vpn",
+            "label": "System VPN Settings",
+            "package_names": [],
+            "setup_uri": "https://support.google.com/android/answer/9089766",
+            "paid_tier_required": false
+          }
+        ],
+        "account_class_policy": {
+          "enabled": true,
+          "connected_required_categories": [
+            "banking"
+          ],
+          "configured_required_categories": [
+            "developer"
+          ],
+          "enforcement_mode": "block"
+        },
+        "paid_tier_policy": {
+          "paid_tier_required_for_linking": false,
+          "paid_only_provider_ids": [
+            "partner_vpn"
+          ],
+          "disclosure_required": true
+        },
+        "disclosures": {
+          "broker_notice": "DT Guardian brokers VPN provider launch and status checks. It does not run a device VPN tunnel.",
+          "provider_data_notice": "Provider account terms, privacy policy, and retention controls are managed by the selected VPN provider.",
+          "paid_tier_notice": "Some provider launch paths require a paid protection tier."
+        }
       },
       "digital_keys": {
         "supported_risk_categories": [

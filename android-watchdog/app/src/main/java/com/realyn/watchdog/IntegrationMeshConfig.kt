@@ -121,9 +121,44 @@ data class IntegrationMeshSmartHomeConfig(
     val defaultScopeSet: List<String>
 )
 
+data class IntegrationMeshVpnProvider(
+    val id: String,
+    val label: String,
+    val packageNames: List<String>,
+    val deepLinkUri: String,
+    val fallbackUri: String,
+    val setupUri: String,
+    val paidTierRequired: Boolean
+)
+
+data class IntegrationMeshVpnAccountClassPolicy(
+    val enabled: Boolean,
+    val connectedRequiredCategories: List<String>,
+    val configuredRequiredCategories: List<String>,
+    val enforcementMode: String
+)
+
+data class IntegrationMeshVpnPaidTierPolicy(
+    val paidTierRequiredForLinking: Boolean,
+    val paidOnlyProviderIds: List<String>,
+    val disclosureRequired: Boolean
+)
+
+data class IntegrationMeshVpnDisclosurePolicy(
+    val brokerNotice: String,
+    val providerDataNotice: String,
+    val paidTierNotice: String
+)
+
 data class IntegrationMeshVpnConfig(
     val healthTtlMinutes: Int,
-    val allowedStatuses: List<String>
+    val staleAfterMinutes: Int,
+    val allowedStatuses: List<String>,
+    val defaultProviderId: String,
+    val providers: List<IntegrationMeshVpnProvider>,
+    val accountClassPolicy: IntegrationMeshVpnAccountClassPolicy,
+    val paidTierPolicy: IntegrationMeshVpnPaidTierPolicy,
+    val disclosurePolicy: IntegrationMeshVpnDisclosurePolicy
 )
 
 data class IntegrationMeshDigitalKeyConfig(
@@ -138,6 +173,42 @@ fun loadIntegrationMeshConfig(context: Context): IntegrationMeshConfig {
 }
 
 object IntegrationMeshConfigStore {
+    private val defaultVpnProviders = listOf(
+        IntegrationMeshVpnProvider(
+            id = "partner_vpn",
+            label = "Partner VPN",
+            packageNames = listOf(
+                "com.nordvpn.android",
+                "com.privateinternetaccess.android",
+                "com.expressvpn.vpn",
+                "com.pia",
+                "org.protonvpn.android"
+            ),
+            deepLinkUri = "",
+            fallbackUri = "https://play.google.com/store/search?q=vpn&c=apps",
+            setupUri = "https://support.google.com/android/answer/9089766",
+            paidTierRequired = true
+        ),
+        IntegrationMeshVpnProvider(
+            id = "protonvpn",
+            label = "Proton VPN",
+            packageNames = listOf("org.protonvpn.android"),
+            deepLinkUri = "https://play.google.com/store/apps/details?id=org.protonvpn.android",
+            fallbackUri = "https://play.google.com/store/apps/details?id=org.protonvpn.android",
+            setupUri = "https://protonvpn.com/support",
+            paidTierRequired = false
+        ),
+        IntegrationMeshVpnProvider(
+            id = "system_vpn",
+            label = "System VPN Settings",
+            packageNames = emptyList(),
+            deepLinkUri = "",
+            fallbackUri = "",
+            setupUri = "https://support.google.com/android/answer/9089766",
+            paidTierRequired = false
+        )
+    )
+
     private val default = IntegrationMeshConfig(
         enabled = true,
         schemaVersion = 1,
@@ -145,25 +216,25 @@ object IntegrationMeshConfigStore {
             smartHomeConnector = IntegrationMeshModuleFeatureFlag(
                 enabled = true,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child"),
+                ownerAllowlist = listOf("parent", "child", "son"),
                 maxRolloutPercent = 100,
                 supportedConnectorIds = listOf("smartthings"),
                 requiredScopes = listOf("home:read", "home:devices:read"),
                 requireRedemptionProof = true
             ),
             vpnProviderConnector = IntegrationMeshModuleFeatureFlag(
-                enabled = false,
+                enabled = true,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child"),
-                maxRolloutPercent = 0,
-                supportedConnectorIds = listOf("partner_vpn"),
-                requiredScopes = emptyList(),
+                ownerAllowlist = listOf("parent", "child", "son"),
+                maxRolloutPercent = 100,
+                supportedConnectorIds = listOf("partner_vpn", "protonvpn", "system_vpn"),
+                requiredScopes = listOf("vpn:launch", "vpn:status"),
                 requireRedemptionProof = true
             ),
             digitalKeyRiskAdapter = IntegrationMeshModuleFeatureFlag(
                 enabled = false,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child"),
+                ownerAllowlist = listOf("parent", "child", "son"),
                 maxRolloutPercent = 0,
                 supportedConnectorIds = emptyList(),
                 requiredScopes = emptyList(),
@@ -179,19 +250,19 @@ object IntegrationMeshConfigStore {
                     name = "internal_test",
                     enabled = true,
                     maxPercent = 100,
-                    ownerRoles = listOf("parent", "child")
+                    ownerRoles = listOf("parent", "child", "son")
                 ),
                 IntegrationMeshRolloutStage(
                     name = "closed_test",
                     enabled = false,
                     maxPercent = 25,
-                    ownerRoles = listOf("parent", "child")
+                    ownerRoles = listOf("parent", "child", "son")
                 ),
                 IntegrationMeshRolloutStage(
                     name = "production",
                     enabled = false,
                     maxPercent = 5,
-                    ownerRoles = listOf("parent", "child")
+                    ownerRoles = listOf("parent", "child", "son")
                 )
             )
         ),
@@ -217,7 +288,26 @@ object IntegrationMeshConfigStore {
             ),
             vpnBrokers = IntegrationMeshVpnConfig(
                 healthTtlMinutes = 30,
-                allowedStatuses = listOf("connected", "connecting", "disconnected", "unknown", "error")
+                staleAfterMinutes = 30,
+                allowedStatuses = listOf("connected", "connecting", "disconnected", "unknown", "error"),
+                defaultProviderId = "partner_vpn",
+                providers = defaultVpnProviders,
+                accountClassPolicy = IntegrationMeshVpnAccountClassPolicy(
+                    enabled = true,
+                    connectedRequiredCategories = listOf("banking"),
+                    configuredRequiredCategories = listOf("developer"),
+                    enforcementMode = "block"
+                ),
+                paidTierPolicy = IntegrationMeshVpnPaidTierPolicy(
+                    paidTierRequiredForLinking = false,
+                    paidOnlyProviderIds = listOf("partner_vpn"),
+                    disclosureRequired = true
+                ),
+                disclosurePolicy = IntegrationMeshVpnDisclosurePolicy(
+                    brokerNotice = "DT Guardian brokers VPN provider launch and status checks. It does not run a device VPN tunnel.",
+                    providerDataNotice = "Provider account terms, privacy policy, and retention controls are managed by the selected VPN provider.",
+                    paidTierNotice = "Some provider launch paths require a paid protection tier."
+                )
             ),
             digitalKeys = IntegrationMeshDigitalKeyConfig(
                 supportedRiskCategories = listOf(
@@ -284,10 +374,10 @@ object IntegrationMeshConfigStore {
         return IntegrationMeshModuleFeatureFlag(
             enabled = payload.optBoolean("enabled", fallback.enabled),
             rolloutStage = payload.optString("rollout_stage", fallback.rolloutStage).trim(),
-            ownerAllowlist = parseStringList(payload.optJSONArray("owner_allowlist"), fallback.ownerAllowlist),
+            ownerAllowlist = parseIdentifierList(payload.optJSONArray("owner_allowlist"), fallback.ownerAllowlist),
             maxRolloutPercent = payload.optInt("max_rollout_percent", fallback.maxRolloutPercent).coerceIn(0, 100),
-            supportedConnectorIds = parseStringList(payload.optJSONArray("supported_connector_ids"), fallback.supportedConnectorIds),
-            requiredScopes = parseStringList(payload.optJSONArray("required_scopes"), fallback.requiredScopes),
+            supportedConnectorIds = parseIdentifierList(payload.optJSONArray("supported_connector_ids"), fallback.supportedConnectorIds),
+            requiredScopes = parseIdentifierList(payload.optJSONArray("required_scopes"), fallback.requiredScopes),
             requireRedemptionProof = payload.optBoolean("require_redemption_proof", fallback.requireRedemptionProof)
         )
     }
@@ -305,7 +395,7 @@ object IntegrationMeshConfigStore {
                     name = stageObject.optString("name", "").trim(),
                     enabled = stageObject.optBoolean("enabled", false),
                     maxPercent = stageObject.optInt("max_percent", 0).coerceIn(0, 100),
-                    ownerRoles = parseStringList(stageObject.optJSONArray("owner_roles"), emptyList())
+                    ownerRoles = parseIdentifierList(stageObject.optJSONArray("owner_roles"), emptyList())
                 )
             }
         }
@@ -326,7 +416,7 @@ object IntegrationMeshConfigStore {
             eventRetentionDays = payload.optInt("event_retention_days", default.audit.eventRetentionDays).coerceAtLeast(1),
             maxEvents = payload.optInt("max_events", default.audit.maxEvents).coerceAtLeast(1),
             schemaVersion = payload.optInt("schema_version", default.audit.schemaVersion).coerceAtLeast(1),
-            redactFields = parseStringList(payload.optJSONArray("redact_fields"), default.audit.redactFields)
+            redactFields = parseIdentifierList(payload.optJSONArray("redact_fields"), default.audit.redactFields)
         )
     }
 
@@ -363,10 +453,10 @@ object IntegrationMeshConfigStore {
             return fallback
         }
         return IntegrationMeshSmartHomeConfig(
-            allowedConnectorIds = parseStringList(payload.optJSONArray("allowed_connector_ids"), fallback.allowedConnectorIds),
+            allowedConnectorIds = parseIdentifierList(payload.optJSONArray("allowed_connector_ids"), fallback.allowedConnectorIds),
             readOnly = payload.optBoolean("read_only", fallback.readOnly),
             maxCachedDevices = payload.optInt("max_cached_devices", fallback.maxCachedDevices).coerceAtLeast(1),
-            defaultScopeSet = parseStringList(payload.optJSONArray("default_scope_set"), fallback.defaultScopeSet)
+            defaultScopeSet = parseIdentifierList(payload.optJSONArray("default_scope_set"), fallback.defaultScopeSet)
         )
     }
 
@@ -377,9 +467,153 @@ object IntegrationMeshConfigStore {
         if (payload == null) {
             return fallback
         }
+
+        val providers = parseVpnProviders(payload.optJSONArray("providers"), fallback.providers)
+        val defaultProviderId = normalizeIdentifier(
+            payload.optString("default_provider_id", fallback.defaultProviderId)
+        ).ifBlank {
+            providers.firstOrNull()?.id ?: fallback.defaultProviderId
+        }
+
+        val accountClassPolicy = parseVpnAccountClassPolicy(
+            payload.optJSONObject("account_class_policy"),
+            fallback.accountClassPolicy
+        )
+        val paidTierPolicy = parseVpnPaidTierPolicy(
+            payload.optJSONObject("paid_tier_policy"),
+            fallback.paidTierPolicy
+        )
+        val disclosurePolicy = parseVpnDisclosurePolicy(
+            payload.optJSONObject("disclosures"),
+            fallback.disclosurePolicy
+        )
+
         return IntegrationMeshVpnConfig(
             healthTtlMinutes = payload.optInt("health_ttl_minutes", fallback.healthTtlMinutes).coerceAtLeast(1),
-            allowedStatuses = parseStringList(payload.optJSONArray("allowed_statuses"), fallback.allowedStatuses)
+            staleAfterMinutes = payload.optInt("stale_after_minutes", fallback.staleAfterMinutes).coerceAtLeast(1),
+            allowedStatuses = parseIdentifierList(payload.optJSONArray("allowed_statuses"), fallback.allowedStatuses),
+            defaultProviderId = defaultProviderId,
+            providers = providers,
+            accountClassPolicy = accountClassPolicy,
+            paidTierPolicy = paidTierPolicy,
+            disclosurePolicy = disclosurePolicy
+        )
+    }
+
+    private fun parseVpnProviders(array: JSONArray?, fallback: List<IntegrationMeshVpnProvider>): List<IntegrationMeshVpnProvider> {
+        if (array == null) {
+            return fallback
+        }
+        val providers = mutableListOf<IntegrationMeshVpnProvider>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            parseVpnProvider(item)?.let { providers += it }
+        }
+        return if (providers.isEmpty()) fallback else providers
+    }
+
+    private fun parseVpnProvider(item: JSONObject): IntegrationMeshVpnProvider? {
+        val id = normalizeIdentifier(item.optString("id", ""))
+        val label = item.optString("label", "").trim().replace("\n", " ").replace("\r", " ")
+        if (id.isBlank() || label.isBlank()) {
+            return null
+        }
+        val packageNames = parseIdentifierList(item.optJSONArray("package_names"), emptyList())
+            .map { it.replace("[^a-z0-9._]".toRegex(), "") }
+            .filter { it.isNotBlank() }
+
+        val deepLinkUri = parseUri(
+            firstNonBlank(
+                item.optString("deep_link_uri", ""),
+                item.optString("deepLinkUri", ""),
+                item.optString("uri", "")
+            )
+        )
+        val fallbackUri = parseUri(
+            firstNonBlank(
+                item.optString("fallback_uri", ""),
+                item.optString("fallbackUri", "")
+            )
+        )
+        val setupUri = parseUri(
+            firstNonBlank(
+                item.optString("setup_uri", ""),
+                item.optString("setupUri", ""),
+                fallbackUri
+            )
+        )
+
+        return IntegrationMeshVpnProvider(
+            id = id,
+            label = label.take(72),
+            packageNames = packageNames,
+            deepLinkUri = deepLinkUri,
+            fallbackUri = fallbackUri,
+            setupUri = setupUri,
+            paidTierRequired = item.optBoolean("paid_tier_required", false)
+        )
+    }
+
+    private fun parseVpnAccountClassPolicy(
+        payload: JSONObject?,
+        fallback: IntegrationMeshVpnAccountClassPolicy
+    ): IntegrationMeshVpnAccountClassPolicy {
+        if (payload == null) {
+            return fallback
+        }
+
+        val enforcementMode = payload.optString("enforcement_mode", fallback.enforcementMode)
+            .trim()
+            .lowercase(Locale.US)
+            .let { mode ->
+                if (mode == "warn") "warn" else "block"
+            }
+
+        return IntegrationMeshVpnAccountClassPolicy(
+            enabled = payload.optBoolean("enabled", fallback.enabled),
+            connectedRequiredCategories = parseIdentifierList(
+                payload.optJSONArray("connected_required_categories"),
+                fallback.connectedRequiredCategories
+            ),
+            configuredRequiredCategories = parseIdentifierList(
+                payload.optJSONArray("configured_required_categories"),
+                fallback.configuredRequiredCategories
+            ),
+            enforcementMode = enforcementMode
+        )
+    }
+
+    private fun parseVpnPaidTierPolicy(
+        payload: JSONObject?,
+        fallback: IntegrationMeshVpnPaidTierPolicy
+    ): IntegrationMeshVpnPaidTierPolicy {
+        if (payload == null) {
+            return fallback
+        }
+        return IntegrationMeshVpnPaidTierPolicy(
+            paidTierRequiredForLinking = payload.optBoolean(
+                "paid_tier_required_for_linking",
+                fallback.paidTierRequiredForLinking
+            ),
+            paidOnlyProviderIds = parseIdentifierList(
+                payload.optJSONArray("paid_only_provider_ids"),
+                fallback.paidOnlyProviderIds
+            ),
+            disclosureRequired = payload.optBoolean("disclosure_required", fallback.disclosureRequired)
+        )
+    }
+
+    private fun parseVpnDisclosurePolicy(
+        payload: JSONObject?,
+        fallback: IntegrationMeshVpnDisclosurePolicy
+    ): IntegrationMeshVpnDisclosurePolicy {
+        if (payload == null) {
+            return fallback
+        }
+        return IntegrationMeshVpnDisclosurePolicy(
+            brokerNotice = payload.optString("broker_notice", fallback.brokerNotice).trim(),
+            providerDataNotice = payload.optString("provider_data_notice", fallback.providerDataNotice).trim(),
+            paidTierNotice = payload.optString("paid_tier_notice", fallback.paidTierNotice).trim()
         )
     }
 
@@ -391,7 +625,7 @@ object IntegrationMeshConfigStore {
             return fallback
         }
         return IntegrationMeshDigitalKeyConfig(
-            supportedRiskCategories = parseStringList(payload.optJSONArray("supported_risk_categories"), fallback.supportedRiskCategories),
+            supportedRiskCategories = parseIdentifierList(payload.optJSONArray("supported_risk_categories"), fallback.supportedRiskCategories),
             requireParentApprovalForShare = payload.optBoolean(
                 "require_parent_approval_for_share",
                 fallback.requireParentApprovalForShare
@@ -399,18 +633,45 @@ object IntegrationMeshConfigStore {
         )
     }
 
-    private fun parseStringList(array: JSONArray?, fallback: List<String>): List<String> {
+    private fun parseIdentifierList(array: JSONArray?, fallback: List<String>): List<String> {
         if (array == null) {
             return fallback
         }
         val values = mutableListOf<String>()
         for (index in 0 until array.length()) {
-            val item = array.optString(index, "").trim()
+            val item = normalizeIdentifier(array.optString(index, ""))
             if (item.isNotBlank()) {
-                values += item.lowercase(Locale.US)
+                values += item
             }
         }
         return if (values.isEmpty()) fallback else values
+    }
+
+    private fun normalizeIdentifier(raw: String): String {
+        return raw.trim().lowercase(Locale.US)
+    }
+
+    private fun parseUri(raw: String): String {
+        val value = raw.trim()
+        if (value.isBlank()) {
+            return ""
+        }
+        val lower = value.lowercase(Locale.US)
+        return when {
+            lower.startsWith("https://") -> value
+            lower.startsWith("intent://") -> value
+            else -> ""
+        }
+    }
+
+    private fun firstNonBlank(vararg values: String): String {
+        values.forEach { value ->
+            val trimmed = value.trim()
+            if (trimmed.isNotBlank()) {
+                return trimmed
+            }
+        }
+        return ""
     }
 
     fun isModuleEnabled(
@@ -432,5 +693,4 @@ object IntegrationMeshConfigStore {
         }
         return true
     }
-
 }

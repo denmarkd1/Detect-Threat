@@ -51,14 +51,21 @@ object IntegrationMeshController {
             else -> null
         }
 
-        vpnConnectorId = resolveConnectorId(nextConfig.featureFlags.vpnProviderConnector, "partner_vpn")
+        vpnConnectorId = resolveConnectorId(
+            nextConfig.featureFlags.vpnProviderConnector,
+            nextConfig.connectors.vpnBrokers.defaultProviderId.ifBlank { "partner_vpn" }
+        )
         vpnConnectorImpl = when {
             IntegrationMeshConfigStore.isModuleEnabled(
                 nextConfig,
                 IntegrationMeshModule.VPN_PROVIDER_CONNECTOR,
                 nextOwnerRole,
                 nextOwnerId
-            ) -> createVpnConnector(nextConfig, vpnConnectorId)
+            ) -> createVpnConnector(
+                nextConfig = nextConfig,
+                connectorId = vpnConnectorId,
+                requiredScopes = nextConfig.featureFlags.vpnProviderConnector.requiredScopes
+            )
             else -> null
         }
 
@@ -184,16 +191,26 @@ object IntegrationMeshController {
 
     private fun createVpnConnector(
         nextConfig: IntegrationMeshConfig,
-        connectorId: String
+        connectorId: String,
+        requiredScopes: List<String>
     ): VpnProviderConnector {
-        return when (connectorId.lowercase(Locale.US)) {
-            "partner_vpn" -> PartnerVpnProviderConnector(
+        val provider = VpnProviderRegistry.resolveProvider(
+            config = nextConfig.connectors.vpnBrokers,
+            providerId = connectorId
+        )
+        val providerId = provider.id.ifBlank { connectorId }
+        return when (providerId.lowercase(Locale.US)) {
+            "demo_vpn", "mock_vpn", "demo" -> DemoVpnProviderConnector(
                 providerConfig = nextConfig.connectors.vpnBrokers,
-                providerId = connectorId
+                providerId = providerId,
+                providerLabel = provider.label,
+                requiredScopes = requiredScopes
             )
-            else -> DemoVpnProviderConnector(
+            else -> PartnerVpnProviderConnector(
                 providerConfig = nextConfig.connectors.vpnBrokers,
-                providerId = connectorId
+                providerId = providerId,
+                providerLabel = provider.label,
+                requiredScopes = requiredScopes
             )
         }
     }
