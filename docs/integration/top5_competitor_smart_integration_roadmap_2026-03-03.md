@@ -315,6 +315,9 @@ Implementation status (2026-03-04):
 3. Add social-engineering defense prompts for key sharing and remote commands.
 4. Add guardian controls for minor profiles where applicable.
 
+Implementation status (2026-03-04):
+- Delivered in `android-watchdog` with local digital-key risk adapter assessment, wallet/manufacturer setup capability guidance, prerequisite enforcement (lock-screen/biometric/integrity), social-engineering confirmation prompts for key sharing and remote commands, guardian override enforcement for minor profiles, and integration-mesh timeline audit events for digital-key actions.
+
 ## Phase 5 - Competitive parity+ enhancements (2 weeks)
 1. Add app-risk board linked to remediation queue.
 2. Add connected-home anomaly timeline and owner accountability views.

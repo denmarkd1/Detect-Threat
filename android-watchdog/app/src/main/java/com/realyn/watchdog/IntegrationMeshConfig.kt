@@ -161,9 +161,24 @@ data class IntegrationMeshVpnConfig(
     val disclosurePolicy: IntegrationMeshVpnDisclosurePolicy
 )
 
+data class IntegrationMeshDigitalKeyGuidanceProvider(
+    val id: String,
+    val label: String,
+    val packageNames: List<String>,
+    val setupUri: String,
+    val fallbackUri: String
+)
+
 data class IntegrationMeshDigitalKeyConfig(
     val supportedRiskCategories: List<String>,
-    val requireParentApprovalForShare: Boolean
+    val requireParentApprovalForShare: Boolean,
+    val requireParentApprovalForRemoteCommands: Boolean,
+    val requireLockScreenForHighRiskActions: Boolean,
+    val requireBiometricForHighRiskActions: Boolean,
+    val requireStrongIntegrityForHighRiskActions: Boolean,
+    val blockHighRiskActionsOnElevatedIntegrity: Boolean,
+    val walletSetupGuidance: List<IntegrationMeshDigitalKeyGuidanceProvider>,
+    val manufacturerSetupGuidance: List<IntegrationMeshDigitalKeyGuidanceProvider>
 )
 
 fun loadIntegrationMeshConfig(context: Context): IntegrationMeshConfig {
@@ -209,6 +224,47 @@ object IntegrationMeshConfigStore {
         )
     )
 
+    private val defaultDigitalKeyWalletProviders = listOf(
+        IntegrationMeshDigitalKeyGuidanceProvider(
+            id = "google_wallet",
+            label = "Google Wallet",
+            packageNames = listOf("com.google.android.apps.walletnfcrel"),
+            setupUri = "https://support.google.com/wallet/answer/13314575",
+            fallbackUri = "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel"
+        ),
+        IntegrationMeshDigitalKeyGuidanceProvider(
+            id = "samsung_wallet",
+            label = "Samsung Wallet",
+            packageNames = listOf("com.samsung.android.spay"),
+            setupUri = "https://www.samsung.com/us/support/mobile/mobile-wallet/",
+            fallbackUri = "https://galaxystore.samsung.com/prepost/000005790062?langCd=en"
+        )
+    )
+
+    private val defaultDigitalKeyManufacturerProviders = listOf(
+        IntegrationMeshDigitalKeyGuidanceProvider(
+            id = "hyundai_digital_key",
+            label = "Hyundai Digital Key",
+            packageNames = listOf("com.hyundaiusa.bluelink"),
+            setupUri = "https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/introducing-all-new-digital-key",
+            fallbackUri = "https://play.google.com/store/search?q=hyundai%20bluelink&c=apps"
+        ),
+        IntegrationMeshDigitalKeyGuidanceProvider(
+            id = "kia_connect_digital_key",
+            label = "Kia Connect",
+            packageNames = listOf("com.myuvo.link"),
+            setupUri = "https://owners.kia.com/content/owners/en/uvo-link.html",
+            fallbackUri = "https://play.google.com/store/search?q=kia%20connect&c=apps"
+        ),
+        IntegrationMeshDigitalKeyGuidanceProvider(
+            id = "bmw_digital_key",
+            label = "BMW Digital Key",
+            packageNames = listOf("de.bmw.connected.mobile20.na"),
+            setupUri = "https://www.bmwusa.com/explore/connecteddrive.html",
+            fallbackUri = "https://play.google.com/store/search?q=bmw%20connected&c=apps"
+        )
+    )
+
     private val default = IntegrationMeshConfig(
         enabled = true,
         schemaVersion = 1,
@@ -232,12 +288,12 @@ object IntegrationMeshConfigStore {
                 requireRedemptionProof = true
             ),
             digitalKeyRiskAdapter = IntegrationMeshModuleFeatureFlag(
-                enabled = false,
+                enabled = true,
                 rolloutStage = "internal_test",
                 ownerAllowlist = listOf("parent", "child", "son"),
-                maxRolloutPercent = 0,
-                supportedConnectorIds = emptyList(),
-                requiredScopes = emptyList(),
+                maxRolloutPercent = 100,
+                supportedConnectorIds = listOf("local_digital_key_guardrails"),
+                requiredScopes = listOf("digital_key:advisory", "digital_key:high_risk_prompt"),
                 requireRedemptionProof = true
             )
         ),
@@ -314,9 +370,18 @@ object IntegrationMeshConfigStore {
                     "unverified_remote_unlock",
                     "sudden_privilege_change",
                     "location_restriction_violation",
-                    "stale_consents"
+                    "stale_consents",
+                    "prerequisite_gap",
+                    "social_engineering_exposure"
                 ),
-                requireParentApprovalForShare = true
+                requireParentApprovalForShare = true,
+                requireParentApprovalForRemoteCommands = true,
+                requireLockScreenForHighRiskActions = true,
+                requireBiometricForHighRiskActions = true,
+                requireStrongIntegrityForHighRiskActions = true,
+                blockHighRiskActionsOnElevatedIntegrity = false,
+                walletSetupGuidance = defaultDigitalKeyWalletProviders,
+                manufacturerSetupGuidance = defaultDigitalKeyManufacturerProviders
             )
         )
     )
@@ -625,11 +690,91 @@ object IntegrationMeshConfigStore {
             return fallback
         }
         return IntegrationMeshDigitalKeyConfig(
-            supportedRiskCategories = parseIdentifierList(payload.optJSONArray("supported_risk_categories"), fallback.supportedRiskCategories),
+            supportedRiskCategories = parseIdentifierList(
+                payload.optJSONArray("supported_risk_categories"),
+                fallback.supportedRiskCategories
+            ),
             requireParentApprovalForShare = payload.optBoolean(
                 "require_parent_approval_for_share",
                 fallback.requireParentApprovalForShare
+            ),
+            requireParentApprovalForRemoteCommands = payload.optBoolean(
+                "require_parent_approval_for_remote_commands",
+                fallback.requireParentApprovalForRemoteCommands
+            ),
+            requireLockScreenForHighRiskActions = payload.optBoolean(
+                "require_lock_screen_for_high_risk_actions",
+                fallback.requireLockScreenForHighRiskActions
+            ),
+            requireBiometricForHighRiskActions = payload.optBoolean(
+                "require_biometric_for_high_risk_actions",
+                fallback.requireBiometricForHighRiskActions
+            ),
+            requireStrongIntegrityForHighRiskActions = payload.optBoolean(
+                "require_strong_integrity_for_high_risk_actions",
+                fallback.requireStrongIntegrityForHighRiskActions
+            ),
+            blockHighRiskActionsOnElevatedIntegrity = payload.optBoolean(
+                "block_high_risk_actions_on_elevated_integrity",
+                fallback.blockHighRiskActionsOnElevatedIntegrity
+            ),
+            walletSetupGuidance = parseDigitalKeyGuidanceProviders(
+                payload.optJSONArray("wallet_setup_guidance"),
+                fallback.walletSetupGuidance
+            ),
+            manufacturerSetupGuidance = parseDigitalKeyGuidanceProviders(
+                payload.optJSONArray("manufacturer_setup_guidance"),
+                fallback.manufacturerSetupGuidance
             )
+        )
+    }
+
+    private fun parseDigitalKeyGuidanceProviders(
+        array: JSONArray?,
+        fallback: List<IntegrationMeshDigitalKeyGuidanceProvider>
+    ): List<IntegrationMeshDigitalKeyGuidanceProvider> {
+        if (array == null) {
+            return fallback
+        }
+        val providers = mutableListOf<IntegrationMeshDigitalKeyGuidanceProvider>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            parseDigitalKeyGuidanceProvider(item)?.let { providers += it }
+        }
+        return if (providers.isEmpty()) fallback else providers
+    }
+
+    private fun parseDigitalKeyGuidanceProvider(item: JSONObject): IntegrationMeshDigitalKeyGuidanceProvider? {
+        val id = normalizeIdentifier(item.optString("id", ""))
+        val label = item.optString("label", "").trim().replace("\n", " ").replace("\r", " ")
+        if (id.isBlank() || label.isBlank()) {
+            return null
+        }
+
+        val packageNames = parseIdentifierList(item.optJSONArray("package_names"), emptyList())
+            .map { it.replace("[^a-z0-9._]".toRegex(), "") }
+            .filter { it.isNotBlank() }
+
+        val setupUri = parseUri(
+            firstNonBlank(
+                item.optString("setup_uri", ""),
+                item.optString("setupUri", ""),
+                item.optString("uri", "")
+            )
+        )
+        val fallbackUri = parseUri(
+            firstNonBlank(
+                item.optString("fallback_uri", ""),
+                item.optString("fallbackUri", "")
+            )
+        )
+
+        return IntegrationMeshDigitalKeyGuidanceProvider(
+            id = id,
+            label = label.take(72),
+            packageNames = packageNames,
+            setupUri = setupUri,
+            fallbackUri = fallbackUri
         )
     }
 

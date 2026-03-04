@@ -16,7 +16,9 @@ enum class GuardianProtectedAction(
     CREDENTIAL_CONFIRM_ROTATION("credential_confirm_rotation", "credential_mutation"),
     VAULT_EXPORT("vault_export", "vault_export"),
     VAULT_DELETE("vault_delete", "vault_delete"),
-    HIGH_RISK_PHISHING_REMEDIATION("high_risk_phishing", "high_risk_phishing")
+    HIGH_RISK_PHISHING_REMEDIATION("high_risk_phishing", "high_risk_phishing"),
+    DIGITAL_KEY_SHARE("digital_key_share", "digital_key_share"),
+    DIGITAL_KEY_REMOTE_COMMAND("digital_key_remote_command", "digital_key_remote_command")
 }
 
 data class GuardianOverrideSettings(
@@ -136,7 +138,7 @@ object GuardianOverridePolicy {
                 )
             )
             .setPositiveButton(R.string.action_confirm) { _, _ ->
-                val token = GuardianOverrideTokenStore.issueToken(
+                val issuedOverride = GuardianOverrideTokenStore.issueToken(
                     context = activity,
                     actionCode = action.code,
                     reasonCode = reasonCode,
@@ -148,7 +150,7 @@ object GuardianOverridePolicy {
                     actionCode = action.code,
                     outcome = "approved",
                     reasonCode = reasonCode,
-                    tokenExpiresAtEpochMs = token.expiresAtEpochMs
+                    tokenExpiresAtEpochMs = issuedOverride.expiresAtEpochMs
                 )
                 onApproved()
             }

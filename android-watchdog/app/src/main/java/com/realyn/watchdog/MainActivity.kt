@@ -349,7 +349,7 @@ class MainActivity : AppCompatActivity() {
     private var latestHomeNavSignals: Map<HomeNavDestination, Boolean> = emptyMap()
     private var homeSurfaceHydrationJob: Job? = null
     private var homeSurfaceHydrationInFlight: Boolean = false
-    private var homeSurfaceHydrationToken: Long = 0L
+    private var homeSurfaceHydrationNonce: Long = 0L
     private var startupTraceStartMs: Long = 0L
     private val startupTraceMarks = linkedMapOf<String, Long>()
     private var startupFreshHydrationReady: Boolean = false
@@ -3309,31 +3309,559 @@ class MainActivity : AppCompatActivity() {
         if (homeIntroAnimating) {
             return
         }
+        setBusy(true, getString(R.string.digital_key_status_loading))
+        lifecycleScope.launch {
+            try {
+                val report = withContext(Dispatchers.Default) { resolveDigitalKeyGuardrailReport() }
+                if (isFinishing || isDestroyed) {
+                    return@launch
+                }
+                LionAlertDialogBuilder(this@MainActivity)
+                    .setTitle(R.string.digital_key_status_dialog_title)
+                    .setMessage(buildDigitalKeyGuardrailsDialogMessage(report))
+                    .setPositiveButton(R.string.digital_key_action_open_setup_guidance) { _, _ ->
+                        openDigitalKeySetupGuidanceDialog(report)
+                    }
+                    .setNeutralButton(R.string.digital_key_action_key_share_prompt) { _, _ ->
+                        runDigitalKeyHighRiskAction(DigitalKeyHighRiskAction.KEY_SHARE, report)
+                    }
+                    .setNegativeButton(R.string.digital_key_action_remote_command_prompt) { _, _ ->
+                        runDigitalKeyHighRiskAction(DigitalKeyHighRiskAction.REMOTE_COMMAND, report)
+                    }
+                    .show()
+            } catch (error: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    LionAlertDialogBuilder(this@MainActivity)
+                        .setTitle(R.string.digital_key_status_dialog_title)
+                        .setMessage(
+                            buildString {
+                                append(getString(R.string.digital_key_status_load_failed))
+                                val errorMessage = error.message.orEmpty().trim()
+                                if (errorMessage.isNotBlank()) {
+                                    appendLine()
+                                    appendLine()
+                                    append(errorMessage)
+                                }
+                            }
+                        )
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
+            } finally {
+                if (!isFinishing && !isDestroyed) {
+                    setBusy(false)
+                }
+            }
+        }
+    }
+
+    private suspend fun resolveDigitalKeyGuardrailReport(): DigitalKeyGuardrailReport {
+        IntegrationMeshController.refresh(this)
+        val state = IntegrationMeshController.snapshot(this)
+        val config = IntegrationMeshController.readConfig(this).connectors.digitalKeys
         val enabled = IntegrationMeshController.isModuleEnabled(
             context = this,
             module = IntegrationMeshModule.DIGITAL_KEY_RISK_ADAPTER
         )
-        val biometric = BiometricAuthController.resolveCapability(
-            activity = this,
-            allowDeviceCredential = true
+        val adapter = IntegrationMeshController.getActiveDigitalKeyRiskAdapter(this)
+        val adapterId = IntegrationMeshController.digitalKeyAdapterId(this)
+
+        val consentArtifacts = mutableListOf<ConnectorConsentArtifact>()
+        val smartHomeConsent = IntegrationMeshAuditStore.latestActiveConsent(
+            context = this,
+            connectorId = state.smartHomeConnectorId,
+            ownerId = state.ownerId
         )
-        val rootTier = rootTierLabel(SecurityScanner.currentRootPosture(this).riskTier)
-        val stateLabel = if (enabled) {
+        if (smartHomeConsent != null) {
+            consentArtifacts += smartHomeConsent
+        }
+        val vpnConsent = IntegrationMeshAuditStore.latestActiveConsent(
+            context = this,
+            connectorId = state.vpnConnectorId,
+            ownerId = state.ownerId
+        )
+        if (vpnConsent != null) {
+            consentArtifacts += vpnConsent
+        }
+
+        val postureSnapshots = mutableListOf<SmartHomePostureSnapshot>()
+        if (smartHomeConsent != null) {
+            val connector = IntegrationMeshController.getActiveSmartHomeConnector(this)
+            if (connector != null) {
+                runCatching { connector.collectPosture(this, smartHomeConsent) }
+                    .getOrNull()
+                    ?.let { snapshot -> postureSnapshots += snapshot }
+            }
+        }
+
+        return DigitalKeyGuardrailEngine.resolveReport(
+            context = this,
+            ownerRole = state.ownerRole,
+            enabled = enabled,
+            adapterId = adapterId,
+            adapter = adapter,
+            config = config,
+            consentArtifacts = consentArtifacts,
+            postureSnapshots = postureSnapshots
+        )
+    }
+
+    private fun buildDigitalKeyGuardrailsDialogMessage(report: DigitalKeyGuardrailReport): String {
+        val stateLabel = if (report.enabled) {
             getString(R.string.digital_key_status_enabled)
         } else {
             getString(R.string.digital_key_status_not_configured)
         }
-        val message = getString(
-            R.string.digital_key_status_summary_template,
-            stateLabel,
-            if (biometric.available) getString(R.string.readiness_state_ok) else biometric.reason,
-            rootTier
-        )
+        val prerequisites = report.prerequisites
+        val walletPreview = report.walletCapabilities.take(2)
+        val manufacturerPreview = report.manufacturerCapabilities.take(2)
+        val findingsPreview = report.assessment.findings.take(4)
+
+        return buildString {
+            append(
+                getString(
+                    R.string.digital_key_status_summary_template,
+                    stateLabel,
+                    digitalKeyBooleanLabel(prerequisites.biometricReady),
+                    rootTierLabel(prerequisites.rootPosture.riskTier)
+                )
+            )
+            appendLine()
+            appendLine()
+            append(
+                getString(
+                    R.string.digital_key_status_risk_template,
+                    digitalKeyRiskLevelLabel(report.assessment.overallRiskLevel),
+                    report.assessment.totalRiskScore
+                )
+            )
+            appendLine()
+            append(getString(R.string.digital_key_prereq_lock_template, digitalKeyBooleanLabel(prerequisites.lockScreenSecure)))
+            appendLine()
+            append(getString(R.string.digital_key_prereq_biometric_template, digitalKeyBooleanLabel(prerequisites.biometricReady)))
+            appendLine()
+            append(
+                getString(
+                    R.string.digital_key_prereq_integrity_template,
+                    digitalKeyBooleanLabel(prerequisites.playDeviceIntegrityReady && prerequisites.playStrongIntegrityReady)
+                )
+            )
+            appendLine()
+            append(getString(R.string.digital_key_prereq_app_lock_template, digitalKeyBooleanLabel(prerequisites.appLockEnabled)))
+
+            if (prerequisites.blockedReasonCodes.isNotEmpty()) {
+                appendLine()
+                appendLine()
+                append(getString(R.string.digital_key_prereq_blocked_title))
+                prerequisites.blockedReasonCodes.forEach { reasonCode ->
+                    appendLine()
+                    append("- ")
+                    append(digitalKeyPrerequisiteLabel(reasonCode))
+                }
+            }
+            if (prerequisites.warningReasonCodes.isNotEmpty()) {
+                appendLine()
+                appendLine()
+                append(getString(R.string.digital_key_prereq_warning_title))
+                prerequisites.warningReasonCodes.forEach { reasonCode ->
+                    appendLine()
+                    append("- ")
+                    append(digitalKeyPrerequisiteLabel(reasonCode))
+                }
+            }
+
+            appendLine()
+            appendLine()
+            append(getString(R.string.digital_key_setup_wallet_title))
+            if (walletPreview.isEmpty()) {
+                appendLine()
+                append("- ")
+                append(getString(R.string.digital_key_setup_none))
+            } else {
+                walletPreview.forEach { capability ->
+                    appendLine()
+                    append(
+                        getString(
+                            R.string.digital_key_setup_bullet_template,
+                            capability.provider.label,
+                            digitalKeySetupCapabilityLabel(capability)
+                        )
+                    )
+                }
+            }
+
+            appendLine()
+            appendLine()
+            append(getString(R.string.digital_key_setup_manufacturer_title))
+            if (manufacturerPreview.isEmpty()) {
+                appendLine()
+                append("- ")
+                append(getString(R.string.digital_key_setup_none))
+            } else {
+                manufacturerPreview.forEach { capability ->
+                    appendLine()
+                    append(
+                        getString(
+                            R.string.digital_key_setup_bullet_template,
+                            capability.provider.label,
+                            digitalKeySetupCapabilityLabel(capability)
+                        )
+                    )
+                }
+            }
+
+            appendLine()
+            appendLine()
+            append(getString(R.string.digital_key_risk_checklist_title))
+            if (findingsPreview.isEmpty()) {
+                appendLine()
+                append("- ")
+                append(getString(R.string.digital_key_risk_checklist_none))
+            } else {
+                findingsPreview.forEach { finding ->
+                    appendLine()
+                    append(
+                        getString(
+                            R.string.digital_key_risk_checklist_item_template,
+                            digitalKeyRiskLevelLabel(finding.severity),
+                            finding.message
+                        )
+                    )
+                }
+            }
+        }.trim()
+    }
+
+    private fun digitalKeyRiskLevelLabel(level: String): String {
+        return when (level.trim().lowercase(Locale.US)) {
+            "high" -> getString(R.string.risk_level_high)
+            "medium" -> getString(R.string.risk_level_medium)
+            "low" -> getString(R.string.risk_level_low)
+            else -> getString(R.string.readiness_state_unknown)
+        }
+    }
+
+    private fun digitalKeyBooleanLabel(value: Boolean): String {
+        return if (value) {
+            getString(R.string.readiness_state_ok)
+        } else {
+            getString(R.string.readiness_state_action_needed)
+        }
+    }
+
+    private fun digitalKeySetupCapabilityLabel(capability: DigitalKeySetupCapability): String {
+        return when {
+            capability.appLaunchReady -> getString(R.string.digital_key_setup_state_app_ready)
+            capability.appInstalled -> getString(R.string.digital_key_setup_state_installed)
+            capability.provider.setupUri.isNotBlank() -> getString(R.string.digital_key_setup_state_setup_link)
+            capability.provider.fallbackUri.isNotBlank() -> getString(R.string.digital_key_setup_state_fallback_link)
+            else -> getString(R.string.digital_key_setup_state_unavailable)
+        }
+    }
+
+    private fun digitalKeyPrerequisiteLabel(reasonCode: String): String {
+        return when (reasonCode.trim().lowercase(Locale.US)) {
+            "lock_screen_not_secure" -> getString(R.string.digital_key_prereq_reason_lock_screen_not_secure)
+            "biometric_not_ready" -> getString(R.string.digital_key_prereq_reason_biometric_not_ready)
+            "integrity_compromised" -> getString(R.string.digital_key_prereq_reason_integrity_compromised)
+            "integrity_elevated" -> getString(R.string.digital_key_prereq_reason_integrity_elevated)
+            "play_device_integrity_missing" -> getString(R.string.digital_key_prereq_reason_play_device_missing)
+            "play_strong_integrity_missing" -> getString(R.string.digital_key_prereq_reason_play_strong_missing)
+            "play_integrity_not_ingested" -> getString(R.string.digital_key_prereq_reason_play_not_ingested)
+            "app_lock_disabled" -> getString(R.string.digital_key_prereq_reason_app_lock_disabled)
+            else -> reasonCode
+        }
+    }
+
+    private fun openDigitalKeySetupGuidanceDialog(report: DigitalKeyGuardrailReport) {
+        val capabilities = report.walletCapabilities + report.manufacturerCapabilities
+        if (capabilities.isEmpty()) {
+            LionAlertDialogBuilder(this)
+                .setTitle(R.string.digital_key_setup_dialog_title)
+                .setMessage(R.string.digital_key_setup_none)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
+
+        val options = capabilities.map { capability ->
+            getString(
+                R.string.digital_key_setup_option_template,
+                capability.provider.label,
+                capability.categoryLabel,
+                digitalKeySetupCapabilityLabel(capability)
+            )
+        }.toTypedArray()
+
         LionAlertDialogBuilder(this)
-            .setTitle(R.string.digital_key_status_dialog_title)
-            .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
+            .setTitle(R.string.digital_key_setup_dialog_title)
+            .setItems(options) { _, which ->
+                val selected = capabilities[which]
+                val launchMode = launchDigitalKeySetupCapability(selected)
+                val opened = !launchMode.equals("failed", ignoreCase = true)
+                val statusMessage = when (launchMode) {
+                    "app" -> getString(
+                        R.string.digital_key_setup_opened_app_template,
+                        selected.provider.label
+                    )
+                    "uri" -> getString(
+                        R.string.digital_key_setup_opened_link_template,
+                        selected.provider.label
+                    )
+                    else -> getString(R.string.digital_key_setup_open_failed)
+                }
+                binding.subStatusLabel.text = statusMessage
+                appendDigitalKeyAuditEvent(
+                    eventType = "digital_key.setup.opened",
+                    outcome = if (opened) "success" else "failed",
+                    riskLevel = if (opened) "low" else "medium",
+                    details = "provider=${selected.provider.id};category=${selected.categoryLabel};mode=$launchMode"
+                )
+            }
+            .setPositiveButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun launchDigitalKeySetupCapability(capability: DigitalKeySetupCapability): String {
+        val launchIntent = capability.provider.packageNames.firstNotNullOfOrNull { packageName ->
+            packageManager.getLaunchIntentForPackage(packageName)
+        }
+        if (launchIntent != null) {
+            return runCatching {
+                startActivity(launchIntent)
+                "app"
+            }.getOrDefault("failed")
+        }
+
+        val uri = capability.provider.setupUri.ifBlank { capability.provider.fallbackUri }
+        if (uri.isBlank()) {
+            return "failed"
+        }
+
+        return runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+            "uri"
+        }.getOrDefault("failed")
+    }
+
+    private fun runDigitalKeyHighRiskAction(
+        action: DigitalKeyHighRiskAction,
+        report: DigitalKeyGuardrailReport
+    ) {
+        if (!report.enabled) {
+            LionAlertDialogBuilder(this)
+                .setTitle(R.string.digital_key_high_risk_blocked_title)
+                .setMessage(R.string.digital_key_high_risk_blocked_not_configured)
+                .setPositiveButton(android.R.string.ok, null)
+                .setNeutralButton(R.string.action_guardian_settings) { _, _ ->
+                    openGuardianSettingsDialog()
+                }
+                .show()
+            appendDigitalKeyAuditEvent(
+                eventType = "digital_key.high_risk.blocked",
+                outcome = "blocked_not_configured",
+                riskLevel = "medium",
+                details = "action=${action.name.lowercase(Locale.US)}"
+            )
+            return
+        }
+
+        val prerequisites = report.prerequisites
+        if (!prerequisites.highRiskAllowed) {
+            val blockedReasons = prerequisites.blockedReasonCodes
+                .map { reasonCode -> digitalKeyPrerequisiteLabel(reasonCode) }
+                .joinToString("\n") { label -> "- $label" }
+            LionAlertDialogBuilder(this)
+                .setTitle(R.string.digital_key_high_risk_blocked_title)
+                .setMessage(
+                    getString(
+                        R.string.digital_key_high_risk_blocked_template,
+                        digitalKeyActionLabel(action),
+                        blockedReasons
+                    )
+                )
+                .setPositiveButton(android.R.string.ok, null)
+                .setNeutralButton(R.string.digital_key_action_open_setup_guidance) { _, _ ->
+                    openDigitalKeySetupGuidanceDialog(report)
+                }
+                .show()
+            appendDigitalKeyAuditEvent(
+                eventType = "digital_key.high_risk.blocked",
+                outcome = "blocked_prerequisite",
+                riskLevel = "high",
+                details = "action=${action.name.lowercase(Locale.US)};blocked=${prerequisites.blockedReasonCodes.joinToString(",")}"
+            )
+            if (PricingPolicy.resolveProfileControl(this).requiresGuardianApprovalForSensitiveActions) {
+                GuardianAlertStore.appendManualEntry(
+                    context = this,
+                    severity = Severity.HIGH,
+                    score = 88,
+                    title = getString(R.string.digital_key_guardian_blocked_title),
+                    sourceType = "digital_key_guardrails",
+                    sourceRef = digitalKeyActionLabel(action),
+                    remediation = getString(R.string.digital_key_guardian_blocked_remediation)
+                )
+            }
+            return
+        }
+
+        val digitalKeyConfig = IntegrationMeshController.readConfig(this).connectors.digitalKeys
+        val requiresGuardian = shouldRequireGuardianForDigitalKeyAction(action, digitalKeyConfig)
+        val proceed = {
+            openDigitalKeySocialDefensePrompt(action, report)
+        }
+
+        if (!requiresGuardian) {
+            proceed()
+            return
+        }
+
+        val guardAction = when (action) {
+            DigitalKeyHighRiskAction.KEY_SHARE -> GuardianProtectedAction.DIGITAL_KEY_SHARE
+            DigitalKeyHighRiskAction.REMOTE_COMMAND -> GuardianProtectedAction.DIGITAL_KEY_REMOTE_COMMAND
+        }
+        val actionLabel = when (action) {
+            DigitalKeyHighRiskAction.KEY_SHARE -> getString(R.string.guardian_action_digital_key_share)
+            DigitalKeyHighRiskAction.REMOTE_COMMAND -> getString(R.string.guardian_action_digital_key_remote_command)
+        }
+
+        GuardianOverridePolicy.requestApproval(
+            activity = this,
+            action = guardAction,
+            actionLabel = actionLabel,
+            onApproved = proceed,
+            onDenied = {
+                appendDigitalKeyAuditEvent(
+                    eventType = "digital_key.high_risk.guardian",
+                    outcome = "denied",
+                    riskLevel = "medium",
+                    details = "action=${action.name.lowercase(Locale.US)}"
+                )
+            }
+        )
+    }
+
+    private fun shouldRequireGuardianForDigitalKeyAction(
+        action: DigitalKeyHighRiskAction,
+        config: IntegrationMeshDigitalKeyConfig
+    ): Boolean {
+        val profileControl = PricingPolicy.resolveProfileControl(this)
+        if (!profileControl.requiresGuardianApprovalForSensitiveActions) {
+            return false
+        }
+        return when (action) {
+            DigitalKeyHighRiskAction.KEY_SHARE -> config.requireParentApprovalForShare
+            DigitalKeyHighRiskAction.REMOTE_COMMAND -> config.requireParentApprovalForRemoteCommands
+        }
+    }
+
+    private fun openDigitalKeySocialDefensePrompt(
+        action: DigitalKeyHighRiskAction,
+        report: DigitalKeyGuardrailReport
+    ) {
+        val warningBlock = if (report.prerequisites.warningReasonCodes.isEmpty()) {
+            ""
+        } else {
+            val warnings = report.prerequisites.warningReasonCodes
+                .map { reasonCode -> digitalKeyPrerequisiteLabel(reasonCode) }
+                .joinToString("\n") { label -> "- $label" }
+            getString(R.string.digital_key_social_warning_template, warnings)
+        }
+        val socialPrompt = when (action) {
+            DigitalKeyHighRiskAction.KEY_SHARE -> getString(R.string.digital_key_social_prompt_share)
+            DigitalKeyHighRiskAction.REMOTE_COMMAND -> getString(R.string.digital_key_social_prompt_remote)
+        }
+        val actionLabel = digitalKeyActionLabel(action)
+        val message = buildString {
+            append(
+                getString(
+                    R.string.digital_key_social_prompt_template,
+                    actionLabel,
+                    socialPrompt
+                )
+            )
+            if (warningBlock.isNotBlank()) {
+                appendLine()
+                appendLine()
+                append(warningBlock)
+            }
+        }
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.digital_key_social_prompt_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.action_confirm) { _, _ ->
+                appendDigitalKeyAuditEvent(
+                    eventType = "digital_key.high_risk.confirmed",
+                    outcome = "confirmed",
+                    riskLevel = if (action == DigitalKeyHighRiskAction.REMOTE_COMMAND) "high" else "medium",
+                    details = "action=${action.name.lowercase(Locale.US)}"
+                )
+                if (PricingPolicy.resolveProfileControl(this).requiresGuardianApprovalForSensitiveActions) {
+                    GuardianAlertStore.appendManualEntry(
+                        context = this,
+                        severity = Severity.MEDIUM,
+                        score = 70,
+                        title = getString(R.string.digital_key_guardian_confirmed_title),
+                        sourceType = "digital_key_guardrails",
+                        sourceRef = actionLabel,
+                        remediation = getString(R.string.digital_key_guardian_confirmed_remediation)
+                    )
+                }
+                binding.subStatusLabel.text = getString(
+                    R.string.digital_key_high_risk_confirmed_template,
+                    actionLabel
+                )
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ ->
+                appendDigitalKeyAuditEvent(
+                    eventType = "digital_key.high_risk.confirmed",
+                    outcome = "cancelled",
+                    riskLevel = "low",
+                    details = "action=${action.name.lowercase(Locale.US)}"
+                )
+            }
+            .show()
+    }
+
+    private fun digitalKeyActionLabel(action: DigitalKeyHighRiskAction): String {
+        return when (action) {
+            DigitalKeyHighRiskAction.KEY_SHARE -> getString(R.string.digital_key_action_share_label)
+            DigitalKeyHighRiskAction.REMOTE_COMMAND -> getString(R.string.digital_key_action_remote_label)
+        }
+    }
+
+    private fun appendDigitalKeyAuditEvent(
+        eventType: String,
+        outcome: String,
+        riskLevel: String,
+        details: String,
+        consentArtifactId: String = ""
+    ) {
+        val state = IntegrationMeshController.snapshot(this)
+        val now = System.currentTimeMillis()
+        val adapterId = IntegrationMeshController.digitalKeyAdapterId(this)
+        val event = ConnectorAuditEvent(
+            schemaVersion = INTEGRATION_MESH_SCHEMA_VERSION,
+            eventId = java.util.UUID.randomUUID().toString(),
+            eventType = eventType,
+            recordType = CONNECTOR_AUDIT_EVENT_TYPE,
+            connectorId = adapterId,
+            connectorType = "digital_key",
+            ownerRole = state.ownerRole,
+            ownerId = state.ownerId,
+            actorRole = state.ownerRole,
+            actorId = state.ownerId,
+            recordedAtEpochMs = now,
+            recordedAtIso = toIsoUtc(now),
+            outcome = outcome,
+            consentArtifactId = consentArtifactId,
+            sourceModule = "digital_key_guardrails",
+            details = details,
+            detailsHash = createHash("$adapterId|$eventType|$outcome|$details|$now"),
+            riskLevel = riskLevel.ifBlank { "medium" }
+        )
+        IntegrationMeshAuditStore.appendConnectorEvent(this, event)
     }
 
     private fun openTimelineReportDialog() {
@@ -5543,12 +6071,7 @@ class MainActivity : AppCompatActivity() {
                             title = getString(R.string.copilot_connect_api_key_title)
                         ) { apiKey ->
                             val linkAction = {
-                                ConnectedAiLinkStore.link(
-                                    context = this,
-                                    provider = provider,
-                                    model = model,
-                                    apiKey = apiKey
-                                )
+                                ConnectedAiLinkStore.link(this, provider, model, apiKey)
                                 binding.subStatusLabel.text = getString(
                                     R.string.copilot_connect_saved_template,
                                     provider,
@@ -5792,8 +6315,8 @@ class MainActivity : AppCompatActivity() {
             homeSurfaceHydrationJob?.cancel()
         }
 
-        val token = homeSurfaceHydrationToken + 1L
-        homeSurfaceHydrationToken = token
+        val hydrationNonce = homeSurfaceHydrationNonce + 1L
+        homeSurfaceHydrationNonce = hydrationNonce
         homeSurfaceHydrationInFlight = true
         markStartupTrace("home_surface_hydration_started")
         homeSurfaceHydrationJob = lifecycleScope.launch {
@@ -5802,7 +6325,7 @@ class MainActivity : AppCompatActivity() {
                     val inputs = collectHomeSurfaceInputs()
                     inputs to buildHomeSurfaceSnapshot(inputs)
                 }
-                if (token != homeSurfaceHydrationToken || isFinishing || isDestroyed) {
+                if (hydrationNonce != homeSurfaceHydrationNonce || isFinishing || isDestroyed) {
                     return@launch
                 }
                 latestLocatorState = result.first.locatorState
@@ -5813,7 +6336,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 // Keep previously rendered snapshot when hydration fails.
             } finally {
-                if (token == homeSurfaceHydrationToken) {
+                if (hydrationNonce == homeSurfaceHydrationNonce) {
                     homeSurfaceHydrationInFlight = false
                 }
             }

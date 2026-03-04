@@ -21,8 +21,10 @@ object IntegrationMeshController {
     private var ownerId: String = "parent"
     private var smartHomeConnectorImpl: SmartHomeConnector? = null
     private var vpnConnectorImpl: VpnProviderConnector? = null
+    private var digitalKeyRiskAdapterImpl: DigitalKeyRiskAdapter? = null
     private var smartHomeConnectorId: String = "smartthings"
     private var vpnConnectorId: String = "partner_vpn"
+    private var digitalKeyAdapterId: String = "local_digital_key_guardrails"
 
     @Synchronized
     fun initialize(context: Context) {
@@ -69,6 +71,23 @@ object IntegrationMeshController {
             else -> null
         }
 
+        digitalKeyAdapterId = resolveConnectorId(
+            nextConfig.featureFlags.digitalKeyRiskAdapter,
+            "local_digital_key_guardrails"
+        )
+        digitalKeyRiskAdapterImpl = when {
+            IntegrationMeshConfigStore.isModuleEnabled(
+                nextConfig,
+                IntegrationMeshModule.DIGITAL_KEY_RISK_ADAPTER,
+                nextOwnerRole,
+                nextOwnerId
+            ) -> createDigitalKeyRiskAdapter(
+                nextConfig = nextConfig,
+                adapterId = digitalKeyAdapterId
+            )
+            else -> null
+        }
+
         initialized = true
     }
 
@@ -109,6 +128,17 @@ object IntegrationMeshController {
     }
 
     @Synchronized
+    fun getActiveDigitalKeyRiskAdapter(context: Context): DigitalKeyRiskAdapter? {
+        ensureInitialized(context)
+        val effectiveRole = ownerRole
+        val effectiveOwnerId = ownerId
+        if (!IntegrationMeshConfigStore.isModuleEnabled(config, IntegrationMeshModule.DIGITAL_KEY_RISK_ADAPTER, effectiveRole, effectiveOwnerId)) {
+            return null
+        }
+        return digitalKeyRiskAdapterImpl
+    }
+
+    @Synchronized
     fun readConfig(context: Context): IntegrationMeshConfig {
         ensureInitialized(context)
         return config
@@ -124,6 +154,12 @@ object IntegrationMeshController {
     fun ownerId(context: Context): String {
         ensureInitialized(context)
         return ownerId
+    }
+
+    @Synchronized
+    fun digitalKeyAdapterId(context: Context): String {
+        ensureInitialized(context)
+        return digitalKeyAdapterId
     }
 
     @Synchronized
@@ -213,6 +249,16 @@ object IntegrationMeshController {
                 requiredScopes = requiredScopes
             )
         }
+    }
+
+    private fun createDigitalKeyRiskAdapter(
+        nextConfig: IntegrationMeshConfig,
+        adapterId: String
+    ): DigitalKeyRiskAdapter {
+        return LocalDigitalKeyRiskAdapter(
+            adapterConfig = nextConfig.connectors.digitalKeys,
+            adapterId = adapterId
+        )
     }
 
     private fun ensureInitialized(context: Context) {

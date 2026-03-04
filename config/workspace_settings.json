@@ -417,13 +417,21 @@
         ]
       },
       "digital_key_risk_adapter": {
-        "enabled": false,
+        "enabled": true,
         "rollout_stage": "internal_test",
         "owner_allowlist": [
           "parent",
-          "child"
+          "child",
+          "son"
         ],
-        "max_rollout_percent": 0,
+        "max_rollout_percent": 100,
+        "supported_connector_ids": [
+          "local_digital_key_guardrails"
+        ],
+        "required_scopes": [
+          "digital_key:advisory",
+          "digital_key:high_risk_prompt"
+        ],
         "require_redemption_proof": true
       }
     },
@@ -559,9 +567,65 @@
           "unverified_remote_unlock",
           "sudden_privilege_change",
           "location_restriction_violation",
-          "stale_consents"
+          "stale_consents",
+          "prerequisite_gap",
+          "social_engineering_exposure"
         ],
-        "require_parent_approval_for_share": true
+        "require_parent_approval_for_share": true,
+        "require_parent_approval_for_remote_commands": true,
+        "require_lock_screen_for_high_risk_actions": true,
+        "require_biometric_for_high_risk_actions": true,
+        "require_strong_integrity_for_high_risk_actions": true,
+        "block_high_risk_actions_on_elevated_integrity": false,
+        "wallet_setup_guidance": [
+          {
+            "id": "google_wallet",
+            "label": "Google Wallet",
+            "package_names": [
+              "com.google.android.apps.walletnfcrel"
+            ],
+            "setup_uri": "https://support.google.com/wallet/answer/13314575",
+            "fallback_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel"
+          },
+          {
+            "id": "samsung_wallet",
+            "label": "Samsung Wallet",
+            "package_names": [
+              "com.samsung.android.spay"
+            ],
+            "setup_uri": "https://www.samsung.com/us/support/mobile/mobile-wallet/",
+            "fallback_uri": "https://galaxystore.samsung.com/prepost/000005790062?langCd=en"
+          }
+        ],
+        "manufacturer_setup_guidance": [
+          {
+            "id": "hyundai_digital_key",
+            "label": "Hyundai Digital Key",
+            "package_names": [
+              "com.hyundaiusa.bluelink"
+            ],
+            "setup_uri": "https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/introducing-all-new-digital-key",
+            "fallback_uri": "https://play.google.com/store/search?q=hyundai%20bluelink&c=apps"
+          },
+          {
+            "id": "kia_connect_digital_key",
+            "label": "Kia Connect",
+            "package_names": [
+              "com.myuvo.link"
+            ],
+            "setup_uri": "https://owners.kia.com/content/owners/en/uvo-link.html",
+            "fallback_uri": "https://play.google.com/store/search?q=kia%20connect&c=apps"
+          },
+          {
+            "id": "bmw_digital_key",
+            "label": "BMW Digital Key",
+            "package_names": [
+              "de.bmw.connected.mobile20.na"
+            ],
+            "setup_uri": "https://www.bmwusa.com/explore/connecteddrive.html",
+            "fallback_uri": "https://play.google.com/store/search?q=bmw%20connected&c=apps"
+          }
+        ]
       }
     }
   },

@@ -232,6 +232,7 @@ In-app Android capabilities:
 - Root-aware defensive mode with trusted/elevated/compromised tiers and hardening gates
 - Credential Defense Center for local password generation and rotation action queueing
 - VPN broker linking with provider registry, launch routing (open app/deep link/system settings), status assertions (`configured`/`connected`/`stale`/`unknown`), account-class policy gates for `banking`/`developer`, and paid-tier disclosures
+- Digital-key risk guardrails with wallet/manufacturer setup guidance, lock-screen + biometric + integrity prerequisites for high-risk actions, social-engineering prompts for key sharing/remote commands, and guardian controls for minor profiles
 - Overlay assistant (display-over-other-apps permission required) for copy/open support during password changes
 - Embedded AI Copilot with optional connected subscription mode via policy-safe local broker (session key only, no persisted raw key)
 - Safe Hygiene Toolkit for storage/log hygiene, stale queue cleanup, and permission posture review (no task-killer behavior)
