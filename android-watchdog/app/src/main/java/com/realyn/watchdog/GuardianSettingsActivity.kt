@@ -1,6 +1,11 @@
 package com.realyn.watchdog
 
+import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -10,18 +15,38 @@ import android.os.Looper
 import android.provider.Settings
 import android.text.InputFilter
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityGuardianSettingsBinding
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
 import com.realyn.watchdog.theme.LionThemeToneMode
 import com.realyn.watchdog.theme.LionThemeViewStyler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class GuardianSettingsActivity : AppCompatActivity() {
 
@@ -32,6 +57,22 @@ class GuardianSettingsActivity : AppCompatActivity() {
     private var isAppearanceSubtitleExpanded: Boolean = false
     private val uiHandler = Handler(Looper.getMainLooper())
     private val hideStatusRunnable = Runnable { hideSettingsStatusWithFade() }
+    private val deviceUmbrellaScanLauncher = registerForActivityResult(ScanContract()) { result ->
+        val content = result.contents?.trim().orEmpty()
+        if (content.isBlank()) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_scan_cancelled))
+            return@registerForActivityResult
+        }
+        runDeviceUmbrellaJoin(content)
+    }
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                launchDeviceUmbrellaQrScanner()
+            } else {
+                showSettingsStatus(getString(R.string.device_umbrella_status_camera_denied))
+            }
+        }
 
     private companion object {
         const val APPEARANCE_SUBTITLE_COLLAPSED_LINES = 2
@@ -71,6 +112,9 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.setUsStateOverrideButton.setOnClickListener { openUsStateOverrideDialog() }
         binding.previewAccentSwatch.setOnClickListener { cycleThemeShade() }
         binding.previewToneSwatch.setOnClickListener { toggleLightDarkTone() }
+        binding.settingsRunTutorialButton.setOnClickListener {
+            openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_TUTORIAL)
+        }
         binding.openPlanBillingButton.setOnClickListener {
             openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_PLAN_BILLING)
         }
@@ -90,6 +134,12 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.openCredentialCenterButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
         }
+        binding.deviceUmbrellaCreateButton.setOnClickListener { createDeviceUmbrellaLinkCode() }
+        binding.deviceUmbrellaJoinButton.setOnClickListener { openDeviceUmbrellaJoinDialog() }
+        binding.deviceUmbrellaScanQrButton.setOnClickListener { openDeviceUmbrellaQrScanner() }
+        binding.deviceUmbrellaReviewJoinRequestsButton.setOnClickListener { reviewDeviceUmbrellaJoinRequests() }
+        binding.deviceUmbrellaSyncButton.setOnClickListener { runDeviceUmbrellaSyncNow() }
+        binding.deviceUmbrellaCopyPayloadButton.setOnClickListener { copyDeviceUmbrellaPayload() }
         binding.settingsIntroReplaySwitch.setOnCheckedChangeListener { _, isChecked ->
             if (syncingIntroSwitches) {
                 return@setOnCheckedChangeListener
@@ -250,6 +300,7 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.settingsIntroReplaySwitch.isChecked = MainActivity.isHomeIntroReplayEveryLaunch(this)
         binding.settingsIntroWidgetMotionSwitch.isChecked = MainActivity.isHomeIntroWidgetMotionEnabled(this)
         syncingIntroSwitches = false
+        refreshDeviceUmbrellaSummary()
     }
 
     private fun cycleThemeShade() {
@@ -511,6 +562,420 @@ class GuardianSettingsActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private fun refreshDeviceUmbrellaSummary() {
+        val state = DeviceUmbrellaSyncStore.readState(this)
+        if (state == null) {
+            binding.deviceUmbrellaStatusLabel.text = getString(R.string.device_umbrella_status_not_linked)
+            binding.deviceUmbrellaCopyPayloadButton.isEnabled = false
+            binding.deviceUmbrellaSyncButton.isEnabled = false
+            binding.deviceUmbrellaReviewJoinRequestsButton.isEnabled = false
+            return
+        }
+
+        val roleLabel = if (state.memberRole.equals("host", ignoreCase = true)) {
+            getString(R.string.device_umbrella_role_host)
+        } else {
+            getString(R.string.device_umbrella_role_member)
+        }
+        val lastSyncText = if (state.lastSyncAtEpochMs > 0L) {
+            formatUtcTime(state.lastSyncAtEpochMs)
+        } else {
+            getString(R.string.device_umbrella_last_sync_never)
+        }
+        binding.deviceUmbrellaStatusLabel.text = getString(
+            R.string.device_umbrella_status_linked_template,
+            state.umbrellaId.ifBlank { "umbrella" },
+            roleLabel,
+            lastSyncText,
+            state.lastRemoteEnvelopeCount,
+            state.lastRemoteHighCount,
+            state.lastRemoteMediumCount
+        )
+        binding.deviceUmbrellaCopyPayloadButton.isEnabled = state.qrPayloadUri.isNotBlank()
+        binding.deviceUmbrellaSyncButton.isEnabled = true
+        binding.deviceUmbrellaReviewJoinRequestsButton.isEnabled =
+            state.memberRole.equals("host", ignoreCase = true)
+    }
+
+    private fun createDeviceUmbrellaLinkCode() {
+        setDeviceUmbrellaBusy(true)
+        showSettingsStatus(getString(R.string.device_umbrella_status_creating))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { DeviceUmbrellaSyncClient.createSession(this@GuardianSettingsActivity) }
+            }
+            setDeviceUmbrellaBusy(false)
+            result.onSuccess { created ->
+                refreshSettingsUi()
+                showSettingsStatus(getString(R.string.device_umbrella_status_created))
+                showDeviceUmbrellaPairReadyDialog(created.state)
+            }.onFailure { error ->
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_error_template,
+                        cleanErrorMessage(error)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun openDeviceUmbrellaJoinDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.device_umbrella_join_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+            isSingleLine = true
+        }
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.device_umbrella_join_dialog_title)
+            .setMessage(R.string.device_umbrella_join_dialog_message)
+            .setView(input)
+            .setPositiveButton(R.string.device_umbrella_action_join_code) { _, _ ->
+                runDeviceUmbrellaJoin(input.text?.toString().orEmpty())
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openDeviceUmbrellaQrScanner() {
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            launchDeviceUmbrellaQrScanner()
+            return
+        }
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    private fun launchDeviceUmbrellaQrScanner() {
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt(getString(R.string.device_umbrella_scan_prompt))
+            setBeepEnabled(false)
+            setBarcodeImageEnabled(false)
+            setOrientationLocked(true)
+        }
+        deviceUmbrellaScanLauncher.launch(options)
+    }
+
+    private fun reviewDeviceUmbrellaJoinRequests() {
+        val state = DeviceUmbrellaSyncStore.readState(this)
+        if (state == null) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_not_linked))
+            return
+        }
+        if (!state.memberRole.equals("host", ignoreCase = true)) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_host_only_approval))
+            return
+        }
+        setDeviceUmbrellaBusy(true)
+        showSettingsStatus(getString(R.string.device_umbrella_status_reviewing_requests))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { DeviceUmbrellaSyncClient.listPendingJoinRequests(this@GuardianSettingsActivity) }
+            }
+            setDeviceUmbrellaBusy(false)
+            result.onSuccess { requests ->
+                if (requests.length() == 0) {
+                    showSettingsStatus(getString(R.string.device_umbrella_status_no_pending_requests))
+                    return@onSuccess
+                }
+                showJoinRequestDecisionDialog(requests)
+            }.onFailure { error ->
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_error_template,
+                        cleanErrorMessage(error)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun showJoinRequestDecisionDialog(requests: JSONArray, index: Int = 0) {
+        if (index >= requests.length()) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_no_pending_requests))
+            return
+        }
+        val request = requests.optJSONObject(index)
+        if (request == null) {
+            showJoinRequestDecisionDialog(requests, index + 1)
+            return
+        }
+        val requestId = request.optString("request_id").trim()
+        if (requestId.isBlank()) {
+            showJoinRequestDecisionDialog(requests, index + 1)
+            return
+        }
+        val alias = request.optString("device_alias").trim().ifBlank { "Android device" }
+        val model = request.optString("device_model").trim().ifBlank { "unknown model" }
+        val requestedAt = request.optString("requested_at").trim().ifBlank { "unknown time" }
+        val pendingCount = (requests.length() - index).coerceAtLeast(1)
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.device_umbrella_join_request_dialog_title)
+            .setMessage(
+                getString(
+                    R.string.device_umbrella_join_request_dialog_message_template,
+                    alias,
+                    model,
+                    requestedAt,
+                    pendingCount
+                )
+            )
+            .setPositiveButton(R.string.device_umbrella_action_approve_request) { _, _ ->
+                decideDeviceUmbrellaJoinRequest(requestId = requestId, alias = alias, approve = true)
+            }
+            .setNeutralButton(R.string.device_umbrella_action_reject_request) { _, _ ->
+                decideDeviceUmbrellaJoinRequest(requestId = requestId, alias = alias, approve = false)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun decideDeviceUmbrellaJoinRequest(requestId: String, alias: String, approve: Boolean) {
+        setDeviceUmbrellaBusy(true)
+        showSettingsStatus(getString(R.string.device_umbrella_status_reviewing_requests))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    DeviceUmbrellaSyncClient.decideJoinRequest(
+                        context = this@GuardianSettingsActivity,
+                        requestId = requestId,
+                        approve = approve
+                    )
+                }
+            }
+            setDeviceUmbrellaBusy(false)
+            result.onSuccess {
+                refreshSettingsUi()
+                showSettingsStatus(
+                    getString(
+                        if (approve) {
+                            R.string.device_umbrella_status_request_approved_template
+                        } else {
+                            R.string.device_umbrella_status_request_rejected_template
+                        },
+                        alias
+                    )
+                )
+            }.onFailure { error ->
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_error_template,
+                        cleanErrorMessage(error)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun runDeviceUmbrellaJoin(rawInput: String) {
+        val value = rawInput.trim()
+        if (value.isBlank()) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_join_empty))
+            return
+        }
+        setDeviceUmbrellaBusy(true)
+        showSettingsStatus(getString(R.string.device_umbrella_status_joining))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { DeviceUmbrellaSyncClient.joinSession(this@GuardianSettingsActivity, value) }
+            }
+            setDeviceUmbrellaBusy(false)
+            result.onSuccess {
+                refreshSettingsUi()
+                showSettingsStatus(getString(R.string.device_umbrella_status_joined))
+            }.onFailure { error ->
+                val cleaned = cleanErrorMessage(error)
+                if (cleaned == getString(R.string.device_umbrella_status_pending_host_approval)) {
+                    showSettingsStatus(getString(R.string.device_umbrella_status_pending_host_approval))
+                    return@onFailure
+                }
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_error_template,
+                        cleaned
+                    )
+                )
+            }
+        }
+    }
+
+    private fun runDeviceUmbrellaSyncNow() {
+        val state = DeviceUmbrellaSyncStore.readState(this)
+        if (state == null) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_not_linked))
+            return
+        }
+
+        setDeviceUmbrellaBusy(true)
+        showSettingsStatus(getString(R.string.device_umbrella_status_syncing))
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { DeviceUmbrellaSyncClient.syncNow(this@GuardianSettingsActivity) }
+            }
+            setDeviceUmbrellaBusy(false)
+            result.onSuccess { synced ->
+                refreshSettingsUi()
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_synced_template,
+                        synced.remoteEnvelopeCount,
+                        synced.remoteHighCount,
+                        synced.remoteMediumCount
+                    )
+                )
+            }.onFailure { error ->
+                showSettingsStatus(
+                    getString(
+                        R.string.device_umbrella_status_error_template,
+                        cleanErrorMessage(error)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun copyDeviceUmbrellaPayload() {
+        val state = DeviceUmbrellaSyncStore.readState(this)
+        val payload = state?.qrPayloadUri.orEmpty()
+        if (payload.isBlank()) {
+            showSettingsStatus(getString(R.string.device_umbrella_status_not_linked))
+            return
+        }
+        copyToClipboard(
+            label = getString(R.string.device_umbrella_clipboard_payload_label),
+            value = payload
+        )
+        showSettingsStatus(getString(R.string.device_umbrella_status_payload_copied))
+    }
+
+    private fun showDeviceUmbrellaPairReadyDialog(state: DeviceUmbrellaState) {
+        val expires = if (state.expiresAtEpochMs > 0L) {
+            formatUtcTime(state.expiresAtEpochMs)
+        } else {
+            getString(R.string.device_umbrella_expiry_unknown)
+        }
+        val details = getString(
+            R.string.device_umbrella_pair_ready_message_template,
+            state.linkCode,
+            state.qrPayloadUri,
+            expires
+        )
+        val qrBitmap = buildUmbrellaQrBitmap(state.qrPayloadUri)
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.device_umbrella_pair_ready_title)
+            .apply {
+                if (qrBitmap == null) {
+                    setMessage(details)
+                } else {
+                    setView(buildUmbrellaPairReadyView(details, qrBitmap))
+                }
+            }
+            .setPositiveButton(R.string.device_umbrella_action_copy_code) { _, _ ->
+                copyToClipboard(
+                    label = getString(R.string.device_umbrella_clipboard_code_label),
+                    value = state.linkCode
+                )
+                showSettingsStatus(getString(R.string.device_umbrella_status_code_copied))
+            }
+            .setNeutralButton(R.string.device_umbrella_action_copy_qr_payload) { _, _ ->
+                copyToClipboard(
+                    label = getString(R.string.device_umbrella_clipboard_payload_label),
+                    value = state.qrPayloadUri
+                )
+                showSettingsStatus(getString(R.string.device_umbrella_status_payload_copied))
+            }
+            .setNegativeButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun buildUmbrellaPairReadyView(details: String, qrBitmap: Bitmap): View {
+        val padding = dp(10)
+        val qrSize = dp(220).coerceAtLeast(dp(180))
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, padding)
+        }
+        val qrImage = ImageView(this).apply {
+            contentDescription = getString(R.string.device_umbrella_qr_content_description)
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(qrSize, qrSize).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+            setImageBitmap(qrBitmap)
+        }
+        val detailsLabel = TextView(this).apply {
+            text = details
+            textSize = 13f
+            setLineSpacing(0f, 1.08f)
+            setPadding(0, dp(12), 0, 0)
+        }
+        container.addView(qrImage)
+        container.addView(detailsLabel)
+        return container
+    }
+
+    private fun buildUmbrellaQrBitmap(payload: String): Bitmap? {
+        if (payload.isBlank()) {
+            return null
+        }
+        return runCatching {
+            val size = dp(220).coerceAtLeast(dp(180))
+            val hints = mapOf(
+                EncodeHintType.MARGIN to 1,
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M
+            )
+            val matrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size, hints)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            for (x in 0 until size) {
+                for (y in 0 until size) {
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+                }
+            }
+            bitmap
+        }.getOrNull()
+    }
+
+    private fun copyToClipboard(label: String, value: String) {
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(ClipData.newPlainText(label, value))
+    }
+
+    private fun setDeviceUmbrellaBusy(busy: Boolean) {
+        val state = DeviceUmbrellaSyncStore.readState(this)
+        val isHost = state?.memberRole?.equals("host", ignoreCase = true) == true
+        binding.settingsRunTutorialButton.isEnabled = !busy
+        binding.deviceUmbrellaCreateButton.isEnabled = !busy
+        binding.deviceUmbrellaJoinButton.isEnabled = !busy
+        binding.deviceUmbrellaScanQrButton.isEnabled = !busy
+        binding.deviceUmbrellaReviewJoinRequestsButton.isEnabled = !busy && isHost
+        binding.deviceUmbrellaSyncButton.isEnabled = !busy && state != null
+        binding.deviceUmbrellaCopyPayloadButton.isEnabled =
+            !busy && state?.qrPayloadUri?.isNotBlank() == true
+    }
+
+    private fun cleanErrorMessage(error: Throwable): String {
+        return error.message.orEmpty()
+            .replace("\n", " ")
+            .trim()
+            .ifBlank { getString(R.string.device_umbrella_error_generic) }
+            .take(180)
+    }
+
+    private fun formatUtcTime(epochMs: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.format(Date(epochMs))
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
     private fun applySettingsTheme(
         palette: LionThemePalette,
         isDarkTone: Boolean,
@@ -544,6 +1009,7 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.settingChildMainOverrideValue.setTextColor(palette.textPrimary)
         binding.settingUsStateOverrideValue.setTextColor(palette.textPrimary)
         binding.settingsChildMainOverrideSwitch.setTextColor(palette.textPrimary)
+        binding.deviceUmbrellaStatusLabel.setTextColor(palette.textSecondary)
         applyPaletteToMaterialCards(binding.root, palette, accentStyle)
         LionThemeViewStyler.applyMaterialButtonPalette(
             root = binding.root,
@@ -554,6 +1020,8 @@ class GuardianSettingsActivity : AppCompatActivity() {
             root = binding.root,
             accentStyle = accentStyle
         )
+        binding.settingsRunTutorialButton.setTextColor(palette.accent)
+        binding.deviceUmbrellaCopyPayloadButton.setTextColor(palette.accent)
 
         binding.previewAccentSwatch.setBackgroundColor(palette.accent)
     }

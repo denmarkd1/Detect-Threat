@@ -1,0 +1,136 @@
+{
+  "generated_at_utc": "2026-03-04T10:18:18+00:00",
+  "workspace": "/home/danicous/security",
+  "package_name": "com.realyn.watchdog",
+  "device_serial": "GINVINZLY59HAEFM",
+  "checks": [
+    {
+      "name": "python_editable_install",
+      "command": "python3 -m pip install -e .",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 3.58,
+      "output_excerpt": "Defaulting to user installation because normal site-packages is not writeable\nObtaining file:///home/danicous/security\n  Installing build dependencies: started\n  Installing build dependencies: finished with status 'done'\n  Checking if build backend supports build_editable: started\n  Checking if build backend supports build_editable: finished with status 'done'\n  Getting requirements to build editable: started\n  Getting requirements to build editable: finished with status 'done'\n  Preparing editable metadata (pyproject.toml): started\n  Preparing editable metadata (pyproject.toml): finished with status 'done'\nRequirement already satisfied: cryptography>=41.0.0 in /home/danicous/.local/lib/python3.10/site-packages (from credential-defense==0.1.0) (46.0.5)\nRequirement already satisfied: requests>=2.31.0 in /home/danicous/.local/lib/python3.10/site-packages (from credential-defense==0.1.0) (2.32.5)\nRequirement already satisfied: cffi>=2.0.0 in /home/danicous/.local/lib/python3.10/site-packages (from cryptography>=41.0.0->credential-defense==0.1.0) (2.0.0)\nRequirement already satisfied: typing-extensions>=4.13.2 in /home/danicous/.local/lib/python3.10/site-packages (from cryptography>=41.0.0->credential-defense==0.1.0) (4.15.0)\nRequirement already satisfied: pycparser in /home/danicous/.local/lib/python3.10/site-packages (from cffi>=2.0.0->cryptography>=41.0.0->credential-defense==0.1.0) (3.0)\nRequirement already satisfied: charset_normalizer<4,>=2 in /home/danicous/.local/lib/python3.10/site-packages (from requests>=2.31.0->credential-defense==0.1.0) (3.4.4)\nRequirement already satisfied: idna<4,>=2.5 in /usr/lib/python3/dist-packages (from requests>=2.31.0->credential-defense==0.1.0) (3.3)\nRequirement already satisfied: urllib3<3,>=1.21.1 in /usr/lib/python3/dist-packages (from requests>=2.31.0->credential-defense==0.1.0) (1.26.5)\nRequirement already satisfied: certifi>=2017.4.17 in /usr/lib/python3/dist-packages (from requests>=2.31.0->credential-defense==0.1.0) (2020.6.20)\nBuilding wheels for collected packages: credential-defense\n  Building editable for credential-defense (pyproject.toml): started\n  Building editable for credential-defense (pyproject.toml): finis\n...[truncated]"
+    },
+    {
+      "name": "credential_defense_help",
+      "command": "credential-defense --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.17,
+      "output_excerpt": "usage: credential-defense [-h]\n                          {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n                          ...\n\nCredential Defense - local-first breach response workflow\n\npositional arguments:\n  {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n    init                Initialize config files and encrypted vault\n    detect-browsers     Detect installed browser profile directories\n    watchdog-status     Write and print runtime OS/watchdog status\n    watchdog-daemon     Run watchdog heartbeat loop for Linux/Windows runtime\n                        detection\n    import-exports      Import browser CSV exports into encrypted vault\n    list-records        List vault records (without printing passwords)\n    session             Run guided top-to-bottom triage session\n    run-actions         Run queued rotate/delete actions with confirmations\n    support-server      Run local support hub (AI chat hotline +\n                        feature/problem ticket queue)\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "watchdog_help",
+      "command": "python3 watchdog/watchdog.py --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.05,
+      "output_excerpt": "usage: watchdog.py [-h] {baseline,scan,watch} ...\n\nRealyn Android watchdog\n\npositional arguments:\n  {baseline,scan,watch}\n    baseline            collect and save baseline snapshot\n    scan                scan and compare to baseline\n    watch               run scan in a loop\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "precommit_guard",
+      "command": "bash scripts/ops/precommit_guard.sh --include-unstaged",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 8.63,
+      "output_excerpt": "[+] precommit_guard: repository=/home/danicous/security\n[+] precommit_guard: scope=staged+unstaged\n[+] precommit_guard: changed files (30):\n    README.md\n    android-watchdog/.kotlin/sessions/kotlin-compiler-15901422897477656131.salive\n    android-watchdog/app/src/main/java/com/realyn/watchdog/HomeTutorialOverlayView.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/MainActivity.kt\n    android-watchdog/app/src/main/res/layout/activity_main.xml\n    android-watchdog/app/src/main/res/values/strings.xml\n    docs/README.md\n    docs/index.html\n    docs/integration/phase1_5_retail_readiness_audit_2026-03-04.md\n    docs/integration/phase6_lyra_qa_trainer_2026-03-04.md\n    docs/integration/phase6_masvs_verification_sweep_2026-03-04.md\n    docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md\n    docs/integration/phase6_pricing_packaging_update_2026-03-04.md\n    docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md\n    docs/integration/play_release_rollout_checklist_2026-02-21.md\n    docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md\n    docs/privacy.html\n    docs/terms.html\n    logs/lyra_qa/lyra_qa_report_20260304T093521Z.json\n    logs/lyra_qa/lyra_qa_report_20260304T093521Z.md\n    logs/lyra_qa/lyra_qa_report_20260304T101341Z.json\n    logs/lyra_qa/lyra_qa_report_20260304T101341Z.md\n    logs/phase6/masvs_sweep_20260304T092437Z.md\n    logs/phase6/masvs_sweep_20260304T093002Z.md\n    logs/phase6/masvs_sweep_20260304T093540Z.md\n    logs/phase6/masvs_sweep_20260304T101322Z.md\n    logs/phase6/masvs_sweep_20260304T101720Z.md\n    scripts/ops/lyra_beta_trainer.py\n    scripts/ops/phase6_masvs_sweep.sh\n    systems/D_T_System/tasks/active_tasks.json\n[!] precommit_guard: identifier-based secret assignment matches (warning only):\n    docs/integration/play_release_rollout_checklist_2026-02-21.md:dt_release_key_password,dt_release_store_password\n[+] precommit_guard: hardcoded secret scan passed.\n[+] precommit_guard: running python syntax check (1 files)...\n[+] precommit_guard: python syntax check passed.\n[+] precommit_guard: running Android compile check (:app:compileDebugKotlin)...\nStarting a Gradle Daemon, 1 busy and 1 in\n...[truncated]"
+    },
+    {
+      "name": "gradle_lint_unit",
+      "command": "./gradlew lintDebug testDebugUnitTest",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 30.24,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "gradle_assemble_debug",
+      "command": "./gradlew assembleDebug",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.53,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "adb_connection",
+      "command": "bash scripts/ops/check_adb_connection.sh",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.01,
+      "output_excerpt": "[+] Using adb: /home/danicous/security/tools/android/platform-tools/adb\nList of devices attached\nGINVINZLY59HAEFM       device usb:1-7.2 product:corot_global model:23078PND5G device:corot transport_id:6\n\n[+] Android device link is active."
+    },
+    {
+      "name": "adb_install_debug_apk",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM install -r /home/danicous/security/android-watchdog/app/build/outputs/apk/debug/app-debug.apk",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.21,
+      "output_excerpt": "Performing Streamed Install\nSuccess"
+    },
+    {
+      "name": "adb_logcat_clear",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM logcat -c",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.3,
+      "output_excerpt": ""
+    },
+    {
+      "name": "app_launch_smoke",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM shell monkey -p com.realyn.watchdog -c android.intent.category.LAUNCHER 1",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.48,
+      "output_excerpt": "bash arg: -p\n  bash arg: com.realyn.watchdog\n  bash arg: -c\n  bash arg: android.intent.category.LAUNCHER\n  bash arg: 1\nEvents injected: 1\n## Network stats: elapsed time=57ms (0ms mobile, 0ms wifi, 57ms not connected)\nargs: [-p, com.realyn.watchdog, -c, android.intent.category.LAUNCHER, 1]\n arg: \"-p\"\n arg: \"com.realyn.watchdog\"\n arg: \"-c\"\n arg: \"android.intent.category.LAUNCHER\"\n arg: \"1\"\ndata=\"com.realyn.watchdog\"\ndata=\"android.intent.category.LAUNCHER\""
+    },
+    {
+      "name": "app_randomized_monkey",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM shell monkey -p com.realyn.watchdog --ignore-crashes --ignore-timeouts --pct-syskeys 0 --throttle 60 -s 424242 150",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.06,
+      "output_excerpt": "bash arg: -p\n  bash arg: com.realyn.watchdog\n  bash arg: --ignore-crashes\n  bash arg: --ignore-timeouts\n  bash arg: --pct-syskeys\n  bash arg: 0\n  bash arg: --throttle\n  bash arg: 60\n  bash arg: -s\n  bash arg: 424242\n  bash arg: 150\nGot IOException performing flipjava.io.FileNotFoundException: /dev/input/event0: open failed: EACCES (Permission denied)\n    // Injection Failed\nEvents injected: 150\n## Network stats: elapsed time=3669ms (0ms mobile, 0ms wifi, 3669ms not connected)\nargs: [-p, com.realyn.watchdog, --ignore-crashes, --ignore-timeouts, --pct-syskeys, 0, --throttle, 60, -s, 424242, 150]\n arg: \"-p\"\n arg: \"com.realyn.watchdog\"\n arg: \"--ignore-crashes\"\n arg: \"--ignore-timeouts\"\n arg: \"--pct-syskeys\"\n arg: \"0\"\n arg: \"--throttle\"\n arg: \"60\"\n arg: \"-s\"\n arg: \"424242\"\n arg: \"150\"\ndata=\"com.realyn.watchdog\"\narg=\"--ignore-crashes\" mCurArgData=\"null\" mNextArg=3 argwas=\"--ignore-crashes\" nextarg=\"--ignore-timeouts\"\narg=\"--ignore-timeouts\" mCurArgData=\"null\" mNextArg=4 argwas=\"--ignore-timeouts\" nextarg=\"--pct-syskeys\"\narg=\"--pct-syskeys\" mCurArgData=\"null\" mNextArg=5 argwas=\"--pct-syskeys\" nextarg=\"0\"\ndata=\"0\"\narg=\"--throttle\" mCurArgData=\"null\" mNextArg=7 argwas=\"--throttle\" nextarg=\"60\"\ndata=\"60\"\ndata=\"424242\""
+    },
+    {
+      "name": "watchdog_baseline",
+      "command": "python3 watchdog/watchdog.py baseline",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.93,
+      "output_excerpt": "2026-03-04T10:18:16+00:00 [watchdog] collecting baseline snapshot\n2026-03-04T10:18:17+00:00 [watchdog] baseline saved to /home/danicous/security/state/baseline.json"
+    },
+    {
+      "name": "watchdog_scan",
+      "command": "python3 watchdog/watchdog.py scan",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.83,
+      "output_excerpt": "2026-03-04T10:18:17+00:00 [watchdog] collecting current snapshot\n2026-03-04T10:18:18+00:00 [watchdog] scan completed: no suspicious changes against baseline"
+    },
+    {
+      "name": "logcat_capture",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM logcat -d -v time -t 4000",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.07,
+      "output_excerpt": "--------- beginning of main\n03-04 18:18:12.475 D/CCodecConfig(23894): no c2 equivalents for encoder\n03-04 18:18:12.475 I/libPowerHal( 1429): MTKPOWER_HINT_PACK_SWITCH: set gpu opp level max: 0\n03-04 18:18:12.475 I/libPowerHal( 1429): [setGPUFreq] Soft min/max = (52, 0); Hard min/max = (52, 0)\n03-04 18:18:12.475 I/libPowerHal( 1429): [setGPUFreq] final min/max = (52, 0)\n03-04 18:18:12.475 I/libPowerHal( 1429): MTKPOWER_HINT_PACK_SWITCH: set gpu opp level: 52\n03-04 18:18:12.475 I/libPowerHal( 1429): MTKPOWER_HINT_PACK_SWITCH: set gpu opp level max: 0\n03-04 18:18:12.475 I/libPowerHal( 1429): [PD] MTKPOWER_HINT_PACK_SWITCH update cmd:1408300 param:40\n03-04 18:18:12.476 I/libPowerHal( 1429): [PD] MTKPOWER_HINT_PACK_SWITCH update cmd:c0c200 param:84215070\n03-04 18:18:12.476 I/libPowerHal( 1429): [PD] MTKPOWER_HINT_PACK_SWITCH update cmd:c0c300 param:259\n03-04 18:18:12.476 I/libPowerHal( 1429): [setDvfsrcDevFreqOpp] opp:2, freq:5500000000\n03-04 18:18:12.476 I/libPowerHal( 1429): [PD] MTKPOWER_HINT_PACK_SWITCH update cmd:1000000 param:2\n03-04 18:18:12.476 D/CCodecConfig(23894): c2 config diff is   c2::u32 coded.bitrate.value = 10000000\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::float coded.frame-rate.value = 60\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 coded.vui.color.matrix = 3\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 coded.vui.color.primaries = 4\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::i64 coding.sync-frame-interval.value = 10000000\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 raw.color.matrix = 3\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 raw.color.primaries = 4\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 raw.size.height = 712\n03-04 18:18:12.476 D/CCodecConfig(23894):   c2::u32 raw.size.width = 320\n03-04 18:18:12.476 W/ColorUtils(23894): expected specified color aspects (0:4:3:0)\n--------- beginning of system\n03-04 18:18:12.477 W/WindowManager( 2197):  displayMetricsChanged=false physicalDisplayChanged=false displayId=271 newUniqueId=virtual:com.android.shell,2000,studio.screen.sharing:0,269 currentUnique=virtual:com.android.shell,2000,studio.screen.sharing:0,269\n03-04 18:18:12.477 D/CCodec  (23894): encoding \n...[truncated]"
+    },
+    {
+      "name": "logcat_fatal_scan",
+      "command": "scan full logcat capture for fatal signatures",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "No fatal crash signature found in the full captured logcat."
+    },
+    {
+      "name": "adb_force_stop",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb -s GINVINZLY59HAEFM shell am force-stop com.realyn.watchdog",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.16,
+      "output_excerpt": ""
+    }
+  ]
+}

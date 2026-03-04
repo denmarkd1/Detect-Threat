@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         const val GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP = "open_locator_setup"
         const val GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP = "open_home_risk_setup"
         const val GUARDIAN_SETTINGS_ACTION_OPEN_VPN_SETUP = "open_vpn_setup"
+        const val GUARDIAN_SETTINGS_ACTION_OPEN_TUTORIAL = "open_tutorial"
 
         private const val UI_PREFS_FILE = "dt_ui_prefs"
         private const val KEY_HOME_INTRO_SHOWN = "home_intro_shown_v4"
@@ -3082,11 +3083,18 @@ class MainActivity : AppCompatActivity() {
         ) {
             return
         }
-        val state = latestSecurityHeroState ?: buildSecurityHeroState()
-        val suggestion = resolveGuidedSuggestion(state)
         prefs.edit()
             .putBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, true)
             .apply()
+        openHomeTutorialChoiceDialog()
+    }
+
+    private fun openHomeTutorialChoiceDialog() {
+        if (isFinishing || isDestroyed || homeTutorialActive) {
+            return
+        }
+        val state = latestSecurityHeroState ?: buildSecurityHeroState()
+        val suggestion = resolveGuidedSuggestion(state)
         LionAlertDialogBuilder(this)
             .setTitle(R.string.home_tutorial_popup_title)
             .setMessage(
@@ -3415,23 +3423,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun positionTutorialCard(highlightRect: RectF) {
         val params = binding.homeTutorialCard.layoutParams as FrameLayout.LayoutParams
-        val overlayHeight = binding.homeTutorialOverlay.height.toFloat().coerceAtLeast(1f)
-        val placeTop = highlightRect.centerY() > (overlayHeight * 0.58f)
-        params.gravity = if (placeTop) {
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        } else {
-            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        }
-        params.topMargin = if (placeTop) {
-            latestSystemBarInsets.top + dpToPx(14f)
-        } else {
-            0
-        }
-        params.bottomMargin = if (!placeTop) {
-            latestSystemBarInsets.bottom + dpToPx(14f)
-        } else {
-            0
-        }
+        binding.homeTutorialCoachView.getLocationOnScreen(tutorialOverlayLocation)
+        binding.homeQuickWidgetsGrid.getLocationOnScreen(tutorialTargetLocation)
+
+        val overlayHeight = binding.homeTutorialOverlay.height
+        val cardHeight = binding.homeTutorialCard.height
+            .takeIf { it > 0 }
+            ?: binding.homeTutorialCard.measuredHeight
+        val safeTop = latestSystemBarInsets.top + dpToPx(14f)
+        val safeBottom = latestSystemBarInsets.bottom + dpToPx(14f)
+        val gapAboveWidgets = dpToPx(10f)
+        val widgetsTopInOverlay = tutorialTargetLocation[1] - tutorialOverlayLocation[1]
+        val preferredTop = widgetsTopInOverlay - cardHeight - gapAboveWidgets
+        val maxTop = (overlayHeight - cardHeight - safeBottom).coerceAtLeast(safeTop)
+        val fallbackTop = ((highlightRect.top - cardHeight) - gapAboveWidgets.toFloat()).toInt()
+        val resolvedTop = when {
+            preferredTop >= safeTop -> preferredTop
+            fallbackTop in safeTop..maxTop -> fallbackTop
+            else -> safeTop
+        }.coerceAtMost(maxTop)
+
+        params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        params.topMargin = resolvedTop
+        params.bottomMargin = 0
         binding.homeTutorialCard.layoutParams = params
     }
 
@@ -4921,6 +4935,7 @@ class MainActivity : AppCompatActivity() {
             GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP -> openDeviceLocatorSetupDialog()
             GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP -> openHomeRiskSetupFlow()
             GUARDIAN_SETTINGS_ACTION_OPEN_VPN_SETUP -> openVpnSetupFlow()
+            GUARDIAN_SETTINGS_ACTION_OPEN_TUTORIAL -> openHomeTutorialChoiceDialog()
         }
     }
 

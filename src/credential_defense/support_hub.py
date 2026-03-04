@@ -29,6 +29,7 @@ from .config import (
     WORKSPACE_ROOT,
     ensure_workspace_files,
 )
+from .device_umbrella import DeviceUmbrellaStore
 
 
 SECRET_PATTERN = re.compile(
@@ -635,6 +636,7 @@ class SupportHub:
     def __init__(self) -> None:
         self.store = SupportStore()
         self.ai = SupportAiResponder()
+        self.device_umbrella = DeviceUmbrellaStore()
         self.stop_event = threading.Event()
         self._wake = threading.Event()
         self.worker = threading.Thread(target=self._worker_loop, name="support-ticket-worker", daemon=True)
@@ -1008,6 +1010,40 @@ class SupportHttpHandler(BaseHTTPRequestHandler):
             rows = self.hub.store.list_feedback(limit=limit)
             self._send_json(HTTPStatus.OK, {"feedback": rows})
             return
+        if parsed.path == "/api/support/device-umbrella/session/status":
+            params = parse_qs(parsed.query)
+            session_id = sanitize_text(params.get("session_id", [""])[0], max_chars=80)
+            member_id = sanitize_text(params.get("member_id", [""])[0], max_chars=80)
+            if not session_id or not member_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "session_id and member_id are required"})
+                return
+            try:
+                status = self.hub.device_umbrella.session_status(
+                    session_id=session_id,
+                    member_id=member_id,
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, status)
+            return
+        if parsed.path == "/api/support/device-umbrella/session/join-requests":
+            params = parse_qs(parsed.query)
+            session_id = sanitize_text(params.get("session_id", [""])[0], max_chars=80)
+            member_id = sanitize_text(params.get("member_id", [""])[0], max_chars=80)
+            if not session_id or not member_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "session_id and member_id are required"})
+                return
+            try:
+                status = self.hub.device_umbrella.list_join_requests(
+                    session_id=session_id,
+                    member_id=member_id,
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, status)
+            return
 
         self._serve_static(parsed.path)
 
@@ -1016,6 +1052,91 @@ class SupportHttpHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if payload is None:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid json payload"})
+            return
+
+        if parsed.path == "/api/support/device-umbrella/session/create":
+            try:
+                result = self.hub.device_umbrella.create_session(
+                    owner=payload.get("owner", ""),
+                    owner_proof=payload.get("owner_proof", ""),
+                    device_fingerprint=payload.get("device_fingerprint", ""),
+                    device_alias=payload.get("device_alias", ""),
+                    device_model=payload.get("device_model", ""),
+                    ttl_seconds=payload.get("ttl_seconds", 900),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.CREATED, result)
+            return
+
+        if parsed.path == "/api/support/device-umbrella/session/register-code":
+            try:
+                result = self.hub.device_umbrella.register_code(
+                    session_id=payload.get("session_id", ""),
+                    member_id=payload.get("member_id", ""),
+                    code_hash=payload.get("code_hash", ""),
+                    owner_proof=payload.get("owner_proof", ""),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/support/device-umbrella/session/join":
+            try:
+                result = self.hub.device_umbrella.join_with_code(
+                    link_code=payload.get("link_code", ""),
+                    owner_proof=payload.get("owner_proof", ""),
+                    device_fingerprint=payload.get("device_fingerprint", ""),
+                    device_alias=payload.get("device_alias", ""),
+                    device_model=payload.get("device_model", ""),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+        if parsed.path == "/api/support/device-umbrella/session/join-decision":
+            try:
+                result = self.hub.device_umbrella.decide_join_request(
+                    session_id=payload.get("session_id", ""),
+                    member_id=payload.get("member_id", ""),
+                    request_id=payload.get("request_id", ""),
+                    decision=payload.get("decision", ""),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/support/device-umbrella/sync/push":
+            try:
+                result = self.hub.device_umbrella.push_envelope(
+                    session_id=payload.get("session_id", ""),
+                    member_id=payload.get("member_id", ""),
+                    payload_version=parse_int(payload.get("payload_version"), default=1, minimum=1, maximum=9),
+                    iv_b64=payload.get("iv_b64", ""),
+                    ciphertext_b64=payload.get("ciphertext_b64", ""),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/support/device-umbrella/sync/pull":
+            try:
+                result = self.hub.device_umbrella.pull_envelopes(
+                    session_id=payload.get("session_id", ""),
+                    member_id=payload.get("member_id", ""),
+                )
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            self._send_json(HTTPStatus.OK, result)
             return
 
         if parsed.path == "/api/support/chat":

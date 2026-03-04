@@ -204,6 +204,7 @@
     <string name="lion_nav_action_timeline_report">Cronología e informe</string>
     <string name="lion_nav_action_security_details">Detalles de seguridad</string>
     <string name="lion_nav_action_guardian_settings">Ajustes de guardian</string>
+    <string name="action_run_tutorial">Ejecutar tutorial</string>
     <string name="action_vpn_setup">Configurar VPN</string>
     <string name="vpn_setup_loading">Preparando configuración de VPN...</string>
     <string name="vpn_setup_dialog_title">Configuración de VPN</string>

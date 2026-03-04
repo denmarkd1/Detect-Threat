@@ -529,29 +529,21 @@ class CredentialDefenseActivity : AppCompatActivity() {
     ) {
         val candidates = detectAuthenticatorApps()
         if (candidates.isEmpty()) {
-            val emptyDialog = LionAlertDialogBuilder(this)
-                .setTitle(R.string.two_factor_auth_app_picker_title)
-                .setMessage(R.string.two_factor_auth_app_none_message)
-                .setPositiveButton(R.string.two_factor_auth_app_install_action) { _, _ ->
+            promptTwoFactorTextInput(
+                titleRes = R.string.two_factor_auth_app_manual_title,
+                hintRes = R.string.input_two_factor_auth_app_hint,
+                initialValue = dialogBinding.twoFactorAuthAppInput.text?.toString().orEmpty(),
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS,
+                invalidMessageRes = R.string.two_factor_auth_app_required,
+                validator = { value -> value.isNotBlank() },
+                neutralActionRes = R.string.two_factor_auth_app_install_action,
+                onNeutralAction = {
                     openAuthenticatorAppInstallSearch()
                 }
-                .setNeutralButton(R.string.two_factor_auth_app_manual_action) { _, _ ->
-                    promptTwoFactorTextInput(
-                        titleRes = R.string.two_factor_auth_app_manual_title,
-                        hintRes = R.string.input_two_factor_auth_app_hint,
-                        initialValue = dialogBinding.twoFactorAuthAppInput.text?.toString().orEmpty(),
-                        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS,
-                        invalidMessageRes = R.string.two_factor_auth_app_required,
-                        validator = { value -> value.isNotBlank() }
-                    ) { value ->
-                        dialogBinding.twoFactorAuthAppInput.setText(value)
-                        onReady()
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .create()
-            emptyDialog.show()
-            LionDialogStyler.applyForActivity(this, emptyDialog)
+            ) { value ->
+                dialogBinding.twoFactorAuthAppInput.setText(value)
+                onReady()
+            }
             return
         }
 
@@ -563,7 +555,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             .setSingleChoiceItems(labels, selectedIndex) { _, which ->
                 selectedIndex = which
             }
-            .setPositiveButton(R.string.two_factor_auth_app_use_selected) { _, _ ->
+            .setPositiveButton(R.string.action_save) { _, _ ->
                 val selected = candidates[selectedIndex]
                 dialogBinding.twoFactorAuthAppInput.setText(selected.label)
                 Toast.makeText(
@@ -589,6 +581,8 @@ class CredentialDefenseActivity : AppCompatActivity() {
         inputType: Int,
         invalidMessageRes: Int,
         validator: (String) -> Boolean,
+        neutralActionRes: Int? = null,
+        onNeutralAction: (() -> Unit)? = null,
         onValueAccepted: (String) -> Unit
     ) {
         val inputLayout = TextInputLayout(this).apply {
@@ -608,12 +602,17 @@ class CredentialDefenseActivity : AppCompatActivity() {
             )
         )
 
-        val inputDialog = LionAlertDialogBuilder(this)
+        val inputDialogBuilder = LionAlertDialogBuilder(this)
             .setTitle(titleRes)
             .setView(inputLayout)
             .setPositiveButton(R.string.action_save, null)
             .setNegativeButton(android.R.string.cancel, null)
-            .create()
+        if (neutralActionRes != null && onNeutralAction != null) {
+            inputDialogBuilder.setNeutralButton(neutralActionRes) { _, _ ->
+                onNeutralAction()
+            }
+        }
+        val inputDialog = inputDialogBuilder.create()
 
         inputDialog.setOnShowListener {
             inputDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {

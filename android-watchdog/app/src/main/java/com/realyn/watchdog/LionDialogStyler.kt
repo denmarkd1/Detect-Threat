@@ -7,9 +7,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.RadioButton
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.CompoundButtonCompat
+import com.google.android.material.textfield.TextInputLayout
 import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
@@ -83,6 +86,33 @@ object LionDialogStyler {
     }
 
     private fun styleInputs(view: View, palette: LionThemePalette) {
+        if (view is TextInputLayout) {
+            val hintColors = ColorStateList(
+                arrayOf(
+                    intArrayOf(android.R.attr.state_focused),
+                    intArrayOf()
+                ),
+                intArrayOf(
+                    palette.textSecondary,
+                    palette.textMuted
+                )
+            )
+            view.defaultHintTextColor = hintColors
+            view.hintTextColor = hintColors
+            view.setBoxStrokeColorStateList(
+                ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_focused),
+                        intArrayOf()
+                    ),
+                    intArrayOf(
+                        palette.accent,
+                        palette.stroke
+                    )
+                )
+            )
+        }
+
         when (view) {
             is EditText -> {
                 view.setTextColor(palette.textPrimary)
@@ -91,10 +121,25 @@ object LionDialogStyler {
                     view.backgroundTintList = ColorStateList.valueOf(palette.stroke)
                 }
             }
-            is ViewGroup -> {
-                for (index in 0 until view.childCount) {
-                    styleInputs(view.getChildAt(index), palette)
+            is RadioButton -> {
+                view.setTextColor(palette.textPrimary)
+                CompoundButtonCompat.setButtonTintList(view, ColorStateList.valueOf(palette.accent))
+            }
+            is TextView -> {
+                if (view !is Button) {
+                    val textColor = when (view.id) {
+                        android.R.id.message,
+                        R.id.planReadOnlyHintLabel -> palette.textSecondary
+                        else -> palette.textPrimary
+                    }
+                    view.setTextColor(textColor)
                 }
+            }
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                styleInputs(view.getChildAt(index), palette)
             }
         }
     }

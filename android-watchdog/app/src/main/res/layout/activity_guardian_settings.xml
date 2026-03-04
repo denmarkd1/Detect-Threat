@@ -89,6 +89,28 @@
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/guardian_settings_lion_hero_height"
                     android:layout_marginTop="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/settingsAppearanceQuickActionsRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="start|center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settingsRunTutorialButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="start|center_vertical"
+                        android:maxLines="1"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/action_run_tutorial"
+                        android:textColor="@color/brand_accent"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -488,6 +510,87 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="@string/guardian_settings_action_open_credential_center" />
+
+                    <Space
+                        android:layout_width="match_parent"
+                        android:layout_height="10dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/guardian_settings_section_device_umbrella"
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/deviceUmbrellaStatusLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/device_umbrella_status_not_linked"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/deviceUmbrellaCreateButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/device_umbrella_action_create_code" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/deviceUmbrellaJoinButton"
+                            style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/device_umbrella_action_join_code" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/deviceUmbrellaScanQrButton"
+                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/device_umbrella_action_scan_qr" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/deviceUmbrellaReviewJoinRequestsButton"
+                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/device_umbrella_action_review_join_requests" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/deviceUmbrellaSyncButton"
+                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/device_umbrella_action_sync_now" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/deviceUmbrellaCopyPayloadButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="start|center_vertical"
+                        android:maxLines="1"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/device_umbrella_action_copy_qr_payload"
+                        android:textColor="@color/brand_accent"
+                        android:textSize="12sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

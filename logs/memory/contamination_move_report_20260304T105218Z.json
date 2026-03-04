@@ -1,0 +1,36 @@
+{
+  "timestamp_utc": "20260304T105218Z",
+  "source_workspace": "/home/danicous/security",
+  "destinations": {
+    "/home/danicous/trading2": {
+      "memory_file": "/home/danicous/trading2/systems/D_T_System/data/mcp_memory.jsonl",
+      "total_planned": 14,
+      "appended": 14,
+      "skipped_existing": 0
+    },
+    "/home/danicous/Cyberpunk": {
+      "memory_file": "/home/danicous/Cyberpunk/systems/D_T_System/data/mcp_memory.jsonl",
+      "total_planned": 4,
+      "appended": 4,
+      "skipped_existing": 0
+    },
+    "/home/danicous/Dark_Coder": {
+      "memory_file": "/home/danicous/Dark_Coder/systems/D_T_System/data/mcp_memory.jsonl",
+      "total_planned": 17,
+      "appended": 17,
+      "skipped_existing": 0
+    },
+    "/home/danicous/Family Game Room": {
+      "memory_file": "/home/danicous/Family Game Room/systems/D_T_System/data/mcp_memory.jsonl",
+      "total_planned": 3,
+      "appended": 3,
+      "skipped_existing": 0
+    },
+    "/home/danicous/Danicous_Troubleshooter": {
+      "memory_file": "/home/danicous/Danicous_Troubleshooter/systems/D_T_System/data/mcp_memory.jsonl",
+      "total_planned": 2,
+      "appended": 2,
+      "skipped_existing": 0
+    }
+  }
+}

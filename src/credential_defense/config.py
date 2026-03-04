@@ -28,6 +28,8 @@ SUPPORT_CHAT_LOG_PATH = SUPPORT_LOG_DIR / "chat_sessions.jsonl"
 SUPPORT_SUMMARY_PATH = SUPPORT_STATE_DIR / "summary.json"
 SUPPORT_FEEDBACK_PATH = SUPPORT_STATE_DIR / "feedback.json"
 SUPPORT_FEEDBACK_LOG_PATH = SUPPORT_LOG_DIR / "feedback_events.jsonl"
+SUPPORT_DEVICE_UMBRELLA_STATE_PATH = SUPPORT_STATE_DIR / "device_umbrella_sessions.json"
+SUPPORT_DEVICE_UMBRELLA_LOG_PATH = SUPPORT_LOG_DIR / "device_umbrella_events.jsonl"
 
 
 def default_settings() -> dict[str, Any]:
@@ -525,6 +527,11 @@ def ensure_workspace_files() -> None:
         SUPPORT_SUMMARY_PATH.write_text("{}\n", encoding="utf-8")
     if not SUPPORT_FEEDBACK_PATH.exists():
         SUPPORT_FEEDBACK_PATH.write_text("[]\n", encoding="utf-8")
+    if not SUPPORT_DEVICE_UMBRELLA_STATE_PATH.exists():
+        SUPPORT_DEVICE_UMBRELLA_STATE_PATH.write_text(
+            json.dumps({"schema_version": 1, "sessions": []}, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
 
 def load_json(path: Path, fallback: Any) -> Any:

@@ -1,0 +1,128 @@
+{
+  "generated_at_utc": "2026-03-04T09:35:21+00:00",
+  "workspace": "/home/danicous/security",
+  "package_name": "com.realyn.watchdog",
+  "device_serial": "unknown",
+  "checks": [
+    {
+      "name": "credential_defense_help",
+      "command": "credential-defense --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.09,
+      "output_excerpt": "usage: credential-defense [-h]\n                          {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n                          ...\n\nCredential Defense - local-first breach response workflow\n\npositional arguments:\n  {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n    init                Initialize config files and encrypted vault\n    detect-browsers     Detect installed browser profile directories\n    watchdog-status     Write and print runtime OS/watchdog status\n    watchdog-daemon     Run watchdog heartbeat loop for Linux/Windows runtime\n                        detection\n    import-exports      Import browser CSV exports into encrypted vault\n    list-records        List vault records (without printing passwords)\n    session             Run guided top-to-bottom triage session\n    run-actions         Run queued rotate/delete actions with confirmations\n    support-server      Run local support hub (AI chat hotline +\n                        feature/problem ticket queue)\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "watchdog_help",
+      "command": "python3 watchdog/watchdog.py --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.04,
+      "output_excerpt": "usage: watchdog.py [-h] {baseline,scan,watch} ...\n\nRealyn Android watchdog\n\npositional arguments:\n  {baseline,scan,watch}\n    baseline            collect and save baseline snapshot\n    scan                scan and compare to baseline\n    watch               run scan in a loop\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "precommit_guard",
+      "command": "bash scripts/ops/precommit_guard.sh --include-unstaged",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.8,
+      "output_excerpt": "[+] precommit_guard: repository=/home/danicous/security\n[+] precommit_guard: scope=staged+unstaged\n[+] precommit_guard: changed files (22):\n    README.md\n    android-watchdog/app/src/main/java/com/realyn/watchdog/HomeTutorialOverlayView.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/MainActivity.kt\n    android-watchdog/app/src/main/res/layout/activity_main.xml\n    android-watchdog/app/src/main/res/values/strings.xml\n    docs/README.md\n    docs/index.html\n    docs/integration/phase1_5_retail_readiness_audit_2026-03-04.md\n    docs/integration/phase6_lyra_qa_trainer_2026-03-04.md\n    docs/integration/phase6_masvs_verification_sweep_2026-03-04.md\n    docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md\n    docs/integration/phase6_pricing_packaging_update_2026-03-04.md\n    docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md\n    docs/integration/play_release_rollout_checklist_2026-02-21.md\n    docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md\n    docs/privacy.html\n    docs/terms.html\n    logs/phase6/masvs_sweep_20260304T092437Z.md\n    logs/phase6/masvs_sweep_20260304T093002Z.md\n    scripts/ops/lyra_beta_trainer.py\n    scripts/ops/phase6_masvs_sweep.sh\n    systems/D_T_System/tasks/active_tasks.json\n[!] precommit_guard: identifier-based secret assignment matches (warning only):\n    docs/integration/play_release_rollout_checklist_2026-02-21.md:dt_release_key_password,dt_release_store_password\n[+] precommit_guard: hardcoded secret scan passed.\n[+] precommit_guard: running python syntax check (1 files)...\n[+] precommit_guard: python syntax check passed.\n[+] precommit_guard: running Android compile check (:app:compileDebugKotlin)...\n\n> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is \n...[truncated]"
+    },
+    {
+      "name": "gradle_lint_unit",
+      "command": "./gradlew lintDebug testDebugUnitTest",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.73,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "gradle_assemble_debug",
+      "command": "./gradlew assembleDebug",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.62,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "adb_connection",
+      "command": "bash scripts/ops/check_adb_connection.sh",
+      "status": "FAIL",
+      "return_code": 2,
+      "duration_seconds": 0.01,
+      "output_excerpt": "[+] Using adb: /home/danicous/security/tools/android/platform-tools/adb\nList of devices attached\n\n[-] No authorized Android device detected.\n[i] Confirm USB debugging is enabled and the trust prompt is accepted on the phone."
+    },
+    {
+      "name": "adb_install_debug_apk",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb install -r /home/danicous/security/android-watchdog/app/build/outputs/apk/debug/app-debug.apk",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "app_launch_smoke",
+      "command": "adb shell monkey -p <package> 1",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "app_randomized_monkey",
+      "command": "adb shell monkey ...",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped by --skip-monkey-events"
+    },
+    {
+      "name": "watchdog_baseline",
+      "command": "python3 watchdog/watchdog.py baseline",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "watchdog_scan",
+      "command": "python3 watchdog/watchdog.py scan",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "logcat_capture",
+      "command": "adb logcat -d -v time -t 4000",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "logcat_fatal_scan",
+      "command": "scan logcat excerpt for fatal signatures",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because logcat capture was skipped."
+    },
+    {
+      "name": "adb_force_stop",
+      "command": "adb shell am force-stop <package>",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped because no authorized device was detected."
+    },
+    {
+      "name": "adb_devices_probe",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb devices -l",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "List of devices attached"
+    }
+  ]
+}

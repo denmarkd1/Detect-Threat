@@ -83,6 +83,36 @@ Run CLI watchdog scan:
 python3 watchdog/watchdog.py scan
 ```
 
+Target a specific device by ADB serial:
+
+```bash
+python3 watchdog/watchdog.py scan --serial GINVINZLY59HAEFM
+```
+
+Link multiple connected Android devices into one local protection umbrella:
+
+```bash
+python3 watchdog/watchdog.py umbrella-link --name "family-umbrella" --owner parent --create-baselines
+```
+
+Show linked umbrella members and current connected/offline status:
+
+```bash
+python3 watchdog/watchdog.py umbrella-status
+```
+
+Run one umbrella scan across all linked devices:
+
+```bash
+python3 watchdog/watchdog.py umbrella-scan
+```
+
+Scan every currently connected device (even if not linked yet):
+
+```bash
+python3 watchdog/watchdog.py umbrella-scan --all-connected
+```
+
 Run continuous CLI watchdog mode:
 
 ```bash
