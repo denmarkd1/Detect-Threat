@@ -111,6 +111,20 @@ object PhishingTriageEngine {
 
     fun triage(context: Context, input: String, sourceRef: String): PhishingTriageResult {
         val normalized = input.trim()
+        val cfg = config(context)
+        if (!cfg.enabled) {
+            val now = System.currentTimeMillis()
+            return PhishingTriageResult(
+                riskScore = 0,
+                severity = Severity.INFO,
+                reasons = listOf("anti_phishing_disabled_by_policy"),
+                suggestedActions = listOf("Anti-phishing triage is disabled by policy."),
+                sourceRef = sourceRef,
+                triagedAtIso = toIsoUtc(now),
+                triagedAtEpochMs = now,
+                extractedUrls = emptyList()
+            )
+        }
         val heuristics = PhishingHeuristics.evaluate(normalized)
         val score = heuristics.riskScore
         val severity = when {
@@ -160,7 +174,9 @@ object PhishingTriageEngine {
         )
 
         PhishingIntakeStore.append(context, normalized, sourceRef, result)
-        PhishingGuardianBridge.maybeEmitHighRiskAlert(context, result)
+        if (cfg.highRiskAutoAlert) {
+            PhishingGuardianBridge.maybeEmitHighRiskAlert(context, result)
+        }
         return result
     }
 

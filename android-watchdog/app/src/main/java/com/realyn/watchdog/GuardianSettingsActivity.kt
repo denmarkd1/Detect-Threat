@@ -81,6 +81,9 @@ class GuardianSettingsActivity : AppCompatActivity() {
         binding.openLocatorSetupButton.setOnClickListener {
             openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_LOCATOR_SETUP)
         }
+        binding.openHomeRiskSetupButton.setOnClickListener {
+            openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_HOME_RISK_SETUP)
+        }
         binding.openCredentialCenterButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
         }

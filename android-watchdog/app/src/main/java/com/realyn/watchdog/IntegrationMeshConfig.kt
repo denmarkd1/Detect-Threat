@@ -66,6 +66,11 @@ data class IntegrationMeshModuleFeatureFlag(
         }
         return rolloutSlot(rolloutKey) < maxRolloutPercent
     }
+
+    private fun rolloutSlot(raw: String): Int {
+        val seed = raw.trim().lowercase(Locale.US).ifBlank { "owner" }
+        return (seed.hashCode() and Int.MAX_VALUE) % 100
+    }
 }
 
 data class IntegrationMeshRolloutConfig(
@@ -138,10 +143,10 @@ object IntegrationMeshConfigStore {
         schemaVersion = 1,
         featureFlags = IntegrationMeshFeatureFlags(
             smartHomeConnector = IntegrationMeshModuleFeatureFlag(
-                enabled = false,
+                enabled = true,
                 rolloutStage = "internal_test",
                 ownerAllowlist = listOf("parent", "child"),
-                maxRolloutPercent = 0,
+                maxRolloutPercent = 100,
                 supportedConnectorIds = listOf("smartthings"),
                 requiredScopes = listOf("home:read", "home:devices:read"),
                 requireRedemptionProof = true
@@ -173,8 +178,8 @@ object IntegrationMeshConfigStore {
                 IntegrationMeshRolloutStage(
                     name = "internal_test",
                     enabled = true,
-                    maxPercent = 10,
-                    ownerRoles = listOf("parent")
+                    maxPercent = 100,
+                    ownerRoles = listOf("parent", "child")
                 ),
                 IntegrationMeshRolloutStage(
                     name = "closed_test",
@@ -428,8 +433,4 @@ object IntegrationMeshConfigStore {
         return true
     }
 
-    private fun rolloutSlot(raw: String): Int {
-        val seed = raw.trim().lowercase(Locale.US).ifBlank { "owner" }
-        return (seed.hashCode() and Int.MAX_VALUE) % 100
-    }
 }

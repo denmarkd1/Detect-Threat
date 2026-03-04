@@ -466,6 +466,14 @@
                         android:text="@string/guardian_settings_action_open_locator_setup" />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/openHomeRiskSetupButton"
+                        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/guardian_settings_action_open_home_risk_setup" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/openCredentialCenterButton"
                         style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
                         android:layout_width="match_parent"

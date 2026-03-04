@@ -97,6 +97,11 @@ Any UI change that affects one of these must include a short note in this file:
   - Introduced profile-driven micro-adjustments that preserve the locked base palettes while applying subtle per-profile tint influence (accent/stroke/panel/nav/text blend nudges).
   - Added subtle profile-specific border/corner accents for home widgets, nav buttons, and settings buttons/cards to differentiate male/lioness character without changing IA or nav model.
   - Added JSON-backed profile registry at `android-watchdog/app/src/main/assets/lion_profiles.json` so future lion profiles can be added with config + drawable updates instead of Kotlin enum edits.
+- 2026-03-03:
+  - Expanded home quick-widgets from 4 to 8 for staged roadmap discoverability (`Sweep`, `Threats`, `Credentials`, `Services`, `Home Risk`, `VPN`, `Digital Key`, `Timeline`).
+  - Updated startup widget motion ordering/spacing to support variable widget counts without overlong launch animations.
+  - Restored full-color center lion icon and moved center action to a second-layer lion navigation dialog (home risk, vpn status, timeline/report, security details, guardian settings).
+  - Reduced and raised the primary `Scan now` action bar to preserve readability and separation from bottom navigation on compact screens.
 
 ## Sign-off checklist
 - [x] Palette locked

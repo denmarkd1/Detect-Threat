@@ -146,6 +146,24 @@ bash scripts/ops/start_android_studio_collab.sh
 tail -f logs/android_studio_collab.log
 ```
 
+Quick open from terminal (no flags required):
+
+```bash
+bash scripts/ops/open_android_studio_gui.sh
+```
+
+Add a GUI launcher entry so you can double-click or open it from Show Applications:
+
+```bash
+bash scripts/ops/install_android_studio_launcher.sh
+```
+
+If needed, disable the file-change monitor in one-click flow:
+
+```bash
+bash scripts/ops/open_android_studio_gui.sh --no-monitor
+```
+
 Run monitor only (if Studio is already open):
 
 ```bash

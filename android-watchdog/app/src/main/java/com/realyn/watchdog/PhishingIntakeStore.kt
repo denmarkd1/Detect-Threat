@@ -30,12 +30,22 @@ data class PhishingIntakeEntry(
                 triagedAtEpochMs = payload.optLong("triagedAtEpochMs", 0L).coerceAtLeast(0L),
                 triagedAtIso = payload.optString("triagedAtIso").trim(),
                 sourceRef = payload.optString("sourceRef").trim(),
-                inputPreview = payload.optString("inputPreview").trim(),
+                inputPreview = sanitizePersistedPreview(payload.optString("inputPreview").trim()),
                 inputSha256 = payload.optString("inputSha256").trim(),
                 result = PhishingTriageResult.fromJson(
                     payload.optJSONObject("result") ?: JSONObject()
                 )
             )
+        }
+
+        private fun sanitizePersistedPreview(preview: String): String {
+            if (preview.isBlank()) {
+                return ""
+            }
+            if (preview.startsWith("chars=", ignoreCase = true) && preview.contains("redacted=true")) {
+                return preview
+            }
+            return "legacy_preview_redacted"
         }
     }
 }
@@ -47,13 +57,11 @@ object PhishingIntakeStore {
     @Synchronized
     fun append(context: Context, input: String, sourceRef: String, result: PhishingTriageResult) {
         val normalized = input.trim()
-        val preview = normalized.replace("\n", " ").replace("\r", " ").trim()
-            .take(180)
         val entry = PhishingIntakeEntry(
             triagedAtEpochMs = result.triagedAtEpochMs,
             triagedAtIso = result.triagedAtIso,
             sourceRef = sourceRef,
-            inputPreview = preview,
+            inputPreview = buildSafePreview(normalized, result.extractedUrls),
             inputSha256 = sha256(normalized),
             result = result
         )
@@ -128,4 +136,9 @@ object PhishingIntakeStore {
             .joinToString("") { "%02x".format(it) }
             .take(24)
     }
+
+    internal fun buildSafePreview(input: String, extractedUrls: List<String>): String {
+        return "chars=${input.length.coerceAtLeast(0)}, urls=${extractedUrls.size.coerceAtLeast(0)}, redacted=true"
+    }
+
 }

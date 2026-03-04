@@ -131,6 +131,55 @@ def _guess_issue_type(issue_text: str) -> str:
     return "general"
 
 
+def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None) -> dict[str, Any]:
+    combined = f"{issue_text} {user_notes or ''}".strip().lower()
+    review_tokens = ("review", "audit", "assess", "scan", "inspect", "analyze", "analysis")
+    implementation_tokens = ("fix", "patch", "address", "resolve", "implement", "harden", "update", "refactor")
+    debug_tokens = ("error", "exception", "traceback", "stack trace", "crash", "failing", "failed", "bug")
+
+    action_signal_count = 0
+    for token in review_tokens + implementation_tokens:
+        if token in combined:
+            action_signal_count += 1
+
+    scope_signal_count = 0
+    scope_patterns = (
+        r"\bphase\s*\d+\b",
+        r"\bmodule\b",
+        r"\bcomponent\b",
+        r"\bbackend\b",
+        r"\bfrontend\b",
+        r"[/\\][\w./\\-]+\.[a-z0-9]{1,8}\b",
+        r"\b[\w.-]+\.(py|js|ts|kt|java|go|rs|json|yaml|yml|toml|md)\b",
+    )
+    for pattern in scope_patterns:
+        if re.search(pattern, combined, flags=re.IGNORECASE):
+            scope_signal_count += 1
+
+    review_hit = any(token in combined for token in review_tokens)
+    implementation_hit = any(token in combined for token in implementation_tokens)
+    debug_hit = any(token in combined for token in debug_tokens)
+    if review_hit:
+        mode = "review_audit"
+    elif implementation_hit:
+        mode = "implementation_request"
+    elif debug_hit:
+        mode = "error_debug"
+    else:
+        mode = "general"
+
+    actionable = mode in {"review_audit", "implementation_request"}
+    assumption_ready = actionable and scope_signal_count > 0
+
+    return {
+        "mode": mode,
+        "action_signal_count": action_signal_count,
+        "scope_signal_count": scope_signal_count,
+        "actionable": actionable,
+        "assumption_ready": assumption_ready,
+    }
+
+
 def _load_json_file(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -506,6 +555,7 @@ def _persist_local_resolution(
 
     issue_id = f"DT_{_utc_now().strftime('%Y%m%d_%H%M%S')}"
     issue_type = _guess_issue_type(issue_input)
+    actionable_profile = _infer_actionable_profile(issue_input, user_notes)
     mcp_guidance = _derive_mcp_guidance(workspace_root, issue_type)
 
     clarifying_questions = [
@@ -527,23 +577,70 @@ def _persist_local_resolution(
         "constraints": [],
     }
 
-    certainty = CertaintyAssessment(
-        level="low",
-        confidence_percentage=0.0,
-        missing_information=[
-            "Detailed expected behavior",
-            "Exact failure signature or logs",
-            "Module-specific validation criteria",
-        ],
-        clarifying_questions=clarifying_questions,
-        assessment_reasoning="Fallback mode used because hub routing is unavailable from this workspace runtime.",
-    )
+    assumption_ready = bool(actionable_profile.get("assumption_ready"))
+    if assumption_ready:
+        certainty = CertaintyAssessment(
+            level="moderate",
+            confidence_percentage=68.0,
+            missing_information=[
+                "Explicit success criteria for final verification",
+            ],
+            clarifying_questions=[
+                "What are the required acceptance checks after implementation?",
+            ],
+            assessment_reasoning=(
+                "Fallback mode used because hub routing is unavailable. "
+                "Request appears actionable and scoped, so D_T switched to assumption-ready execution."
+            ),
+        )
+        completion_status = {
+            "status": "ready_for_execution_assumptions",
+            "source_mode": "local_fallback",
+            "message": (
+                "Hub routing unavailable; proceeding with memory-first assumptions using the provided scope."
+            ),
+            "assumption_mode": True,
+            "clarifying_questions": [
+                "What are the required acceptance checks after implementation?",
+            ],
+        }
+    else:
+        certainty = CertaintyAssessment(
+            level="low",
+            confidence_percentage=0.0,
+            missing_information=[
+                "Detailed expected behavior",
+                "Exact failure signature or logs",
+                "Module-specific validation criteria",
+            ],
+            clarifying_questions=clarifying_questions,
+            assessment_reasoning="Fallback mode used because hub routing is unavailable from this workspace runtime.",
+        )
+        completion_status = {
+            "status": "clarification_needed",
+            "message": "D_T local fallback completed; provide more details for deeper automated resolution.",
+            "clarifying_questions": clarifying_questions,
+        }
 
-    completion_status = {
-        "status": "clarification_needed",
-        "message": "D_T local fallback completed; provide more details for deeper automated resolution.",
-        "clarifying_questions": clarifying_questions,
-    }
+    todo_items = [
+        "Use recommended MCP servers first when building triage context.",
+        "Skip non-beneficial MCP servers for this issue type unless explicitly needed.",
+    ]
+    if assumption_ready:
+        todo_items.extend(
+            [
+                "Proceed with assumption-based implementation scoped to the request.",
+                "Record assumptions explicitly in the handoff and verification summary.",
+            ]
+        )
+
+    handoff_text = _build_handoff(issue_input, issue_type, route_error, mcp_guidance)
+    if assumption_ready:
+        handoff_text += (
+            "\n\n## Assumption Mode\n"
+            "Hub routing was unavailable, but the request is actionable and scoped. "
+            "Proceed with memory-first implementation and document assumptions."
+        )
 
     resolution = DTResolution(
         issue_id=issue_id,
@@ -552,12 +649,9 @@ def _persist_local_resolution(
         is_existing_problem=False,
         memory_references=[],
         required_resources=[f"mcp:{name}" for name in mcp_guidance.get("recommended_servers", [])],
-        todo_list=[
-            "Use recommended MCP servers first when building triage context.",
-            "Skip non-beneficial MCP servers for this issue type unless explicitly needed.",
-        ],
+        todo_list=todo_items,
         task_steps=[],
-        code_review_handoff=_build_handoff(issue_input, issue_type, route_error, mcp_guidance),
+        code_review_handoff=handoff_text,
         testing_requirements=[],
         phase_impact={},
         completion_status=completion_status,
@@ -630,6 +724,7 @@ def _resolution_from_route_payload(
     )
 
     issue_type = _guess_issue_type(issue_input)
+    actionable_profile = _infer_actionable_profile(issue_input, user_notes)
     mcp_guidance = _derive_mcp_guidance(workspace_root, issue_type) if workspace_root else None
     completion = payload.get("completion_status")
     if not isinstance(completion, dict):
@@ -647,6 +742,25 @@ def _resolution_from_route_payload(
     if not isinstance(handoff, str):
         handoff = _build_handoff(issue_input, issue_type, None, mcp_guidance)
 
+    source_status = str(completion.get("status", "")).strip().lower()
+    adaptation_applied = source_status == "clarification_needed" and bool(actionable_profile.get("assumption_ready"))
+    if adaptation_applied:
+        completion = {
+            **completion,
+            "source_status": "clarification_needed",
+            "status": "ready_for_execution_assumptions",
+            "message": (
+                "Hub requested clarification, but request is actionable and scoped. "
+                "Proceeding with assumption-ready codereview handoff."
+            ),
+            "assumption_mode": True,
+        }
+        handoff += (
+            "\n\n## Assumption Mode\n"
+            "Route payload requested clarification, but this issue is actionable and scoped. "
+            "Proceed with memory-first assumptions and document unresolved questions."
+        )
+
     return DTResolution(
         issue_id=issue_id,
         issue_context={
@@ -661,7 +775,15 @@ def _resolution_from_route_payload(
         memory_references=list(payload.get("memory_references", [])),
         required_resources=list(payload.get("required_resources", []))
         or [f"mcp:{name}" for name in (mcp_guidance or {}).get("recommended_servers", [])],
-        todo_list=list(payload.get("todo_list", [])),
+        todo_list=list(payload.get("todo_list", []))
+        or (
+            [
+                "Run memory-first scoped review and document assumptions.",
+                "Apply root-cause fix path and run verification checks.",
+            ]
+            if adaptation_applied
+            else []
+        ),
         task_steps=list(payload.get("task_steps", [])),
         code_review_handoff=handoff,
         testing_requirements=list(payload.get("testing_requirements", [])),

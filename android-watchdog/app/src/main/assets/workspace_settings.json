@@ -375,17 +375,17 @@
     "high_risk_auto_alert": true
   },
   "integration_mesh": {
-    "enabled": false,
+    "enabled": true,
     "schema_version": 1,
     "feature_flags": {
       "smart_home_connector": {
-        "enabled": false,
+        "enabled": true,
         "rollout_stage": "internal_test",
         "owner_allowlist": [
           "parent",
           "child"
         ],
-        "max_rollout_percent": 0,
+        "max_rollout_percent": 100,
         "supported_connector_ids": [
           "smartthings",
           "google_home"
@@ -428,9 +428,10 @@
         {
           "name": "internal_test",
           "enabled": true,
-          "max_percent": 10,
+          "max_percent": 100,
           "owner_roles": [
-            "parent"
+            "parent",
+            "child"
           ]
         },
         {

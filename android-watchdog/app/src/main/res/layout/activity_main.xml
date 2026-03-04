@@ -112,6 +112,7 @@
                         android:orientation="vertical">
 
                         <LinearLayout
+                            android:id="@+id/widgetPrimaryRowTop"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal">
@@ -141,6 +142,7 @@
                                         android:orientation="horizontal">
 
                                         <ImageView
+                                            android:id="@+id/widgetSweepIcon"
                                             android:layout_width="14dp"
                                             android:layout_height="14dp"
                                             android:contentDescription="@string/nav_scan"
@@ -148,6 +150,7 @@
                                             app:tint="@color/brand_accent" />
 
                                         <TextView
+                                            android:id="@+id/widgetSweepTitle"
                                             android:layout_width="wrap_content"
                                             android:layout_height="wrap_content"
                                             android:layout_marginStart="5dp"
@@ -215,6 +218,7 @@
                                         android:orientation="horizontal">
 
                                         <ImageView
+                                            android:id="@+id/widgetThreatsIcon"
                                             android:layout_width="14dp"
                                             android:layout_height="14dp"
                                             android:contentDescription="@string/nav_guard"
@@ -222,6 +226,7 @@
                                             app:tint="@color/brand_accent" />
 
                                         <TextView
+                                            android:id="@+id/widgetThreatsTitle"
                                             android:layout_width="wrap_content"
                                             android:layout_height="wrap_content"
                                             android:layout_marginStart="5dp"
@@ -262,9 +267,10 @@
                         </LinearLayout>
 
                         <LinearLayout
+                            android:id="@+id/widgetPrimaryRowBottom"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="6dp"
                             android:orientation="horizontal">
 
                             <com.google.android.material.card.MaterialCardView
@@ -292,6 +298,7 @@
                                         android:orientation="horizontal">
 
                                         <ImageView
+                                            android:id="@+id/widgetCredentialsIcon"
                                             android:layout_width="14dp"
                                             android:layout_height="14dp"
                                             android:contentDescription="@string/nav_vault"
@@ -299,6 +306,7 @@
                                             app:tint="@color/brand_accent" />
 
                                         <TextView
+                                            android:id="@+id/widgetCredentialsTitle"
                                             android:layout_width="wrap_content"
                                             android:layout_height="wrap_content"
                                             android:layout_marginStart="5dp"
@@ -366,6 +374,7 @@
                                         android:orientation="horizontal">
 
                                         <ImageView
+                                            android:id="@+id/widgetServicesIcon"
                                             android:layout_width="14dp"
                                             android:layout_height="14dp"
                                             android:contentDescription="@string/nav_support"
@@ -373,6 +382,7 @@
                                             app:tint="@color/brand_accent" />
 
                                         <TextView
+                                            android:id="@+id/widgetServicesTitle"
                                             android:layout_width="wrap_content"
                                             android:layout_height="wrap_content"
                                             android:layout_marginStart="5dp"
@@ -406,6 +416,312 @@
                                         android:ellipsize="end"
                                         android:maxLines="1"
                                         android:text="@string/home_widget_loading"
+                                        android:textColor="@color/text_muted"
+                                        android:textSize="11sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/widgetSecondaryRowTop"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:id="@+id/widgetHomeRiskCard"
+                                android:layout_width="0dp"
+                                android:layout_height="108dp"
+                                android:layout_weight="1"
+                                app:cardBackgroundColor="@color/brand_panel_alt"
+                                app:cardCornerRadius="12dp"
+                                app:cardElevation="0dp"
+                                app:strokeColor="@color/brand_stroke"
+                                app:strokeWidth="0dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="10dp">
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center"
+                                        android:orientation="horizontal">
+
+                                        <ImageView
+                                            android:layout_width="14dp"
+                                            android:layout_height="14dp"
+                                            android:contentDescription="@string/home_widget_home_risk_title"
+                                            android:src="@drawable/ic_shield"
+                                            app:tint="@color/brand_accent" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="5dp"
+                                            android:text="@string/home_widget_home_risk_title"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="12sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:id="@+id/widgetHomeRiskValue"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_primary"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/widgetHomeRiskHint"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_muted"
+                                        android:textSize="11sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+
+                            <Space
+                                android:layout_width="8dp"
+                                android:layout_height="1dp" />
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:id="@+id/widgetVpnCard"
+                                android:layout_width="0dp"
+                                android:layout_height="108dp"
+                                android:layout_weight="1"
+                                app:cardBackgroundColor="@color/brand_panel_alt"
+                                app:cardCornerRadius="12dp"
+                                app:cardElevation="0dp"
+                                app:strokeColor="@color/brand_stroke"
+                                app:strokeWidth="0dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="10dp">
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center"
+                                        android:orientation="horizontal">
+
+                                        <ImageView
+                                            android:layout_width="14dp"
+                                            android:layout_height="14dp"
+                                            android:contentDescription="@string/home_widget_vpn_title"
+                                            android:src="@drawable/ic_nav_services"
+                                            app:tint="@color/brand_accent" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="5dp"
+                                            android:text="@string/home_widget_vpn_title"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="12sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:id="@+id/widgetVpnValue"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_primary"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/widgetVpnHint"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_muted"
+                                        android:textSize="11sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/widgetSecondaryRowBottom"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:id="@+id/widgetDigitalKeyCard"
+                                android:layout_width="0dp"
+                                android:layout_height="108dp"
+                                android:layout_weight="1"
+                                app:cardBackgroundColor="@color/brand_panel_alt"
+                                app:cardCornerRadius="12dp"
+                                app:cardElevation="0dp"
+                                app:strokeColor="@color/brand_stroke"
+                                app:strokeWidth="0dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="10dp">
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center"
+                                        android:orientation="horizontal">
+
+                                        <ImageView
+                                            android:layout_width="14dp"
+                                            android:layout_height="14dp"
+                                            android:contentDescription="@string/home_widget_digital_key_title"
+                                            android:src="@drawable/ic_nav_guard"
+                                            app:tint="@color/brand_accent" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="5dp"
+                                            android:text="@string/home_widget_digital_key_title"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="12sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:id="@+id/widgetDigitalKeyValue"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_primary"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/widgetDigitalKeyHint"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_muted"
+                                        android:textSize="11sp" />
+                                </LinearLayout>
+                            </com.google.android.material.card.MaterialCardView>
+
+                            <Space
+                                android:layout_width="8dp"
+                                android:layout_height="1dp" />
+
+                            <com.google.android.material.card.MaterialCardView
+                                android:id="@+id/widgetTimelineCard"
+                                android:layout_width="0dp"
+                                android:layout_height="108dp"
+                                android:layout_weight="1"
+                                app:cardBackgroundColor="@color/brand_panel_alt"
+                                app:cardCornerRadius="12dp"
+                                app:cardElevation="0dp"
+                                app:strokeColor="@color/brand_stroke"
+                                app:strokeWidth="0dp">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:gravity="center"
+                                    android:orientation="vertical"
+                                    android:padding="10dp">
+
+                                    <LinearLayout
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center"
+                                        android:orientation="horizontal">
+
+                                        <ImageView
+                                            android:layout_width="14dp"
+                                            android:layout_height="14dp"
+                                            android:contentDescription="@string/home_widget_timeline_title"
+                                            android:src="@drawable/ic_nav_scan"
+                                            app:tint="@color/brand_accent" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="5dp"
+                                            android:text="@string/home_widget_timeline_title"
+                                            android:textColor="@color/text_secondary"
+                                            android:textSize="12sp"
+                                            android:textStyle="bold" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:id="@+id/widgetTimelineValue"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="4dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
+                                        android:textColor="@color/text_primary"
+                                        android:textSize="14sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/widgetTimelineHint"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:ellipsize="end"
+                                        android:gravity="center"
+                                        android:maxLines="1"
+                                        android:text="@string/home_widget_loading"
+                                        android:textAlignment="center"
                                         android:textColor="@color/text_muted"
                                         android:textSize="11sp" />
                                 </LinearLayout>
@@ -1371,7 +1687,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/securityTopActionButton"
-        style="@style/Widget.RealynWatchdog.Button.RaisedUniformPair"
+        style="@style/Widget.RealynWatchdog.Button.RaisedCompactScan"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
@@ -1413,13 +1729,14 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
 
                 <ImageView
+                    android:id="@+id/navScanIcon"
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_scan"
@@ -1427,9 +1744,12 @@
                     app:tint="@color/text_secondary" />
 
                 <TextView
+                    android:id="@+id/navScanLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/nav_scan"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
@@ -1448,13 +1768,14 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
 
                 <ImageView
+                    android:id="@+id/navGuardIcon"
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_guard"
@@ -1462,9 +1783,12 @@
                     app:tint="@color/text_secondary" />
 
                 <TextView
+                    android:id="@+id/navGuardLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/nav_guard"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
@@ -1501,13 +1825,14 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
 
                 <ImageView
+                    android:id="@+id/navVaultIcon"
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_vault"
@@ -1515,9 +1840,12 @@
                     app:tint="@color/text_secondary" />
 
                 <TextView
+                    android:id="@+id/navVaultLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/nav_vault"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
@@ -1536,13 +1864,14 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@android:color/transparent"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
 
                 <ImageView
+                    android:id="@+id/navSupportIcon"
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_support"
@@ -1550,9 +1879,12 @@
                     app:tint="@color/text_secondary" />
 
                 <TextView
+                    android:id="@+id/navSupportLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/nav_support"
                     android:textColor="@color/text_secondary"
                     android:textSize="11sp" />
