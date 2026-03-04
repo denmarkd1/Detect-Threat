@@ -324,6 +324,14 @@ Implementation status (2026-03-04):
 3. Add unified report export with non-secret evidence.
 4. Add KPI telemetry (mean time to remediate, high-risk action success, connector reliability).
 
+Implementation status (2026-03-04):
+- Delivered in `android-watchdog` with:
+  - Phase-5 parity engine (`Phase5ParityEngine`) that computes app-risk board linkage to credential remediation queue, connected-home anomaly timeline views, owner accountability views, KPI telemetry, and unified non-secret evidence report output.
+  - Timeline/report dialog wiring in `MainActivity` to surface app-risk board + queue links, connected-home anomalies, owner accountability, and KPI metrics.
+  - Unified report export flow (`ACTION_CREATE_DOCUMENT`) with non-secret evidence fields only (hash-referenced source IDs, no passwords/raw secrets).
+  - KPI telemetry persistence in local audit state via `KpiTelemetryStore` + `WatchdogConfig.KPI_TELEMETRY_FILE`.
+  - Unit coverage in `Phase5ParityEngineTest` for queue linkage, anomaly filtering, accountability aggregation, and KPI math.
+
 ## Phase 6 - Hardening and launch readiness (1 to 2 weeks)
 1. MASVS-based verification sweep.
 2. Policy and Play disclosure review.

@@ -21,8 +21,10 @@ import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.text.TextUtils
 import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
@@ -37,6 +39,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -59,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -93,6 +97,19 @@ class MainActivity : AppCompatActivity() {
         private const val HOME_NAV_ICON_PAGE_COUNT = 2
         private const val SWIPE_TRIGGER_DP = 24f
         private const val SWIPE_DIRECTION_BIAS = 1.2f
+        private const val LION_PROCESSING_INITIAL_PROGRESS = 0.06f
+        private const val LION_PROCESSING_TARGET_PROGRESS = 0.94f
+        private const val LION_PROCESSING_PROGRESS_MS_PER_POINT = 2000L
+        private const val LION_PROCESSING_STEP_MIN_MS = 180L
+        private const val LION_PROCESSING_STEP_MAX_MS = 920L
+        private const val LION_PROCESSING_COMPLETE_ANIM_MS = 420L
+        private const val LION_MIN_BUSY_VISUAL_MS_DEFAULT = 1800L
+        private const val LION_MIN_BUSY_VISUAL_MS_QUICK_SCAN = 4200L
+        private const val LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_BASE = 6800L
+        private const val LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_PER_MODULE = 1400L
+        private const val LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_MAX = 12000L
+        private const val LION_SCAN_COMPLETE_HOLD_MS = 2800L
+        private const val SCAN_TERMINAL_UPDATE_MIN_INTERVAL_MS = 120L
 
         fun isHomeIntroReplayEveryLaunch(context: Context): Boolean {
             return context.getSharedPreferences(UI_PREFS_FILE, Context.MODE_PRIVATE)
@@ -168,6 +185,19 @@ class MainActivity : AppCompatActivity() {
         val actions: List<SecurityHeroAction>,
         val details: List<String>
     )
+
+    private data class DeepScanSelection(
+        val includeStartupPersistenceSweep: Boolean,
+        val includeStorageArtifactSweep: Boolean,
+        val includeEmbeddedPathProbe: Boolean,
+        val includeWifiPostureSweep: Boolean
+    ) {
+        fun hasAnyDeepModule(): Boolean {
+            return includeStartupPersistenceSweep ||
+                includeStorageArtifactSweep ||
+                includeEmbeddedPathProbe
+        }
+    }
 
     private data class HomeRiskLookupResult(
         val posture: SmartHomePostureSnapshot? = null,
@@ -307,6 +337,19 @@ class MainActivity : AppCompatActivity() {
         val locatorState: LocatorCapabilityState
     )
 
+    private data class ScanReviewPayload(
+        val modeLabel: String,
+        val summaryLine: String,
+        val scopeSummary: String,
+        val reportText: String,
+        val completedAtEpochMs: Long,
+        val highCount: Int,
+        val mediumCount: Int,
+        val lowCount: Int,
+        val infoCount: Int,
+        val maintenancePayloadJson: String = ""
+    )
+
     private lateinit var binding: ActivityMainBinding
     private var latestCopilotBrief: CopilotBrief? = null
     private var latestHygieneAudit: HygieneAuditResult? = null
@@ -322,11 +365,20 @@ class MainActivity : AppCompatActivity() {
     private var latestWifiSnapshot: WifiScanSnapshotRecord? = null
     private var latestLocatorState: LocatorCapabilityState? = null
     private var pendingWifiPermissionScan: Boolean = false
+    private var pendingDeepScanSelectionForMediaPermission: DeepScanSelection? = null
     private var pendingVaultExportItemId: String = ""
+    private var pendingUnifiedEvidenceReport: String = ""
     private var lionFillMode: LionFillMode = LionFillMode.LEFT_TO_RIGHT
     private var lionBusyInProgress: Boolean = false
     private var lionProgressAnimator: ValueAnimator? = null
+    private var lionCompletionDelayRunnable: Runnable? = null
     private var lionIdleResetRunnable: Runnable? = null
+    private var lionBusyStartedAtMs: Long = 0L
+    private var lionMinBusyVisualMs: Long = LION_MIN_BUSY_VISUAL_MS_DEFAULT
+    private var lionAnimationSessionId: Int = 0
+    private var scanTerminalEnabled: Boolean = false
+    private var scanTerminalLastLine: String = ""
+    private var scanTerminalLastRenderedAtMs: Long = 0L
     private var homeIntroHandledThisSession: Boolean = false
     private var homeIntroAnimating: Boolean = false
     private var introWordAnimator: ValueAnimator? = null
@@ -374,6 +426,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private val deepStoragePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            val pendingSelection = pendingDeepScanSelectionForMediaPermission ?: return@registerForActivityResult
+            pendingDeepScanSelectionForMediaPermission = null
+            if (requiredDeepStorageMediaPermissions().isNotEmpty()) {
+                binding.subStatusLabel.text = getString(R.string.deep_scan_storage_permission_limited_status)
+            }
+            maybePromptAllFilesAccessForDeepScan(pendingSelection)
+        }
+
     private val mediaVaultImportLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
@@ -391,6 +453,16 @@ class MainActivity : AppCompatActivity() {
             completePendingVaultExport(destination)
         }
 
+    private val unifiedReportExportLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val destination = if (result.resultCode == Activity.RESULT_OK) {
+                result.data?.data
+            } else {
+                null
+            }
+            completePendingUnifiedReportExport(destination)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         beginStartupTrace()
@@ -399,7 +471,7 @@ class MainActivity : AppCompatActivity() {
         pendingGuardianSettingsAction = intent?.getStringExtra(EXTRA_GUARDIAN_SETTINGS_ACTION)
         configureResponsiveHomeLayout()
 
-        binding.oneTimeScanButton.setOnClickListener { runHomeFullScan() }
+        binding.oneTimeScanButton.setOnClickListener { runOneTimeScan() }
         binding.continuousScanButton.setOnClickListener { toggleContinuousMode() }
         binding.refreshButton.setOnClickListener { refreshUiState() }
         binding.supportButton.setOnClickListener { openSupportCenter() }
@@ -416,7 +488,7 @@ class MainActivity : AppCompatActivity() {
         binding.mediaVaultOpenButton.setOnClickListener { openMediaVaultDialog() }
         binding.deviceLocatorOpenButton.setOnClickListener { openDeviceLocatorProvider() }
         binding.deviceLocatorSetupButton.setOnClickListener { openDeviceLocatorSetupDialog() }
-        binding.securityTopActionButton.setOnClickListener { runHomeFullScan() }
+        binding.securityTopActionButton.setOnClickListener { runOneTimeScan() }
         binding.securityActionDetailsButton.setOnClickListener { openSecurityDetailsDialog() }
         binding.advancedControlsToggleButton.setOnClickListener { toggleAdvancedControls() }
         binding.pricingManageButton.setOnClickListener { openPlanSelectionDialog() }
@@ -452,6 +524,7 @@ class MainActivity : AppCompatActivity() {
         lionFillMode = LionThemePrefs.readFillMode(this)
         refreshLionHeroVisuals()
         binding.lionHeroView.setIdleState()
+        setScanTerminalEnabled(false)
         binding.bottomNavCard.visibility = View.GONE
         applyMinimalHomeSurface()
         configureHomePagingState()
@@ -755,7 +828,29 @@ class MainActivity : AppCompatActivity() {
         title.setText(labelRes)
         value.text = widgetValueForDestination(snapshot, destination)
         hint.text = widgetHintForDestination(snapshot, destination)
+        configureWidgetHintTicker(hint, destination)
         card.contentDescription = getString(labelRes)
+    }
+
+    private fun configureWidgetHintTicker(hint: TextView, destination: HomeNavDestination) {
+        val enableTicker = destination == HomeNavDestination.SWEEP
+        if (enableTicker) {
+            hint.isSingleLine = true
+            hint.ellipsize = TextUtils.TruncateAt.MARQUEE
+            hint.marqueeRepeatLimit = -1
+            hint.isSelected = true
+            hint.setHorizontallyScrolling(true)
+            hint.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            hint.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+            return
+        }
+        hint.isSingleLine = true
+        hint.ellipsize = TextUtils.TruncateAt.END
+        hint.marqueeRepeatLimit = 0
+        hint.isSelected = false
+        hint.setHorizontallyScrolling(false)
+        hint.gravity = Gravity.CENTER
+        hint.textAlignment = View.TEXT_ALIGNMENT_CENTER
     }
 
     private fun widgetValueForDestination(
@@ -937,7 +1032,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun routeHomeDestination(destination: HomeNavDestination) {
         when (destination) {
-            HomeNavDestination.SWEEP -> runHomeFullScan()
+            HomeNavDestination.SWEEP -> runOneTimeScan()
             HomeNavDestination.THREATS -> openPhishingTriageDialog()
             HomeNavDestination.CREDENTIALS -> openCredentialCenter()
             HomeNavDestination.SERVICES -> openSecurityDetailsDialog()
@@ -1353,6 +1448,10 @@ class MainActivity : AppCompatActivity() {
             TypedValue.COMPLEX_UNIT_SP,
             if (profile.compactHeight) 11f else 12f
         )
+        binding.scanTerminalLabel.setTextSize(
+            TypedValue.COMPLEX_UNIT_SP,
+            if (profile.compactHeight) 10f else 11f
+        )
         binding.securityUrgentActionsLabel.setTextSize(
             TypedValue.COMPLEX_UNIT_SP,
             if (profile.compactHeight) 10f else 11f
@@ -1468,30 +1567,452 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runOneTimeScan() {
-        runHomeFullScan()
+        if (homeIntroAnimating || lionBusyInProgress) {
+            return
+        }
+        showScanModeDialog()
+    }
+
+    private fun showScanModeDialog() {
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.scan_mode_dialog_title)
+            .setMessage(R.string.scan_mode_dialog_message)
+            .setPositiveButton(R.string.scan_mode_option_quick) { _, _ ->
+                runHomeFullScan()
+            }
+            .setNeutralButton(R.string.scan_mode_option_deep_custom) { _, _ ->
+                showDeepScanOptionsDialog()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
+    }
+
+    private fun showDeepScanOptionsDialog() {
+        val labels = arrayOf(
+            getString(R.string.deep_scan_option_startup_persistence),
+            getString(R.string.deep_scan_option_storage_artifacts),
+            getString(R.string.deep_scan_option_embedded_probe),
+            getString(R.string.deep_scan_option_wifi_posture)
+        )
+        val checks = booleanArrayOf(
+            true,
+            true,
+            true,
+            WifiPostureScanner.config(this).enabled
+        )
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.deep_scan_options_title)
+            .setMessage(R.string.deep_scan_options_message)
+            .setMultiChoiceItems(labels, checks) { _, which, isChecked ->
+                checks[which] = isChecked
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.deep_scan_action_start) { _, _ ->
+                val selection = DeepScanSelection(
+                    includeStartupPersistenceSweep = checks[0],
+                    includeStorageArtifactSweep = checks[1],
+                    includeEmbeddedPathProbe = checks[2],
+                    includeWifiPostureSweep = checks[3]
+                )
+                if (!selection.hasAnyDeepModule() && !selection.includeWifiPostureSweep) {
+                    Toast.makeText(
+                        this,
+                        R.string.deep_scan_selection_required,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setPositiveButton
+                }
+                maybeRunDeepScanWithStorageOnboarding(selection)
+            }
+            .create()
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
+    }
+
+    private fun maybeRunDeepScanWithStorageOnboarding(selection: DeepScanSelection) {
+        if (!selection.includeStorageArtifactSweep) {
+            runHomeDeepScan(selection)
+            return
+        }
+        val missingMediaPermissions = requiredDeepStorageMediaPermissions()
+        if (missingMediaPermissions.isNotEmpty()) {
+            val dialog = LionAlertDialogBuilder(this)
+                .setTitle(R.string.deep_scan_storage_media_permission_title)
+                .setMessage(R.string.deep_scan_storage_media_permission_message)
+                .setPositiveButton(R.string.deep_scan_storage_permission_grant) { _, _ ->
+                    pendingDeepScanSelectionForMediaPermission = selection
+                    deepStoragePermissionLauncher.launch(missingMediaPermissions)
+                }
+                .setNeutralButton(R.string.deep_scan_storage_permission_continue_limited) { _, _ ->
+                    maybePromptAllFilesAccessForDeepScan(selection)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+            dialog.show()
+            LionDialogStyler.applyForActivity(this, dialog)
+            return
+        }
+        maybePromptAllFilesAccessForDeepScan(selection)
+    }
+
+    private fun maybePromptAllFilesAccessForDeepScan(selection: DeepScanSelection) {
+        if (!selection.includeStorageArtifactSweep) {
+            runHomeDeepScan(selection)
+            return
+        }
+        val canOfferAllFiles = DeepThreatScanner.canOfferAllFilesAccessOnboarding(this)
+        val hasAllFiles = DeepThreatScanner.hasAllFilesAccess(this)
+        if (!canOfferAllFiles || hasAllFiles) {
+            runHomeDeepScan(selection)
+            return
+        }
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.deep_scan_all_files_onboarding_title)
+            .setMessage(R.string.deep_scan_all_files_onboarding_message)
+            .setPositiveButton(R.string.deep_scan_storage_permission_continue_limited) { _, _ ->
+                runHomeDeepScan(selection)
+            }
+            .setNeutralButton(R.string.deep_scan_all_files_open_settings) { _, _ ->
+                val opened = openAllFilesAccessSettings()
+                binding.subStatusLabel.text = if (opened) {
+                    getString(R.string.deep_scan_all_files_settings_opened_status)
+                } else {
+                    getString(R.string.deep_scan_all_files_settings_open_failed)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
+    }
+
+    private fun requiredDeepStorageMediaPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO
+            ).filter { permission ->
+                ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
+            }.toTypedArray()
+        } else {
+            val granted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                emptyArray()
+            } else {
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+    }
+
+    private fun openAllFilesAccessSettings(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return false
+        }
+        val packageUri = Uri.parse("package:$packageName")
+        val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
+        if (runCatching { startActivity(appIntent) }.isSuccess) {
+            return true
+        }
+        val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+        return runCatching { startActivity(fallbackIntent) }.isSuccess
     }
 
     private fun runHomeFullScan() {
         if (homeIntroAnimating) {
             return
         }
-        setBusy(true, getString(R.string.home_full_scan_running))
+        setScanTerminalEnabled(true)
+        setScanTerminalLine(
+            buildScanTerminalLine(
+                progress = 0f,
+                stageStatus = getString(R.string.scan_stage_preparing),
+                detail = "core: preparing snapshot collectors"
+            ),
+            force = true
+        )
+        val coreStageLabel = getString(R.string.scan_stage_core_running)
+        setBusy(
+            busy = true,
+            status = getString(R.string.home_full_scan_running),
+            lionMinDurationMs = 0L
+        )
+        updateLionProcessingCheckpoint(0.08f, getString(R.string.scan_stage_preparing))
+        val startedAtMs = SystemClock.elapsedRealtime()
         lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
-                SecurityScanner.runScan(this@MainActivity, createBaselineIfMissing = true)
+                SecurityScanner.runScan(
+                    context = this@MainActivity,
+                    createBaselineIfMissing = true,
+                    progressCallback = ScanProgressCallback { coreProgress, coreDetail ->
+                        postScanProgress(
+                            progress = 0.10f + (coreProgress * 0.58f),
+                            stageStatus = coreStageLabel,
+                            terminalDetail = coreDetail
+                        )
+                    }
+                )
             }
+            updateLionProcessingCheckpoint(0.70f, getString(R.string.scan_stage_core_complete))
             val wifiEnabled = WifiPostureScanner.config(this@MainActivity).enabled
             if (wifiEnabled) {
+                updateLionProcessingCheckpoint(0.74f, getString(R.string.scan_stage_wifi_running))
                 withContext(Dispatchers.Default) {
                     WifiPostureScanner.runPostureScan(this@MainActivity)
                 }
+                updateLionProcessingCheckpoint(0.88f, getString(R.string.scan_stage_wifi_complete))
+            } else {
+                updateLionProcessingCheckpoint(0.84f)
             }
             latestWifiSnapshot = WifiScanSnapshotStore.latest(this@MainActivity)
             binding.statusLabel.text = SecurityScanner.summaryLine(result)
-            binding.subStatusLabel.text = getString(R.string.home_full_scan_completed)
-            binding.resultText.text = SecurityScanner.formatReport(result)
+            updateLionProcessingCheckpoint(0.91f, getString(R.string.scan_stage_finalizing))
+            val elapsedMs = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtLeast(0L)
+            val scopeSummary = if (wifiEnabled) {
+                getString(R.string.home_full_scan_scope_with_wifi)
+            } else {
+                getString(R.string.home_full_scan_scope_core)
+            }
+            binding.subStatusLabel.text = getString(
+                R.string.home_full_scan_completed_timing_scope,
+                formatScanDuration(elapsedMs),
+                scopeSummary
+            )
+            val reportText = SecurityScanner.formatReport(result)
+            binding.resultText.text = reportText
+            val reviewPayload = buildFullScanReviewPayload(
+                result = result,
+                scopeSummary = scopeSummary,
+                reportText = reportText
+            )
+            updateLionProcessingCheckpoint(LION_PROCESSING_TARGET_PROGRESS)
             setBusy(false)
+            setScanTerminalEnabled(false)
             refreshUiState()
+            showScanCompletionPrompt(reviewPayload)
+        }
+    }
+
+    private fun runHomeDeepScan(selection: DeepScanSelection) {
+        if (homeIntroAnimating) {
+            return
+        }
+        setScanTerminalEnabled(true)
+        setScanTerminalLine(
+            buildScanTerminalLine(
+                progress = 0f,
+                stageStatus = getString(R.string.scan_stage_preparing),
+                detail = "deep: preparing module pipeline"
+            ),
+            force = true
+        )
+        val coreStageLabel = getString(R.string.scan_stage_core_running)
+        val deepStageLabel = getString(R.string.scan_stage_deep_running)
+        setBusy(
+            busy = true,
+            status = getString(R.string.home_deep_scan_running),
+            lionMinDurationMs = 0L
+        )
+        updateLionProcessingCheckpoint(0.08f, getString(R.string.scan_stage_preparing))
+        val startedAtMs = SystemClock.elapsedRealtime()
+        lifecycleScope.launch {
+            var reviewPayload: ScanReviewPayload? = null
+            runCatching {
+                val coreResult = withContext(Dispatchers.Default) {
+                    SecurityScanner.runScan(
+                        context = this@MainActivity,
+                        createBaselineIfMissing = true,
+                        progressCallback = ScanProgressCallback { coreProgress, coreDetail ->
+                            postScanProgress(
+                                progress = 0.10f + (coreProgress * 0.34f),
+                                stageStatus = coreStageLabel,
+                                terminalDetail = coreDetail
+                            )
+                        }
+                    )
+                }
+                updateLionProcessingCheckpoint(0.46f, getString(R.string.scan_stage_core_complete))
+                val deepResult = withContext(Dispatchers.IO) {
+                    DeepThreatScanner.run(
+                        context = this@MainActivity,
+                        options = DeepScanOptions(
+                            includeStartupPersistenceSweep = selection.includeStartupPersistenceSweep,
+                            includeStorageArtifactSweep = selection.includeStorageArtifactSweep,
+                            includeEmbeddedPathProbe = selection.includeEmbeddedPathProbe
+                        ),
+                        progressCallback = DeepScanProgressCallback { deepProgress, deepDetail ->
+                            postScanProgress(
+                                progress = 0.48f + (deepProgress * 0.34f),
+                                stageStatus = deepStageLabel,
+                                terminalDetail = deepDetail
+                            )
+                        }
+                    )
+                }
+                updateLionProcessingCheckpoint(0.82f, getString(R.string.scan_stage_deep_complete))
+                if (selection.includeWifiPostureSweep) {
+                    updateLionProcessingCheckpoint(0.85f, getString(R.string.scan_stage_wifi_running))
+                    withContext(Dispatchers.Default) {
+                        WifiPostureScanner.runPostureScan(this@MainActivity)
+                    }
+                    updateLionProcessingCheckpoint(0.89f, getString(R.string.scan_stage_wifi_complete))
+                }
+                latestWifiSnapshot = WifiScanSnapshotStore.latest(this@MainActivity)
+                updateLionProcessingCheckpoint(0.90f, getString(R.string.scan_stage_maintenance_running))
+                val maintenanceAudit = withContext(Dispatchers.IO) {
+                    SafeHygieneToolkit.runAudit(this@MainActivity)
+                }
+                latestHygieneAudit = maintenanceAudit
+                SafeHygieneToolkit.logMaintenanceAction(
+                    context = this@MainActivity,
+                    action = "deep_scan_maintenance_snapshot",
+                    detail = JSONObject()
+                        .put("inactiveAppCandidateCount", maintenanceAudit.healthReport.inactiveAppCandidateCount)
+                        .put("duplicateMediaGroupCount", maintenanceAudit.healthReport.duplicateMediaGroupCount)
+                        .put("installerRemnantCount", maintenanceAudit.healthReport.installerRemnantCount)
+                        .put("safeCleanupBytes", maintenanceAudit.healthReport.safeCleanupBytes)
+                )
+                updateLionProcessingCheckpoint(0.93f, getString(R.string.scan_stage_maintenance_complete))
+
+                val elapsedMs = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtLeast(0L)
+                val scopeSummary = "${buildDeepScopeSummary(selection)}, ${getString(R.string.scan_results_scope_maintenance)}"
+                binding.statusLabel.text = "${SecurityScanner.summaryLine(coreResult)} ${deepResult.summaryLine()}"
+                updateLionProcessingCheckpoint(0.95f, getString(R.string.scan_stage_finalizing))
+                binding.subStatusLabel.text = getString(
+                    R.string.home_deep_scan_completed_timing_scope,
+                    formatScanDuration(elapsedMs),
+                    scopeSummary
+                )
+                val reportText = buildString {
+                    appendLine(SecurityScanner.formatReport(coreResult))
+                    appendLine()
+                    appendLine(deepResult.formatReport())
+                    appendLine()
+                    appendLine(buildMaintenanceReportSection(maintenanceAudit))
+                }.trim()
+                binding.resultText.text = reportText
+                reviewPayload = buildDeepScanReviewPayload(
+                    coreResult = coreResult,
+                    deepResult = deepResult,
+                    scopeSummary = scopeSummary,
+                    reportText = reportText,
+                    maintenancePayloadJson = buildMaintenancePayloadJson(maintenanceAudit)
+                )
+            }.onFailure {
+                binding.subStatusLabel.text = getString(R.string.home_deep_scan_failed)
+                setScanTerminalLine(getString(R.string.scan_terminal_failed), force = true)
+            }
+            updateLionProcessingCheckpoint(LION_PROCESSING_TARGET_PROGRESS)
+            setBusy(false)
+            setScanTerminalEnabled(false)
+            refreshUiState()
+            reviewPayload?.let { showScanCompletionPrompt(it) }
+        }
+    }
+
+    private fun resolveDeepScanMinimumVisualMs(selection: DeepScanSelection): Long {
+        var estimate = LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_BASE
+        if (selection.includeStartupPersistenceSweep) {
+            estimate += LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_PER_MODULE
+        }
+        if (selection.includeStorageArtifactSweep) {
+            estimate += LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_PER_MODULE
+        }
+        if (selection.includeEmbeddedPathProbe) {
+            estimate += LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_PER_MODULE
+        }
+        if (selection.includeWifiPostureSweep) {
+            estimate += LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_PER_MODULE
+        }
+        return estimate.coerceAtMost(LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_MAX)
+    }
+
+    private fun buildDeepScopeSummary(selection: DeepScanSelection): String {
+        val parts = mutableListOf<String>()
+        parts += getString(R.string.home_deep_scope_core)
+        if (selection.includeStartupPersistenceSweep) {
+            parts += getString(R.string.home_deep_scope_startup)
+        }
+        if (selection.includeStorageArtifactSweep) {
+            parts += getString(R.string.home_deep_scope_storage)
+        }
+        if (selection.includeEmbeddedPathProbe) {
+            parts += getString(R.string.home_deep_scope_embedded)
+        }
+        if (selection.includeWifiPostureSweep) {
+            parts += getString(R.string.home_deep_scope_wifi)
+        }
+        return parts.joinToString(", ")
+    }
+
+    private fun buildMaintenancePayloadJson(audit: HygieneAuditResult): String {
+        val health = audit.healthReport
+        return JSONObject()
+            .put("generatedAtEpochMs", audit.generatedAtEpochMs)
+            .put("appCacheBytes", audit.appCacheBytes)
+            .put("staleArtifactCount", audit.staleArtifactCount)
+            .put("staleArtifactBytes", audit.staleArtifactBytes)
+            .put("staleCompletedQueueCount", audit.staleCompletedQueueCount)
+            .put("safeCleanupBytes", health.safeCleanupBytes)
+            .put("usageAccessGranted", health.usageAccessGranted)
+            .put("inactiveAppCandidateCount", health.inactiveAppCandidateCount)
+            .put("inactiveAppExamples", JSONArray(health.inactiveAppExamples))
+            .put("mediaReadAccessGranted", health.mediaReadAccessGranted)
+            .put("duplicateMediaGroupCount", health.duplicateMediaGroupCount)
+            .put("duplicateMediaFileCount", health.duplicateMediaFileCount)
+            .put("duplicateMediaReclaimableBytes", health.duplicateMediaReclaimableBytes)
+            .put("duplicateMediaExamples", JSONArray(health.duplicateMediaExamples))
+            .put("installerRemnantCount", health.installerRemnantCount)
+            .put("installerRemnantBytes", health.installerRemnantBytes)
+            .put("installerRemnantExamples", JSONArray(health.installerRemnantExamples))
+            .toString()
+    }
+
+    private fun buildMaintenanceReportSection(audit: HygieneAuditResult): String {
+        val health = audit.healthReport
+        return buildString {
+            appendLine("Safe Hygiene Report")
+            appendLine("Generated: ${toIsoUtc(audit.generatedAtEpochMs)}")
+            appendLine(
+                "Cleanup-safe reclaimable: ${
+                    SafeHygieneToolkit.formatBytes(health.safeCleanupBytes)
+                } (cache + local stale artifacts)"
+            )
+            appendLine(
+                "Inactive apps: ${health.inactiveAppCandidateCount} | usage access: ${
+                    if (health.usageAccessGranted) "granted" else "missing"
+                }"
+            )
+            appendLine(
+                "Duplicate media: ${health.duplicateMediaGroupCount} group(s), ${health.duplicateMediaFileCount} file(s), potential ${
+                    SafeHygieneToolkit.formatBytes(health.duplicateMediaReclaimableBytes)
+                } reclaim"
+            )
+            appendLine(
+                "Installer remnants: ${health.installerRemnantCount} file(s), ${
+                    SafeHygieneToolkit.formatBytes(health.installerRemnantBytes)
+                }"
+            )
+            appendLine(
+                "Media read access: ${
+                    if (health.mediaReadAccessGranted) "granted" else "missing"
+                }"
+            )
+        }.trim()
+    }
+
+    private fun formatScanDuration(elapsedMs: Long): String {
+        val normalized = elapsedMs.coerceAtLeast(0L)
+        val seconds = normalized / 1000.0
+        return if (seconds < 10.0) {
+            String.format(Locale.US, "%.1fs", seconds)
+        } else {
+            "${normalized / 1000L}s"
         }
     }
 
@@ -1629,7 +2150,11 @@ class MainActivity : AppCompatActivity() {
         recoverBottomNavIfNeeded()
     }
 
-    private fun setBusy(busy: Boolean, status: String? = null) {
+    private fun setBusy(
+        busy: Boolean,
+        status: String? = null,
+        lionMinDurationMs: Long = LION_MIN_BUSY_VISUAL_MS_DEFAULT
+    ) {
         val profileControl = PricingPolicy.resolveProfileControl(this)
         binding.oneTimeScanButton.isEnabled = !busy
         binding.continuousScanButton.isEnabled = !busy
@@ -1680,7 +2205,7 @@ class MainActivity : AppCompatActivity() {
         binding.widgetTimelineCard.isEnabled = navEnabled
 
         if (busy) {
-            beginLionProcessingAnimation()
+            beginLionProcessingAnimation(lionMinDurationMs)
         } else {
             completeLionProcessingAnimation()
         }
@@ -3868,26 +4393,109 @@ class MainActivity : AppCompatActivity() {
         if (homeIntroAnimating) {
             return
         }
+        val queue = CredentialActionStore.loadQueue(this)
         val guardianEntries = GuardianAlertStore.readRecent(this, limit = 20)
-        val connectorEvents = IntegrationMeshAuditStore.readRecentEvents(this, limit = 20)
+        val connectorEvents = IntegrationMeshAuditStore.readRecentEvents(this, limit = 80)
+        val appRiskBoard = Phase5ParityEngine.buildAppRiskBoard(this, queue)
+        val anomalies = Phase5ParityEngine.buildConnectedHomeAnomalies(connectorEvents)
+        val accountability = Phase5ParityEngine.buildOwnerAccountability(anomalies, queue)
+        val kpi = Phase5ParityEngine.computeKpis(queue, connectorEvents)
+        KpiTelemetryStore.appendSnapshot(this, kpi)
         val high = guardianEntries.count { it.severity == Severity.HIGH }
         val medium = guardianEntries.count { it.severity == Severity.MEDIUM }
-        val message = if (guardianEntries.isEmpty() && connectorEvents.isEmpty()) {
-            getString(R.string.timeline_report_empty)
-        } else {
-            getString(
-                R.string.timeline_report_summary_template,
-                guardianEntries.size,
-                high,
-                medium,
-                connectorEvents.size
-            )
+        val appBoardRows = appRiskBoard.take(4).mapIndexed { index, row ->
+            val queueLink = if (row.linkedQueueActionId.isBlank()) {
+                "queue_link=none"
+            } else {
+                "queue_link=${row.linkedQueueActionId} (${row.linkedQueueOwner}/${row.linkedQueueCategory})"
+            }
+            "${index + 1}. ${row.appRef} [${row.severity.name}/${row.score}] $queueLink"
         }
+        val anomalyRows = anomalies.take(4).mapIndexed { index, row ->
+            val owner = CredentialPolicy.canonicalOwnerId(row.ownerRole)
+            "${index + 1}. owner=$owner connector=${row.connectorId} event=${row.eventType} outcome=${row.outcome} risk=${row.severity.name}"
+        }
+        val accountabilityRows = accountability.map { row ->
+            "owner=${row.ownerRole} high=${row.anomalyHighCount} medium=${row.anomalyMediumCount} pending_queue=${row.pendingQueueCount}"
+        }
+        val message = buildString {
+            if (guardianEntries.isEmpty() && connectorEvents.isEmpty() && appRiskBoard.isEmpty()) {
+                appendLine(getString(R.string.timeline_report_empty))
+                appendLine()
+            } else {
+                appendLine(
+                    getString(
+                        R.string.timeline_report_summary_template,
+                        guardianEntries.size,
+                        high,
+                        medium,
+                        connectorEvents.size
+                    )
+                )
+                appendLine()
+            }
+            appendLine(getString(R.string.phase5_app_risk_board_title))
+            appendLine("Items: ${appRiskBoard.size}")
+            if (appBoardRows.isEmpty()) {
+                appendLine(getString(R.string.phase5_none))
+            } else {
+                appBoardRows.forEach { appendLine(it) }
+            }
+            appendLine()
+            appendLine(getString(R.string.phase5_connected_home_timeline_title))
+            appendLine("Anomalies: ${anomalies.size}")
+            if (anomalyRows.isEmpty()) {
+                appendLine(getString(R.string.phase5_none))
+            } else {
+                anomalyRows.forEach { appendLine(it) }
+            }
+            appendLine()
+            appendLine(getString(R.string.phase5_owner_accountability_title))
+            accountabilityRows.forEach { appendLine(it) }
+            appendLine()
+            appendLine(getString(R.string.phase5_kpi_title))
+            appendLine(
+                getString(
+                    R.string.phase5_kpi_mttr_template,
+                    String.format(Locale.US, "%.1f", kpi.meanTimeToRemediateHours),
+                    kpi.sampleCompletedRemediations
+                )
+            )
+            appendLine(
+                getString(
+                    R.string.phase5_kpi_high_risk_success_template,
+                    Phase5ParityEngine.formatPercent(kpi.highRiskActionSuccessRate),
+                    kpi.sampleHighRiskActions
+                )
+            )
+            appendLine(
+                getString(
+                    R.string.phase5_kpi_connector_reliability_template,
+                    Phase5ParityEngine.formatPercent(kpi.connectorReliabilityRate),
+                    kpi.sampleConnectorEvents
+                )
+            )
+        }.trim()
+        val reportText = Phase5ParityEngine.buildUnifiedEvidenceReport(
+            capturedAtEpochMs = System.currentTimeMillis(),
+            appRiskBoard = appRiskBoard,
+            anomalies = anomalies,
+            accountability = accountability,
+            kpi = kpi,
+            guardianEntries = guardianEntries,
+            connectorEvents = connectorEvents,
+            queue = queue
+        )
         LionAlertDialogBuilder(this)
             .setTitle(R.string.timeline_report_dialog_title)
             .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
-            .setNeutralButton(R.string.guardian_feed_title) { _, _ ->
+            .setPositiveButton(R.string.phase5_action_open_remediation_queue) { _, _ ->
+                openCredentialCenter()
+            }
+            .setNeutralButton(R.string.phase5_action_export_unified_report) { _, _ ->
+                launchUnifiedReportExport(reportText)
+            }
+            .setNegativeButton(R.string.guardian_feed_title) { _, _ ->
                 openGuardianFeedDialog()
             }
             .show()
@@ -4003,6 +4611,19 @@ class MainActivity : AppCompatActivity() {
         binding.introTitleLabel.setTextColor(palette.textPrimary)
         binding.introWelcomeLabel.setTextColor(palette.textPrimary)
         binding.lionModeToggleButton.setTextColor(palette.accent)
+        binding.scanTerminalCard.background = null
+        binding.scanTerminalCard.setCardBackgroundColor(Color.TRANSPARENT)
+        binding.scanTerminalCard.strokeWidth = 0
+        binding.scanTerminalCard.cardElevation = 0f
+        binding.scanTerminalCard.translationZ = 0f
+        binding.scanTerminalCard.preventCornerOverlap = false
+        binding.scanTerminalLabel.setTextColor(
+            if (isDarkTone) {
+                blendColors(palette.accent, palette.textPrimary, 0.52f)
+            } else {
+                blendColors(palette.accent, palette.textSecondary, 0.62f)
+            }
+        )
 
         applyWidgetCardPalette(binding.widgetSweepCard, palette, accentStyle)
         applyWidgetCardPalette(binding.widgetThreatsCard, palette, accentStyle)
@@ -4322,26 +4943,229 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun beginLionProcessingAnimation() {
-        if (lionBusyInProgress) {
+    private fun postScanProgress(
+        progress: Float,
+        stageStatus: String? = null,
+        terminalDetail: String? = null
+    ) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            updateLionProcessingCheckpoint(progress, stageStatus, terminalDetail)
             return
         }
-        lionBusyInProgress = true
-        lionIdleResetRunnable?.let { pending ->
-            binding.lionHeroView.removeCallbacks(pending)
+        runOnUiThread {
+            updateLionProcessingCheckpoint(progress, stageStatus, terminalDetail)
         }
-        lionIdleResetRunnable = null
+    }
+
+    private fun updateLionProcessingCheckpoint(
+        progress: Float,
+        stageStatus: String? = null,
+        terminalDetail: String? = null
+    ) {
+        if (lionBusyInProgress) {
+            if (!stageStatus.isNullOrBlank()) {
+                binding.subStatusLabel.text = stageStatus
+            }
+            val current = binding.lionHeroView.readScanProgress()
+            val target = progress.coerceIn(
+                LION_PROCESSING_INITIAL_PROGRESS,
+                LION_PROCESSING_TARGET_PROGRESS
+            )
+            if (target <= current + 0.001f) {
+                return
+            }
+            binding.lionHeroView.setScanProgress(target)
+            val terminalText = buildScanTerminalLine(
+                progress = target,
+                stageStatus = stageStatus,
+                detail = terminalDetail
+            )
+            setScanTerminalLine(terminalText)
+        }
+    }
+
+    private fun buildScanTerminalLine(
+        progress: Float,
+        stageStatus: String? = null,
+        detail: String? = null
+    ): String {
+        val detailText = (detail ?: stageStatus)
+            .orEmpty()
+            .replace('\n', ' ')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifBlank { getString(R.string.scan_terminal_working) }
+            .let { if (it.length > 96) "${it.take(93)}..." else it }
+        val percent = (progress.coerceIn(0f, 1f) * 100f).toInt()
+        return getString(R.string.scan_terminal_progress_template, percent, detailText)
+    }
+
+    private fun setScanTerminalEnabled(enabled: Boolean) {
+        scanTerminalEnabled = enabled
+        binding.scanTerminalCard.visibility = if (enabled) View.VISIBLE else View.GONE
+        if (!enabled) {
+            scanTerminalLastLine = ""
+            scanTerminalLastRenderedAtMs = 0L
+            binding.scanTerminalLabel.text = ""
+        }
+        binding.root.post { alignHomeWidgetsBetweenTitleAndScan() }
+    }
+
+    private fun setScanTerminalLine(message: String, force: Boolean = false) {
+        if (!scanTerminalEnabled) {
+            return
+        }
+        if (binding.scanTerminalCard.visibility != View.VISIBLE) {
+            binding.scanTerminalCard.visibility = View.VISIBLE
+        }
+        val normalized = message.trim().ifBlank { getString(R.string.scan_terminal_idle) }
+        val now = SystemClock.elapsedRealtime()
+        if (!force) {
+            if (normalized == scanTerminalLastLine) {
+                return
+            }
+            if ((now - scanTerminalLastRenderedAtMs) < SCAN_TERMINAL_UPDATE_MIN_INTERVAL_MS) {
+                return
+            }
+        }
+        scanTerminalLastLine = normalized
+        scanTerminalLastRenderedAtMs = now
+        binding.scanTerminalLabel.text = normalized
+    }
+
+    private fun buildFullScanReviewPayload(
+        result: ScanResult,
+        scopeSummary: String,
+        reportText: String
+    ): ScanReviewPayload {
+        val highCount = result.alerts.count { it.severity == Severity.HIGH }
+        val mediumCount = result.alerts.count { it.severity == Severity.MEDIUM }
+        val lowCount = result.alerts.count { it.severity == Severity.LOW }
+        val infoCount = result.alerts.count { it.severity == Severity.INFO }
+        return ScanReviewPayload(
+            modeLabel = getString(R.string.scan_mode_option_quick),
+            summaryLine = SecurityScanner.summaryLine(result),
+            scopeSummary = scopeSummary,
+            reportText = reportText,
+            completedAtEpochMs = result.snapshot.scannedAtEpochMs,
+            highCount = highCount,
+            mediumCount = mediumCount,
+            lowCount = lowCount,
+            infoCount = infoCount,
+            maintenancePayloadJson = ""
+        )
+    }
+
+    private fun buildDeepScanReviewPayload(
+        coreResult: ScanResult,
+        deepResult: DeepScanResult,
+        scopeSummary: String,
+        reportText: String,
+        maintenancePayloadJson: String = ""
+    ): ScanReviewPayload {
+        val coreHigh = coreResult.alerts.count { it.severity == Severity.HIGH }
+        val coreMedium = coreResult.alerts.count { it.severity == Severity.MEDIUM }
+        val coreLow = coreResult.alerts.count { it.severity == Severity.LOW }
+        val coreInfo = coreResult.alerts.count { it.severity == Severity.INFO }
+        return ScanReviewPayload(
+            modeLabel = getString(R.string.scan_mode_option_deep_custom),
+            summaryLine = "${SecurityScanner.summaryLine(coreResult)} ${deepResult.summaryLine()}",
+            scopeSummary = scopeSummary,
+            reportText = reportText,
+            completedAtEpochMs = deepResult.scannedAtEpochMs,
+            highCount = coreHigh + deepResult.highCount(),
+            mediumCount = coreMedium + deepResult.mediumCount(),
+            lowCount = coreLow + deepResult.lowCount(),
+            infoCount = coreInfo + deepResult.infoCount(),
+            maintenancePayloadJson = maintenancePayloadJson
+        )
+    }
+
+    private fun showScanCompletionPrompt(payload: ScanReviewPayload) {
+        if (isFinishing || isDestroyed) {
+            return
+        }
+        val message = getString(
+            R.string.scan_results_prompt_message_template,
+            payload.summaryLine
+        )
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.scan_results_prompt_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.scan_results_prompt_review) { _, _ ->
+                openScanResultsScreen(payload)
+            }
+            .setNegativeButton(R.string.scan_results_prompt_later, null)
+            .create()
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
+    }
+
+    private fun openScanResultsScreen(payload: ScanReviewPayload) {
+        val intent = Intent(this, ScanResultsActivity::class.java).apply {
+            putExtra(ScanResultsActivity.EXTRA_MODE_LABEL, payload.modeLabel)
+            putExtra(ScanResultsActivity.EXTRA_SUMMARY_LINE, payload.summaryLine)
+            putExtra(ScanResultsActivity.EXTRA_SCOPE_SUMMARY, payload.scopeSummary)
+            putExtra(ScanResultsActivity.EXTRA_REPORT_TEXT, payload.reportText)
+            putExtra(ScanResultsActivity.EXTRA_COMPLETED_AT_EPOCH_MS, payload.completedAtEpochMs)
+            putExtra(ScanResultsActivity.EXTRA_HIGH_COUNT, payload.highCount)
+            putExtra(ScanResultsActivity.EXTRA_MEDIUM_COUNT, payload.mediumCount)
+            putExtra(ScanResultsActivity.EXTRA_LOW_COUNT, payload.lowCount)
+            putExtra(ScanResultsActivity.EXTRA_INFO_COUNT, payload.infoCount)
+            putExtra(ScanResultsActivity.EXTRA_MAINTENANCE_PAYLOAD_JSON, payload.maintenancePayloadJson)
+        }
+        startActivity(intent)
+    }
+
+    private fun animateLionProgressTo(targetProgress: Float, explicitDurationMs: Long? = null) {
+        val current = binding.lionHeroView.readScanProgress()
+        val target = targetProgress.coerceIn(current, LION_PROCESSING_TARGET_PROGRESS)
+        if (target <= current + 0.001f) {
+            return
+        }
         lionProgressAnimator?.cancel()
-        lionProgressAnimator = ValueAnimator.ofFloat(0f, 0.92f).apply {
-            duration = 2200L
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.RESTART
+        val duration = explicitDurationMs ?: ((target - current) * LION_PROCESSING_PROGRESS_MS_PER_POINT)
+            .toLong()
+            .coerceIn(LION_PROCESSING_STEP_MIN_MS, LION_PROCESSING_STEP_MAX_MS)
+        lionProgressAnimator = ValueAnimator.ofFloat(current, target).apply {
+            this.duration = duration
             interpolator = LinearInterpolator()
             addUpdateListener { animator ->
                 binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
             }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    if (lionProgressAnimator === animation) {
+                        lionProgressAnimator = null
+                    }
+                }
+            })
             start()
         }
+    }
+
+    private fun beginLionProcessingAnimation(minVisualDurationMs: Long = LION_MIN_BUSY_VISUAL_MS_DEFAULT) {
+        if (lionBusyInProgress) {
+            return
+        }
+        lionBusyInProgress = true
+        lionMinBusyVisualMs = minVisualDurationMs.coerceIn(0L, LION_MIN_BUSY_VISUAL_MS_DEEP_SCAN_MAX)
+        lionBusyStartedAtMs = SystemClock.elapsedRealtime()
+        lionAnimationSessionId += 1
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionCompletionDelayRunnable = null
+        lionIdleResetRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionIdleResetRunnable = null
+        binding.lionHeroView.setScanProgress(LION_PROCESSING_INITIAL_PROGRESS)
+        animateLionProgressTo(
+            targetProgress = (LION_PROCESSING_INITIAL_PROGRESS + 0.04f)
+                .coerceAtMost(LION_PROCESSING_TARGET_PROGRESS),
+            explicitDurationMs = 320L
+        )
     }
 
     private fun completeLionProcessingAnimation() {
@@ -4349,26 +5173,83 @@ class MainActivity : AppCompatActivity() {
             return
         }
         lionBusyInProgress = false
-        lionProgressAnimator?.cancel()
-        lionProgressAnimator = null
-        binding.lionHeroView.setScanComplete()
-        val resetRunnable = Runnable {
-            if (!lionBusyInProgress) {
-                binding.lionHeroView.setIdleState()
-            }
+        val sessionIdAtComplete = lionAnimationSessionId
+        val elapsed = (SystemClock.elapsedRealtime() - lionBusyStartedAtMs).coerceAtLeast(0L)
+        val remaining = (lionMinBusyVisualMs - elapsed).coerceAtLeast(0L)
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
         }
-        lionIdleResetRunnable = resetRunnable
-        binding.lionHeroView.postDelayed(resetRunnable, 1400L)
+        lionCompletionDelayRunnable = null
+        if (remaining > 0L) {
+            val completionRunnable = Runnable {
+                finalizeLionProcessingAnimation(sessionIdAtComplete)
+            }
+            lionCompletionDelayRunnable = completionRunnable
+            binding.lionHeroView.postDelayed(completionRunnable, remaining)
+            return
+        }
+        finalizeLionProcessingAnimation(sessionIdAtComplete)
+    }
+
+    private fun finalizeLionProcessingAnimation(sessionId: Int) {
+        if (lionBusyInProgress || lionAnimationSessionId != sessionId) {
+            return
+        }
+        lionCompletionDelayRunnable = null
+        lionProgressAnimator?.cancel()
+        val completionStart = binding.lionHeroView.readScanProgress()
+            .coerceIn(LION_PROCESSING_INITIAL_PROGRESS, 1f)
+        lionProgressAnimator = ValueAnimator.ofFloat(completionStart, 1f).apply {
+            duration = LION_PROCESSING_COMPLETE_ANIM_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animator ->
+                binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (lionBusyInProgress || lionAnimationSessionId != sessionId) {
+                        return
+                    }
+                    lionProgressAnimator = null
+                    binding.lionHeroView.setScanComplete()
+                    lionIdleResetRunnable?.let { pending ->
+                        binding.lionHeroView.removeCallbacks(pending)
+                    }
+                    val resetRunnable = Runnable {
+                        if (!lionBusyInProgress && lionAnimationSessionId == sessionId) {
+                            binding.lionHeroView.setIdleState()
+                        }
+                    }
+                    lionIdleResetRunnable = resetRunnable
+                    binding.lionHeroView.postDelayed(resetRunnable, LION_SCAN_COMPLETE_HOLD_MS)
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    if (lionProgressAnimator === animation) {
+                        lionProgressAnimator = null
+                    }
+                }
+            })
+            start()
+        }
     }
 
     private fun cancelLionProcessingAnimations(resetToIdle: Boolean) {
+        lionAnimationSessionId += 1
+        lionBusyInProgress = false
+        lionBusyStartedAtMs = 0L
+        lionMinBusyVisualMs = LION_MIN_BUSY_VISUAL_MS_DEFAULT
+        setScanTerminalEnabled(false)
         lionProgressAnimator?.cancel()
         lionProgressAnimator = null
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionCompletionDelayRunnable = null
         lionIdleResetRunnable?.let { pending ->
             binding.lionHeroView.removeCallbacks(pending)
         }
         lionIdleResetRunnable = null
-        lionBusyInProgress = false
         if (resetToIdle) {
             binding.lionHeroView.setIdleState()
         }
@@ -5256,6 +6137,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun launchUnifiedReportExport(reportText: String) {
+        val normalized = reportText.trim()
+        if (normalized.isBlank()) {
+            binding.subStatusLabel.text = getString(R.string.timeline_report_export_unavailable)
+            return
+        }
+        pendingUnifiedEvidenceReport = normalized
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val exportIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, "dt_unified_evidence_$timestamp.txt")
+        }
+        unifiedReportExportLauncher.launch(exportIntent)
+    }
+
+    private fun completePendingUnifiedReportExport(destinationUri: Uri?) {
+        val payload = pendingUnifiedEvidenceReport
+        pendingUnifiedEvidenceReport = ""
+        if (payload.isBlank() || destinationUri == null) {
+            return
+        }
+        val saved = runCatching {
+            contentResolver.openOutputStream(destinationUri)?.use { stream ->
+                stream.write(payload.toByteArray(Charsets.UTF_8))
+                stream.flush()
+            } != null
+        }.getOrDefault(false)
+        binding.subStatusLabel.text = if (saved) {
+            getString(R.string.timeline_report_export_complete)
+        } else {
+            getString(R.string.timeline_report_export_failed)
+        }
+    }
+
     private fun confirmVaultDeleteAction(item: VaultItem, retentionDays: Int, permanent: Boolean) {
         val titleRes = if (permanent) {
             R.string.media_vault_delete_now_confirm_title
@@ -5751,28 +6667,107 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val playbook = audit.playbook.take(6).joinToString("\n")
+        val cleanupOptions = arrayOf(
+            getString(R.string.hygiene_cleanup_option_cache),
+            getString(R.string.hygiene_cleanup_option_artifacts),
+            getString(R.string.hygiene_cleanup_option_queue)
+        )
+        val optionChecks = booleanArrayOf(
+            audit.appCacheBytes > 0L,
+            audit.staleArtifactCount > 0,
+            audit.staleCompletedQueueCount > 0
+        )
+        if (!optionChecks.any { it }) {
+            optionChecks[0] = true
+        }
+        val healthSummary = buildHygieneHealthSummary(audit)
         val message = buildString {
+            appendLine(getString(R.string.hygiene_health_report_title))
+            appendLine(healthSummary)
+            appendLine()
             appendLine(getString(R.string.hygiene_cleanup_confirm_message_template))
             appendLine()
             appendLine(getString(R.string.hygiene_playbook_title))
             append(playbook)
         }.trim()
 
-        LionAlertDialogBuilder(this)
+        val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.hygiene_cleanup_confirm_title)
             .setMessage(message)
+            .setMultiChoiceItems(cleanupOptions, optionChecks) { _, which, isChecked ->
+                optionChecks[which] = isChecked
+            }
             .setPositiveButton(R.string.action_confirm) { _, _ ->
-                applySafeHygieneCleanup()
+                val selection = HygieneCleanupSelection(
+                    clearCache = optionChecks[0],
+                    removeStaleArtifacts = optionChecks[1],
+                    trimCompletedQueue = optionChecks[2]
+                )
+                if (!selection.hasAnySelection()) {
+                    Toast.makeText(
+                        this,
+                        R.string.hygiene_cleanup_selection_required,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setPositiveButton
+                }
+                applySafeHygieneCleanup(selection)
             }
             .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            .create()
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
     }
 
-    private fun applySafeHygieneCleanup() {
+    private fun buildHygieneHealthSummary(audit: HygieneAuditResult): String {
+        val inactiveStatus = if (audit.healthReport.usageAccessGranted) {
+            getString(
+                R.string.hygiene_health_inactive_template,
+                audit.healthReport.inactiveAppCandidateCount
+            )
+        } else {
+            getString(R.string.hygiene_health_inactive_permission_missing)
+        }
+        val duplicateStatus = if (audit.healthReport.mediaReadAccessGranted) {
+            getString(
+                R.string.hygiene_health_duplicate_template,
+                audit.healthReport.duplicateMediaGroupCount,
+                audit.healthReport.duplicateMediaFileCount,
+                SafeHygieneToolkit.formatBytes(audit.healthReport.duplicateMediaReclaimableBytes)
+            )
+        } else {
+            getString(R.string.hygiene_health_duplicate_permission_missing)
+        }
+        val installerStatus = if (audit.healthReport.mediaReadAccessGranted) {
+            getString(
+                R.string.hygiene_health_installer_template,
+                audit.healthReport.installerRemnantCount,
+                SafeHygieneToolkit.formatBytes(audit.healthReport.installerRemnantBytes)
+            )
+        } else {
+            getString(R.string.hygiene_health_installer_permission_missing)
+        }
+        return buildString {
+            appendLine(
+                getString(
+                    R.string.hygiene_health_safe_reclaim_template,
+                    SafeHygieneToolkit.formatBytes(audit.healthReport.safeCleanupBytes)
+                )
+            )
+            appendLine(inactiveStatus)
+            appendLine(duplicateStatus)
+            append(installerStatus)
+        }.trim()
+    }
+
+    private fun applySafeHygieneCleanup(selection: HygieneCleanupSelection) {
         setBusy(true, "Applying safe hygiene cleanup...")
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                SafeHygieneToolkit.runSafeCleanup(this@MainActivity)
+                SafeHygieneToolkit.runSafeCleanup(
+                    context = this@MainActivity,
+                    selection = selection
+                )
             }
             setBusy(false)
             val changed = result.reclaimedCacheBytes > 0L ||
@@ -6944,7 +7939,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun routeToGuidedDestination(destination: GuidedDestination) {
         when (destination) {
-            GuidedDestination.SWEEP -> runHomeFullScan()
+            GuidedDestination.SWEEP -> runOneTimeScan()
             GuidedDestination.THREATS -> openPhishingTriageDialog()
             GuidedDestination.CREDENTIALS -> openCredentialCenter()
             GuidedDestination.SERVICES -> openSecurityDetailsDialog()
@@ -7051,12 +8046,25 @@ class MainActivity : AppCompatActivity() {
         binding.homeQuickWidgetsGrid.getLocationOnScreen(widgetLoc)
         binding.securityTopActionButton.getLocationOnScreen(scanLoc)
         binding.homeHeroContent.getLocationOnScreen(heroLoc)
+        val terminalVisible = binding.scanTerminalCard.visibility == View.VISIBLE &&
+            binding.scanTerminalCard.height > 0
+        val terminalBottom = if (terminalVisible) {
+            val terminalLoc = IntArray(2)
+            binding.scanTerminalCard.getLocationOnScreen(terminalLoc)
+            terminalLoc[1].toFloat() + binding.scanTerminalCard.height
+        } else {
+            titleLoc[1].toFloat() + binding.homeFrameTitleLabel.height
+        }
 
         val titleBottom = titleLoc[1].toFloat() + binding.homeFrameTitleLabel.height
         val scanTop = scanLoc[1].toFloat()
         val heroTop = heroLoc[1].toFloat() + binding.homeHeroContent.paddingTop
         val heroBottom = heroLoc[1].toFloat() + binding.homeHeroContent.height - binding.homeHeroContent.paddingBottom
-        val safeTop = maxOf(titleBottom + dpToPx(10f), heroTop)
+        val safeTop = if (terminalVisible) {
+            maxOf(titleBottom + dpToPx(10f), terminalBottom + dpToPx(8f), heroTop)
+        } else {
+            maxOf(titleBottom + dpToPx(10f), heroTop)
+        }
         val safeBottom = minOf(scanTop - dpToPx(10f), heroBottom)
         if (safeBottom <= safeTop) {
             return
