@@ -338,6 +338,17 @@ Implementation status (2026-03-04):
 3. Staged rollout plan and rollback playbook.
 4. Final pricing/packaging update for top-feature marketing.
 
+Implementation status (2026-03-04):
+- Delivered in workspace launch package with:
+  - Repeatable MASVS-aligned sweep script: `scripts/ops/phase6_masvs_sweep.sh`
+  - Phase-1-to-5 retail verification artifact: `docs/integration/phase1_5_retail_readiness_audit_2026-03-04.md`
+  - Policy and Play disclosure review package: `docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md`
+  - Staged rollout and rollback playbook: `docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md`
+  - Final pricing/packaging lock doc: `docs/integration/phase6_pricing_packaging_update_2026-03-04.md`
+  - MASVS sweep runbook: `docs/integration/phase6_masvs_verification_sweep_2026-03-04.md`
+  - Embedded tutorial overlay package: `docs/integration/phase6_tutorial_overlay_2026-03-04.md`
+  - Device-backed Lyra QA trainer: `scripts/ops/lyra_beta_trainer.py` + `docs/integration/phase6_lyra_qa_trainer_2026-03-04.md`
+
 ## 10) Proposed acceptance criteria
 
 1. User can connect at least one smart-home ecosystem and see risk posture in-app.

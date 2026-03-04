@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>DT Scanner Privacy Policy</title>
+    <title>DT Guardian Privacy Policy</title>
     <link rel="stylesheet" href="assets/styles.css">
   </head>
   <body>
     <div class="wrapper">
       <header class="hero">
         <h1>Privacy Policy</h1>
-        <p>DT Scanner (Detect Treat)</p>
+        <p>DT Guardian (Detect Treat)</p>
         <nav class="nav">
           <a href="index.html">Plans + Support</a>
           <a href="privacy.html">Privacy Policy</a>
@@ -20,39 +20,47 @@
       </header>
 
       <section class="section legal">
-        <p><strong>Effective date:</strong> 2026-02-19</p>
+        <p><strong>Effective date:</strong> 2026-03-04</p>
         <p>
-          DT Scanner is built as a defensive mobile security utility. This policy explains what data the app
-          accesses and how that data is handled.
+          DT Guardian is a defensive mobile security utility. This policy describes what data is processed,
+          where it is processed, and what external services are optionally used.
         </p>
 
         <h2>Data Processing Model</h2>
         <ul>
-          <li>Current version is on-device only.</li>
-          <li>No account signup is required.</li>
-          <li>Scan history is stored locally on the user's device.</li>
-          <li>No cloud sync is enabled in this version.</li>
+          <li>Core watchdog analysis, credential queueing, and guardian timeline storage are local-first on device.</li>
+          <li>No mandatory account signup is required for base protection flows.</li>
+          <li>No raw password values are sent to third-party APIs.</li>
+          <li>Optional network features are clearly separated and user-initiated.</li>
         </ul>
 
         <h2>What The App Accesses</h2>
         <ul>
-          <li>Installed app metadata relevant to local watchdog scanning.</li>
-          <li>Accessibility and device-admin state indicators for risk detection.</li>
-          <li>Notification permission status for alert display.</li>
-          <li>When using support forms/chat, submitted support content is stored locally in workspace ticket/chat logs.</li>
+          <li>Installed app/package metadata and risk-relevant device posture signals.</li>
+          <li>Notification/overlay/readiness status used for defensive alerts and remediation guidance.</li>
+          <li>Identity/profile fields entered by the user for family/guardian controls (stored locally).</li>
+          <li>When users invoke optional support flows, provided support text may be sent to the configured support endpoint.</li>
+        </ul>
+
+        <h2>Optional External Service Calls</h2>
+        <ul>
+          <li>Credential breach checks use k-anonymity hash-prefix queries against the Have I Been Pwned Pwned Passwords range endpoint.</li>
+          <li>Optional connected AI mode may send user prompts to the selected provider when enabled by the user.</li>
+          <li>VPN and smart-home integrations in this phase broker provider setup/status and connector posture only.</li>
         </ul>
 
         <h2>What The App Does Not Do</h2>
         <ul>
           <li>Does not sell personal data.</li>
-          <li>Does not share personal scan output to third parties in this version.</li>
-          <li>Does not provide a guarantee that a device is fully compromise-free.</li>
+          <li>Does not transmit raw passwords for breach checks.</li>
+          <li>Does not claim guaranteed prevention/detection of all threats.</li>
+          <li>Does not operate as a native device VPN tunnel in this release phase.</li>
         </ul>
 
-        <h2>Future Updates</h2>
+        <h2>Family and Guardian Controls</h2>
         <p>
-          If optional cloud backup or diagnostics are added in future versions, users will be asked for clear,
-          explicit opt-in before any non-local data transfer begins.
+          Sensitive actions for minor profiles can require explicit guardian confirmation. Guardian events are
+          logged in local timeline artifacts for accountability.
         </p>
 
         <h2>Contact</h2>

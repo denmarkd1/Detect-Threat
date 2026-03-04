@@ -9,6 +9,7 @@ Package: `com.realyn.watchdog`
 - Keep package name unchanged: `com.realyn.watchdog`.
 - Ensure `versionCode` strictly increases each release.
 - Ensure `versionName` matches release notes and changelog.
+- Ensure `targetSdk`/`compileSdk` meet current Play requirement (API 35+ for new submissions in 2026).
 - Verify privacy/terms/support URLs are final and public.
 - Confirm no raw secrets/passwords are logged or bundled.
 
@@ -81,3 +82,14 @@ Go only if all are true:
 - Internal test pass signed off
 - No unresolved high/critical incidents in support queue
 - Rollback plan prepared (hotfix version bump path)
+
+## 8) Phase 6 hardening gate (added 2026-03-04)
+
+- Run MASVS-aligned sweep and archive output:
+  - `bash scripts/ops/phase6_masvs_sweep.sh`
+- Attach generated report:
+  - `logs/phase6/masvs_sweep_<UTC_TIMESTAMP>.md`
+- Validate policy/disclosure package:
+  - `docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md`
+- Validate staged rollout + rollback playbook:
+  - `docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md`

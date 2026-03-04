@@ -209,6 +209,23 @@ Include unstaged changes as well:
 bash scripts/ops/precommit_guard.sh --include-unstaged
 ```
 
+Run Phase 6 MASVS hardening sweep and generate a timestamped report:
+
+```bash
+bash scripts/ops/phase6_masvs_sweep.sh
+```
+
+Run the Lyra device-backed QA trainer (beta/supervising QA flow):
+
+```bash
+python3 scripts/ops/lyra_beta_trainer.py
+```
+
+For first-time Play submission sequencing, follow:
+
+- `docs/integration/phase6_play_store_first_submission_guide_2026-03-04.md`
+- `docs/integration/phase6_real_world_review_outlets_2026-03-04.md`
+
 Refresh the single D_T hub runtime source used by all MCP launcher wrappers:
 
 ```bash
