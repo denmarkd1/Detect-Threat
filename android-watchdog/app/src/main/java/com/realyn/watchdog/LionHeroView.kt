@@ -138,6 +138,10 @@ class LionHeroView @JvmOverloads constructor(
         applyDepthLayerIntensity(normalized)
     }
 
+    fun readScanProgress(): Float {
+        return fillImageView.fillProgress
+    }
+
     fun setScanComplete() {
         fillImageView.fillProgress = 1f
         idleImageView.colorFilter = null

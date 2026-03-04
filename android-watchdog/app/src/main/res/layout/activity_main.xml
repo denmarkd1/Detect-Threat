@@ -96,6 +96,33 @@
                         android:textSize="24sp"
                         android:textStyle="bold" />
 
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/scanTerminalCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:visibility="gone"
+                        app:cardBackgroundColor="@android:color/transparent"
+                        app:cardCornerRadius="0dp"
+                        app:cardElevation="0dp"
+                        app:strokeWidth="0dp">
+
+                        <TextView
+                            android:id="@+id/scanTerminalLabel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:fontFamily="monospace"
+                            android:maxLines="2"
+                            android:paddingStart="4dp"
+                            android:paddingTop="8dp"
+                            android:paddingEnd="4dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/scan_terminal_idle"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </com.google.android.material.card.MaterialCardView>
+
                     <Space
                         android:id="@+id/widgetTopSpacer"
                         android:layout_width="match_parent"

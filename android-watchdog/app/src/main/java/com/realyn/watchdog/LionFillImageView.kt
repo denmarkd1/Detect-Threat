@@ -65,7 +65,9 @@ class LionFillImageView @JvmOverloads constructor(
         )
         val path = Path().apply {
             moveTo(cx, cy)
-            arcTo(arcBounds, -90f, sweep, true)
+            // Anchor at 12 o'clock and sweep clockwise like a clock-face fill.
+            lineTo(cx, cy - radius)
+            arcTo(arcBounds, -90f, sweep, false)
             close()
         }
         canvas.clipPath(path)

@@ -118,6 +118,10 @@ data class ScanResult(
     val scamTriage: ScamTriageSnapshot
 )
 
+fun interface ScanProgressCallback {
+    fun onProgress(progress: Float, detail: String)
+}
+
 object SecurityScanner {
 
     private val watchedPermissions = setOf(
@@ -152,9 +156,22 @@ object SecurityScanner {
         "mobiletracker"
     )
 
-    fun runScan(context: Context, createBaselineIfMissing: Boolean = true): ScanResult {
-        val snapshot = collectSnapshot(context)
+    fun runScan(
+        context: Context,
+        createBaselineIfMissing: Boolean = true,
+        progressCallback: ScanProgressCallback? = null
+    ): ScanResult {
+        emitProgress(progressCallback, 0.02f, "core: preparing snapshot collectors")
+        val snapshot = collectSnapshot(context) { stageProgress, stageDetail ->
+            emitProgress(
+                progressCallback,
+                0.05f + (stageProgress * 0.62f),
+                stageDetail
+            )
+        }
+        emitProgress(progressCallback, 0.70f, "core: running scam shield heuristics")
         val scamTriage = ScamShield.analyze(context, snapshot.thirdPartyPackages)
+        emitProgress(progressCallback, 0.80f, "core: comparing against trusted baseline")
         val baseline = loadBaseline(context)
 
         val result = if (baseline == null) {
@@ -186,10 +203,12 @@ object SecurityScanner {
                 scamTriage = scamTriage
             )
         }
+        emitProgress(progressCallback, 0.90f, "core: writing history and incident timeline")
 
         appendHistory(context, result)
         IncidentStore.syncFromScan(context, result)
         GuardianAlertStore.syncFromScan(context, result)
+        emitProgress(progressCallback, 1f, "core: complete")
         return result
     }
 
@@ -320,14 +339,33 @@ object SecurityScanner {
         return RootDefense.evaluate(context, packages)
     }
 
-    private fun collectSnapshot(context: Context): WatchdogSnapshot {
+    private fun collectSnapshot(
+        context: Context,
+        progressCallback: ScanProgressCallback? = null
+    ): WatchdogSnapshot {
+        emitProgress(progressCallback, 0.02f, "core: loading installed app inventory")
         val packages = collectThirdPartyPackages(context)
+        emitProgress(
+            progressCallback,
+            0.18f,
+            "core: installed third-party apps=${packages.size}"
+        )
         val accessibility = collectAccessibilityServices(context)
         val admins = collectDeviceAdmins(context)
-        val risky = collectHighRiskPermissions(context, packages)
+        emitProgress(progressCallback, 0.34f, "core: checking accessibility and device-admin posture")
+        val risky = collectHighRiskPermissions(context, packages) { packageProgress, packageDetail ->
+            emitProgress(
+                progressCallback,
+                0.34f + (packageProgress * 0.42f),
+                packageDetail
+            )
+        }
+        emitProgress(progressCallback, 0.80f, "core: scanning suspicious package-name signals")
         val suspicious = packages.filter { pkg -> suspiciousKeywords.any { it in pkg.lowercase(Locale.US) } }.toSet()
         val signals = collectSecuritySignals(context)
+        emitProgress(progressCallback, 0.92f, "core: evaluating root defense posture")
         val rootPosture = RootDefense.evaluate(context, packages)
+        emitProgress(progressCallback, 1f, "core: snapshot complete")
 
         return WatchdogSnapshot(
             scannedAtEpochMs = System.currentTimeMillis(),
@@ -543,14 +581,21 @@ object SecurityScanner {
 
     private fun collectHighRiskPermissions(
         context: Context,
-        packages: Set<String>
+        packages: Set<String>,
+        progressCallback: ScanProgressCallback? = null
     ): Map<String, Set<String>> {
         val pm = context.packageManager
         val result = mutableMapOf<String, Set<String>>()
+        val packageList = packages.toList().sorted()
+        if (packageList.isEmpty()) {
+            emitProgress(progressCallback, 1f, "core.permissions: no third-party packages to inspect")
+            return result
+        }
+        val emitEvery = (packageList.size / 24).coerceAtLeast(1)
 
-        packages.forEach { pkg ->
+        packageList.forEachIndexed { index, pkg ->
             val info = getPackageInfoCompat(pm, pkg)
-            val requested = info?.requestedPermissions ?: return@forEach
+            val requested = info?.requestedPermissions ?: return@forEachIndexed
             val flags = info.requestedPermissionsFlags ?: IntArray(requested.size)
 
             val granted = mutableSetOf<String>()
@@ -569,9 +614,25 @@ object SecurityScanner {
             if (granted.isNotEmpty()) {
                 result[pkg] = granted
             }
+            val processed = index + 1
+            if (processed % emitEvery == 0 || processed == packageList.size) {
+                emitProgress(
+                    progressCallback,
+                    processed.toFloat() / packageList.size.toFloat(),
+                    "core.permissions: $pkg"
+                )
+            }
         }
 
         return result
+    }
+
+    private fun emitProgress(
+        progressCallback: ScanProgressCallback?,
+        progress: Float,
+        detail: String = ""
+    ) {
+        progressCallback?.onProgress(progress.coerceIn(0f, 1f), detail.trim())
     }
 
     private fun getPackageInfoCompat(pm: PackageManager, packageName: String): PackageInfo? {

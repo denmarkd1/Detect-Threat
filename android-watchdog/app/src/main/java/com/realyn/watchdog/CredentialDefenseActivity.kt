@@ -1,5 +1,7 @@
 package com.realyn.watchdog
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.Intent
@@ -8,11 +10,15 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
+import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -23,6 +29,8 @@ import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
 import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
 import com.realyn.watchdog.databinding.DialogServiceActionBinding
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.realyn.watchdog.theme.LionIdentityAccentStyle
 import com.realyn.watchdog.theme.LionThemeCatalog
 import com.realyn.watchdog.theme.LionThemePalette
@@ -37,6 +45,20 @@ import java.util.Date
 import java.util.Locale
 
 class CredentialDefenseActivity : AppCompatActivity() {
+    private companion object {
+        private const val LION_PROCESSING_INITIAL_PROGRESS = 0.06f
+        private const val LION_PROCESSING_TARGET_PROGRESS = 0.94f
+        private const val LION_PROCESSING_RAMP_MS = 2600L
+        private const val LION_PROCESSING_RAMP_AFTER_CHECKPOINT_MS = 1700L
+        private const val LION_PROCESSING_COMPLETE_ANIM_MS = 420L
+        private const val LION_MIN_BUSY_VISUAL_MS = 1800L
+        private const val LION_SCAN_COMPLETE_HOLD_MS = 2800L
+    }
+
+    private data class AuthenticatorAppCandidate(
+        val label: String,
+        val packageName: String
+    )
 
     private enum class QueueFilter {
         ALL,
@@ -72,7 +94,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
     private var lionFillMode: LionFillMode = LionFillMode.LEFT_TO_RIGHT
     private var lionBusyInProgress: Boolean = false
     private var lionProgressAnimator: ValueAnimator? = null
+    private var lionCompletionDelayRunnable: Runnable? = null
     private var lionIdleResetRunnable: Runnable? = null
+    private var lionBusyStartedAtMs: Long = 0L
+    private var lionAnimationSessionId: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -193,11 +218,11 @@ class CredentialDefenseActivity : AppCompatActivity() {
     private fun refreshIdentityCard() {
         val profile = PrimaryIdentityStore.readProfile(this)
         val profileControl = PricingPolicy.resolveProfileControl(this)
-        val identityLabel = profile.identityLabel.ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+        val identityLabel = profile.identityLabel.ifBlank { PrimaryIdentityStore.importDeviceNameOrDefault(this) }
         val roleLabel = when (profileControl.roleCode) {
-            "child" -> getString(R.string.profile_role_child)
+            "child" -> getString(R.string.account_type_family_member)
             "family_single" -> getString(R.string.profile_role_family_single)
-            else -> getString(R.string.profile_role_parent)
+            else -> getString(R.string.account_type_main_user)
         }
         val guardianLabel = if (profileControl.roleCode == "parent") {
             getString(R.string.identity_guardian_not_required)
@@ -271,7 +296,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         val dialogBinding = DialogIdentityProfileBinding.inflate(layoutInflater)
 
         dialogBinding.identityLabelInput.setText(
-            existing.identityLabel.ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+            existing.identityLabel.ifBlank { PrimaryIdentityStore.importDeviceNameOrDefault(this) }
         )
         dialogBinding.primaryEmailInput.setText(existing.primaryEmail)
         dialogBinding.guardianEmailInput.setText(existing.guardianEmail)
@@ -293,6 +318,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
             else -> R.id.familyRoleParentRadio
         }
         dialogBinding.familyRoleGroup.check(checkedRoleId)
+        val planTierId = if (PricingPolicy.resolveFeatureAccess(this).paidAccess) {
+            R.id.planTierProRadio
+        } else {
+            R.id.planTierFreeRadio
+        }
+        dialogBinding.planTierGroup.check(planTierId)
+        dialogBinding.planManageButton.visibility = if (isOnboarding) View.GONE else View.VISIBLE
 
         fun refreshTwoFactorInputs() {
             val checkedId = dialogBinding.twoFactorMethodGroup.checkedRadioButtonId
@@ -323,7 +355,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 { _, _ ->
                     if (isOnboarding) {
                         val fallbackLabel = existing.identityLabel.ifBlank {
-                            PrimaryIdentityStore.defaultIdentityLabel()
+                            PrimaryIdentityStore.importDeviceNameOrDefault(this)
                         }
                         PrimaryIdentityStore.writeProfile(
                             context = this,
@@ -347,9 +379,14 @@ class CredentialDefenseActivity : AppCompatActivity() {
         dialog.setCanceledOnTouchOutside(!isOnboarding)
 
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            dialogBinding.planManageButton.setOnClickListener {
+                dialog.dismiss()
+                openMainForSettingsAction(MainActivity.GUARDIAN_SETTINGS_ACTION_OPEN_PLAN_BILLING)
+            }
+            lateinit var attemptSaveIdentity: () -> Unit
+            attemptSaveIdentity = saveAttempt@{
                 val identityLabel = dialogBinding.identityLabelInput.text?.toString().orEmpty().trim()
-                    .ifBlank { PrimaryIdentityStore.defaultIdentityLabel() }
+                    .ifBlank { PrimaryIdentityStore.importDeviceNameOrDefault(this) }
                 val primaryEmail = dialogBinding.primaryEmailInput.text?.toString().orEmpty()
                     .trim().lowercase(Locale.US)
                 val twoFactorMethod = when (dialogBinding.twoFactorMethodGroup.checkedRadioButtonId) {
@@ -374,31 +411,35 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
                 if (primaryEmail.isNotBlank() && (!primaryEmail.contains("@") || primaryEmail.length < 5)) {
                     Toast.makeText(this, R.string.primary_email_invalid, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    return@saveAttempt
                 }
                 if (familyRole == "child" && guardianEmail.isBlank()) {
                     Toast.makeText(this, R.string.guardian_email_required, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    return@saveAttempt
                 }
                 if (guardianEmail.isNotBlank() && (!guardianEmail.contains("@") || guardianEmail.length < 5)) {
                     Toast.makeText(this, R.string.guardian_email_invalid, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    return@saveAttempt
                 }
                 if (familyRole == "child" && childBirthYear == 0) {
                     Toast.makeText(this, R.string.child_birth_year_required, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    return@saveAttempt
                 }
                 if (childBirthYear != 0 && (childBirthYear < 1900 || childBirthYear > currentYear)) {
                     Toast.makeText(this, R.string.child_birth_year_invalid, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    return@saveAttempt
                 }
                 if (twoFactorMethod == "email" && primaryEmail.isBlank()) {
-                    Toast.makeText(this, R.string.two_factor_requires_email, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    promptPrimaryEmailForTwoFactor(dialogBinding) { attemptSaveIdentity() }
+                    return@saveAttempt
                 }
                 if (twoFactorMethod == "sms" && twoFactorPhone.isBlank()) {
-                    Toast.makeText(this, R.string.two_factor_requires_phone, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
+                    promptPhoneForTwoFactor(dialogBinding) { attemptSaveIdentity() }
+                    return@saveAttempt
+                }
+                if (twoFactorMethod == "auth_app" && twoFactorAuthApp.isBlank()) {
+                    promptAuthenticatorAppForTwoFactor(dialogBinding) { attemptSaveIdentity() }
+                    return@saveAttempt
                 }
 
                 val normalizedAuthApp = if (twoFactorMethod == "auth_app") {
@@ -432,10 +473,213 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     promptLinkEmailNow(primaryEmail)
                 }
             }
+
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { attemptSaveIdentity() }
         }
 
         dialog.show()
         LionDialogStyler.applyForActivity(this, dialog)
+    }
+
+    private fun openMainForSettingsAction(action: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_GUARDIAN_SETTINGS_ACTION, action)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        startActivity(intent)
+    }
+
+    private fun promptPrimaryEmailForTwoFactor(
+        dialogBinding: DialogIdentityProfileBinding,
+        onReady: () -> Unit
+    ) {
+        promptTwoFactorTextInput(
+            titleRes = R.string.two_factor_email_setup_title,
+            hintRes = R.string.input_primary_email_hint,
+            initialValue = dialogBinding.primaryEmailInput.text?.toString().orEmpty(),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            invalidMessageRes = R.string.primary_email_invalid,
+            validator = { value -> value.contains("@") && value.length >= 5 }
+        ) { value ->
+            dialogBinding.primaryEmailInput.setText(value.lowercase(Locale.US))
+            onReady()
+        }
+    }
+
+    private fun promptPhoneForTwoFactor(
+        dialogBinding: DialogIdentityProfileBinding,
+        onReady: () -> Unit
+    ) {
+        promptTwoFactorTextInput(
+            titleRes = R.string.two_factor_phone_setup_title,
+            hintRes = R.string.input_two_factor_phone_hint,
+            initialValue = dialogBinding.twoFactorPhoneInput.text?.toString().orEmpty(),
+            inputType = InputType.TYPE_CLASS_PHONE,
+            invalidMessageRes = R.string.two_factor_requires_phone,
+            validator = { value -> value.isNotBlank() }
+        ) { value ->
+            dialogBinding.twoFactorPhoneInput.setText(value)
+            onReady()
+        }
+    }
+
+    private fun promptAuthenticatorAppForTwoFactor(
+        dialogBinding: DialogIdentityProfileBinding,
+        onReady: () -> Unit
+    ) {
+        val candidates = detectAuthenticatorApps()
+        if (candidates.isEmpty()) {
+            val emptyDialog = LionAlertDialogBuilder(this)
+                .setTitle(R.string.two_factor_auth_app_picker_title)
+                .setMessage(R.string.two_factor_auth_app_none_message)
+                .setPositiveButton(R.string.two_factor_auth_app_install_action) { _, _ ->
+                    openAuthenticatorAppInstallSearch()
+                }
+                .setNeutralButton(R.string.two_factor_auth_app_manual_action) { _, _ ->
+                    promptTwoFactorTextInput(
+                        titleRes = R.string.two_factor_auth_app_manual_title,
+                        hintRes = R.string.input_two_factor_auth_app_hint,
+                        initialValue = dialogBinding.twoFactorAuthAppInput.text?.toString().orEmpty(),
+                        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS,
+                        invalidMessageRes = R.string.two_factor_auth_app_required,
+                        validator = { value -> value.isNotBlank() }
+                    ) { value ->
+                        dialogBinding.twoFactorAuthAppInput.setText(value)
+                        onReady()
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+            emptyDialog.show()
+            LionDialogStyler.applyForActivity(this, emptyDialog)
+            return
+        }
+
+        val labels = candidates.map { it.label }.toTypedArray()
+        var selectedIndex = 0
+        val pickerDialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.two_factor_auth_app_picker_title)
+            .setMessage(R.string.two_factor_auth_app_picker_message)
+            .setSingleChoiceItems(labels, selectedIndex) { _, which ->
+                selectedIndex = which
+            }
+            .setPositiveButton(R.string.two_factor_auth_app_use_selected) { _, _ ->
+                val selected = candidates[selectedIndex]
+                dialogBinding.twoFactorAuthAppInput.setText(selected.label)
+                Toast.makeText(
+                    this,
+                    getString(R.string.two_factor_auth_app_selected_template, selected.label),
+                    Toast.LENGTH_SHORT
+                ).show()
+                onReady()
+            }
+            .setNeutralButton(R.string.two_factor_auth_app_install_action) { _, _ ->
+                openAuthenticatorAppInstallSearch()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        pickerDialog.show()
+        LionDialogStyler.applyForActivity(this, pickerDialog)
+    }
+
+    private fun promptTwoFactorTextInput(
+        titleRes: Int,
+        hintRes: Int,
+        initialValue: String,
+        inputType: Int,
+        invalidMessageRes: Int,
+        validator: (String) -> Boolean,
+        onValueAccepted: (String) -> Unit
+    ) {
+        val inputLayout = TextInputLayout(this).apply {
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+            hint = getString(hintRes)
+        }
+        val input = TextInputEditText(this).apply {
+            this.inputType = inputType
+            setText(initialValue)
+            setSelection(text?.length ?: 0)
+        }
+        inputLayout.addView(
+            input,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val inputDialog = LionAlertDialogBuilder(this)
+            .setTitle(titleRes)
+            .setView(inputLayout)
+            .setPositiveButton(R.string.action_save, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+        inputDialog.setOnShowListener {
+            inputDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = input.text?.toString().orEmpty().trim()
+                if (!validator(value)) {
+                    inputLayout.error = getString(invalidMessageRes)
+                    return@setOnClickListener
+                }
+                inputLayout.error = null
+                onValueAccepted(value)
+                inputDialog.dismiss()
+            }
+        }
+
+        inputDialog.show()
+        LionDialogStyler.applyForActivity(this, inputDialog)
+    }
+
+    private fun detectAuthenticatorApps(): List<AuthenticatorAppCandidate> {
+        val probeIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("otpauth://totp/watchdog?secret=JBSWY3DPEHPK3PXP&issuer=Watchdog")
+        )
+        val resolved = packageManager.queryIntentActivities(probeIntent, 0)
+        val candidates = resolved.mapNotNull { info ->
+            val packageName = info.activityInfo?.packageName?.trim().orEmpty()
+            if (packageName.isBlank() || packageName == this.packageName) {
+                return@mapNotNull null
+            }
+            val label = runCatching {
+                info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
+            }.getOrDefault("").ifBlank { packageName }
+            AuthenticatorAppCandidate(label = label, packageName = packageName)
+        }.distinctBy { it.packageName }
+
+        val labelCounts = candidates.groupingBy { it.label.lowercase(Locale.US) }.eachCount()
+        return candidates
+            .map { candidate ->
+                val duplicateCount = labelCounts[candidate.label.lowercase(Locale.US)] ?: 0
+                if (duplicateCount > 1) {
+                    candidate.copy(label = "${candidate.label} (${candidate.packageName})")
+                } else {
+                    candidate
+                }
+            }
+            .sortedBy { it.label.lowercase(Locale.US) }
+    }
+
+    private fun openAuthenticatorAppInstallSearch() {
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=authenticator%20app&c=apps")),
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://play.google.com/store/search?q=authenticator%20app&c=apps")
+            )
+        )
+        for (intent in intents) {
+            val opened = runCatching {
+                startActivity(intent)
+                true
+            }.getOrElse { false }
+            if (opened) {
+                return
+            }
+        }
+        Toast.makeText(this, R.string.two_factor_auth_app_store_open_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun promptLinkEmailNow(email: String) {
@@ -543,6 +787,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
         }
 
         setCredentialBusy(true)
+        updateLionProcessingCheckpoint(0.16f)
         binding.breachSummaryLabel.text = getString(R.string.breach_scan_running)
 
         lifecycleScope.launch {
@@ -550,6 +795,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 CredentialVaultStore.loadRecords(this@CredentialDefenseActivity)
                     .filter { it.username.equals(profile.primaryEmail, ignoreCase = true) }
             }
+            updateLionProcessingCheckpoint(0.42f)
 
             if (records.isEmpty()) {
                 binding.breachSummaryLabel.text = getString(R.string.breach_scan_no_records_for_primary)
@@ -560,6 +806,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             val results = withContext(Dispatchers.IO) {
                 records.map { CredentialBreachChecker.checkRecord(it) }
             }
+            updateLionProcessingCheckpoint(0.72f)
 
             val checkedAt = System.currentTimeMillis()
             withContext(Dispatchers.IO) {
@@ -574,6 +821,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     }
                 }
             }
+            updateLionProcessingCheckpoint(0.88f)
 
             val compromised = results.count { it.error == null && it.pwnedCount > 0 }
             val totalPwnedHits = results.sumOf { if (it.error == null) it.pwnedCount else 0 }
@@ -586,6 +834,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 totalPwnedHits,
                 errors
             )
+            updateLionProcessingCheckpoint(LION_PROCESSING_TARGET_PROGRESS)
 
             PricingPolicy.recordBreachScanUsage(this@CredentialDefenseActivity)
             setCredentialBusy(false)
@@ -1406,15 +1655,50 @@ class CredentialDefenseActivity : AppCompatActivity() {
             return
         }
         lionBusyInProgress = true
+        lionBusyStartedAtMs = SystemClock.elapsedRealtime()
+        lionAnimationSessionId += 1
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionCompletionDelayRunnable = null
         lionIdleResetRunnable?.let { pending ->
             binding.lionHeroView.removeCallbacks(pending)
         }
         lionIdleResetRunnable = null
+        binding.lionHeroView.setScanProgress(LION_PROCESSING_INITIAL_PROGRESS)
+        startLionProcessingRamp(
+            fromProgress = LION_PROCESSING_INITIAL_PROGRESS,
+            durationMs = LION_PROCESSING_RAMP_MS
+        )
+    }
+
+    private fun updateLionProcessingCheckpoint(progress: Float) {
+        if (!lionBusyInProgress) {
+            return
+        }
+        val current = binding.lionHeroView.readScanProgress()
+        val target = progress.coerceIn(
+            LION_PROCESSING_INITIAL_PROGRESS,
+            LION_PROCESSING_TARGET_PROGRESS
+        )
+        if (target <= current + 0.005f) {
+            return
+        }
+        binding.lionHeroView.setScanProgress(target)
+        startLionProcessingRamp(
+            fromProgress = target,
+            durationMs = LION_PROCESSING_RAMP_AFTER_CHECKPOINT_MS
+        )
+    }
+
+    private fun startLionProcessingRamp(fromProgress: Float, durationMs: Long) {
         lionProgressAnimator?.cancel()
-        lionProgressAnimator = ValueAnimator.ofFloat(0f, 0.92f).apply {
-            duration = 2200L
-            repeatCount = ValueAnimator.INFINITE
-            repeatMode = ValueAnimator.RESTART
+        lionProgressAnimator = ValueAnimator.ofFloat(
+            fromProgress.coerceIn(0f, LION_PROCESSING_TARGET_PROGRESS),
+            LION_PROCESSING_TARGET_PROGRESS
+        ).apply {
+            duration = durationMs
+            repeatCount = 0
             interpolator = LinearInterpolator()
             addUpdateListener { animator ->
                 binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
@@ -1428,26 +1712,81 @@ class CredentialDefenseActivity : AppCompatActivity() {
             return
         }
         lionBusyInProgress = false
-        lionProgressAnimator?.cancel()
-        lionProgressAnimator = null
-        binding.lionHeroView.setScanComplete()
-        val resetRunnable = Runnable {
-            if (!lionBusyInProgress) {
-                binding.lionHeroView.setIdleState()
-            }
+        val sessionIdAtComplete = lionAnimationSessionId
+        val elapsed = (SystemClock.elapsedRealtime() - lionBusyStartedAtMs).coerceAtLeast(0L)
+        val remaining = (LION_MIN_BUSY_VISUAL_MS - elapsed).coerceAtLeast(0L)
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
         }
-        lionIdleResetRunnable = resetRunnable
-        binding.lionHeroView.postDelayed(resetRunnable, 1400L)
+        lionCompletionDelayRunnable = null
+        if (remaining > 0L) {
+            val completionRunnable = Runnable {
+                finalizeLionProcessingAnimation(sessionIdAtComplete)
+            }
+            lionCompletionDelayRunnable = completionRunnable
+            binding.lionHeroView.postDelayed(completionRunnable, remaining)
+            return
+        }
+        finalizeLionProcessingAnimation(sessionIdAtComplete)
+    }
+
+    private fun finalizeLionProcessingAnimation(sessionId: Int) {
+        if (lionBusyInProgress || lionAnimationSessionId != sessionId) {
+            return
+        }
+        lionCompletionDelayRunnable = null
+        lionProgressAnimator?.cancel()
+        val completionStart = binding.lionHeroView.readScanProgress()
+            .coerceIn(LION_PROCESSING_INITIAL_PROGRESS, 1f)
+        lionProgressAnimator = ValueAnimator.ofFloat(completionStart, 1f).apply {
+            duration = LION_PROCESSING_COMPLETE_ANIM_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animator ->
+                binding.lionHeroView.setScanProgress(animator.animatedValue as Float)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (lionBusyInProgress || lionAnimationSessionId != sessionId) {
+                        return
+                    }
+                    lionProgressAnimator = null
+                    binding.lionHeroView.setScanComplete()
+                    lionIdleResetRunnable?.let { pending ->
+                        binding.lionHeroView.removeCallbacks(pending)
+                    }
+                    val resetRunnable = Runnable {
+                        if (!lionBusyInProgress && lionAnimationSessionId == sessionId) {
+                            binding.lionHeroView.setIdleState()
+                        }
+                    }
+                    lionIdleResetRunnable = resetRunnable
+                    binding.lionHeroView.postDelayed(resetRunnable, LION_SCAN_COMPLETE_HOLD_MS)
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    if (lionProgressAnimator === animation) {
+                        lionProgressAnimator = null
+                    }
+                }
+            })
+            start()
+        }
     }
 
     private fun cancelLionProcessingAnimations(resetToIdle: Boolean) {
+        lionAnimationSessionId += 1
+        lionBusyInProgress = false
+        lionBusyStartedAtMs = 0L
         lionProgressAnimator?.cancel()
         lionProgressAnimator = null
+        lionCompletionDelayRunnable?.let { pending ->
+            binding.lionHeroView.removeCallbacks(pending)
+        }
+        lionCompletionDelayRunnable = null
         lionIdleResetRunnable?.let { pending ->
             binding.lionHeroView.removeCallbacks(pending)
         }
         lionIdleResetRunnable = null
-        lionBusyInProgress = false
         if (resetToIdle) {
             binding.lionHeroView.setIdleState()
         }

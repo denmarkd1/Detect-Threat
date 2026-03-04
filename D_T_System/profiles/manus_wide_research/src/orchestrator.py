@@ -30,11 +30,14 @@ class ResearchResult:
     """Aggregated outcome returned to the requesting workspace."""
 
     job_id: str
+    status: str
     findings: List[Dict[str, Any]]
     artifacts: Dict[str, Path]
     timeline: List[Dict[str, Any]]
     completion_time: datetime
     notes: str = ""
+    error_code: Optional[str] = None
+    swarm_health: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -152,9 +155,8 @@ class WideResearchOrchestrator:
 
         research_result = await self.run_wide_research(job)
         artifacts = {name: str(path) for name, path in research_result.artifacts.items()}
-
-        return {
-            "status": "success",
+        payload = {
+            "status": research_result.status,
             "job_id": research_result.job_id,
             "query": query,
             "guidance": guidance,
@@ -166,7 +168,20 @@ class WideResearchOrchestrator:
             "timeline": research_result.timeline,
             "notes": research_result.notes,
             "completion_time": research_result.completion_time.isoformat() + "Z",
+            "swarm_health": research_result.swarm_health,
         }
+        if research_result.error_code:
+            payload["error"] = research_result.error_code
+        if research_result.status == "failed":
+            payload["message"] = (
+                "Manus wide research could not produce findings; use local-first D_T processing."
+            )
+        elif research_result.status == "degraded":
+            payload["warning"] = (
+                "Manus wide research returned partial findings; some agents failed."
+            )
+
+        return payload
 
     async def _build_execution_plan(self, job: ResearchJob) -> HiveExecutionPlan:
         """Translate a job into a hive execution plan."""
@@ -217,14 +232,29 @@ class WideResearchOrchestrator:
         }
         timeline: List[Dict[str, Any]] = swarm_result.get("timeline", [])
         notes = swarm_result.get("notes", "")
+        status = str(swarm_result.get("status") or "success").strip().lower()
+        if status not in {"success", "degraded", "failed"}:
+            status = "failed"
+        error_code = swarm_result.get("error_code")
+        attempted_agents = int(swarm_result.get("attempted_agents") or 0)
+        successful_agents = int(swarm_result.get("successful_agents") or len(findings))
+        failed_agents = int(swarm_result.get("failed_agents") or 0)
+        swarm_health = {
+            "attempted_agents": attempted_agents,
+            "successful_agents": successful_agents,
+            "failed_agents": failed_agents,
+        }
 
         return ResearchResult(
             job_id=job.job_id,
+            status=status,
             findings=findings,
             artifacts=artifacts,
             timeline=timeline,
             completion_time=datetime.utcnow(),
             notes=notes,
+            error_code=str(error_code) if error_code else None,
+            swarm_health=swarm_health,
         )
 
     async def close(self) -> None:

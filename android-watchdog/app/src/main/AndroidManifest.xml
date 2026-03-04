@@ -12,6 +12,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -42,6 +48,10 @@
 
         <activity
             android:name=".GuardianSettingsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ScanResultsActivity"
             android:exported="false" />
 
         <provider

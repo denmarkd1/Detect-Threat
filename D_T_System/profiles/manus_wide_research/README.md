@@ -11,3 +11,14 @@ The swarm manager now connects to the existing `PuterZenMCPBridge`, allowing
 parallel Manus-style agents to execute real research assignments and emit
 structured findings. Further enhancements (e.g., advanced aggregation and
 post-processing) can build on this foundation.
+
+## Runtime health contract
+
+Swarm execution now surfaces explicit job-level health:
+
+- `status`: `success`, `degraded`, or `failed`
+- `error_code`: includes `puter_bridge_unavailable` for bridge-level outages
+- `attempted_agents`, `successful_agents`, `failed_agents`
+
+When the swarm status is `failed`, the D_T core is expected to fall back to
+local-first processing instead of treating escalation as a successful run.

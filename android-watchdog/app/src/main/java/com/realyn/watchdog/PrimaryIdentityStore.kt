@@ -1,6 +1,8 @@
 package com.realyn.watchdog
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import java.util.Calendar
 import java.util.Locale
 
@@ -135,7 +137,7 @@ object PrimaryIdentityStore {
             .putBoolean(KEY_IDENTITY_ONBOARDING_COMPLETE, true)
             .apply()
         if (profile.identityLabel.isBlank()) {
-            prefs.edit().putString(KEY_IDENTITY_LABEL, defaultIdentityLabel(now)).apply()
+            prefs.edit().putString(KEY_IDENTITY_LABEL, importDeviceNameOrDefault(context, now)).apply()
         }
     }
 
@@ -151,6 +153,43 @@ object PrimaryIdentityStore {
 
     fun defaultIdentityLabel(seed: Long = System.currentTimeMillis()): String {
         return "device-${seed.toString(16).takeLast(6)}"
+    }
+
+    fun importDeviceNameOrDefault(context: Context, seed: Long = System.currentTimeMillis()): String {
+        val imported = readSystemDeviceName(context)
+        if (imported.isNotBlank()) {
+            return imported
+        }
+        return defaultIdentityLabel(seed)
+    }
+
+    private fun readSystemDeviceName(context: Context): String {
+        val resolver = context.contentResolver
+        val globalName = runCatching {
+            Settings.Global.getString(resolver, Settings.Global.DEVICE_NAME)
+        }.getOrNull().orEmpty().trim()
+        if (globalName.isNotBlank()) {
+            return globalName
+        }
+
+        val secureName = runCatching {
+            Settings.Secure.getString(resolver, "bluetooth_name")
+        }.getOrNull().orEmpty().trim()
+        if (secureName.isNotBlank()) {
+            return secureName
+        }
+
+        val model = Build.MODEL?.trim().orEmpty()
+        if (model.isNotBlank()) {
+            return model
+        }
+
+        val device = Build.DEVICE?.trim().orEmpty()
+        if (device.isNotBlank()) {
+            return device
+        }
+
+        return ""
     }
 
     private fun normalizeTwoFactorMethod(raw: String): String {

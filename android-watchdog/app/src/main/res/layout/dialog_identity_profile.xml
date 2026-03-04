@@ -42,7 +42,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="@string/family_profile_role_title"
+            android:text="@string/account_type_title"
             android:textStyle="bold" />
 
         <RadioGroup
@@ -55,14 +55,59 @@
                 android:id="@+id/familyRoleParentRadio"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/profile_role_parent" />
+                android:text="@string/account_type_main_user" />
 
             <RadioButton
                 android:id="@+id/familyRoleChildRadio"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/profile_role_child" />
+                android:text="@string/account_type_family_member" />
         </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/plan_title"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/planTierGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/planTierFreeRadio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:focusable="false"
+                android:text="@string/plan_tier_free" />
+
+            <RadioButton
+                android:id="@+id/planTierProRadio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="false"
+                android:focusable="false"
+                android:text="@string/plan_tier_pro" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/planReadOnlyHintLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/plan_read_only_hint"
+            android:textAppearance="?attr/textAppearanceBodySmall" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/planManageButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/action_manage_plan" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/guardianEmailLayout"

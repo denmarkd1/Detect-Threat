@@ -36,6 +36,11 @@ class SwarmExecutionSummary:
     artifacts: Dict[str, str]
     timeline: List[Dict[str, Any]]
     notes: str
+    status: str
+    error_code: Optional[str]
+    attempted_agents: int
+    successful_agents: int
+    failed_agents: int
 
 
 class SwarmManager:
@@ -80,6 +85,11 @@ class SwarmManager:
                 "artifacts": summary.artifacts,
                 "timeline": summary.timeline,
                 "notes": summary.notes,
+                "status": summary.status,
+                "error_code": summary.error_code,
+                "attempted_agents": summary.attempted_agents,
+                "successful_agents": summary.successful_agents,
+                "failed_agents": summary.failed_agents,
             }
             return result
         finally:
@@ -118,10 +128,12 @@ class SwarmManager:
         findings: List[Dict[str, Any]] = []
         artifacts: Dict[str, str] = {}
         timeline: List[Dict[str, Any]] = [start_event]
+        agent_errors: List[str] = []
 
         for result in agent_results:
             if isinstance(result, Exception):
                 self.logger.error("Agent execution failed: %s", result)
+                agent_errors.append(str(result))
                 timeline.append(
                     {
                         "timestamp": datetime.utcnow().isoformat(),
@@ -135,16 +147,80 @@ class SwarmManager:
             artifacts.update(result["artifacts"])
             timeline.extend(result["timeline"])
 
+        findings.sort(key=lambda item: item.get("confidence", 0), reverse=True)
+
+        attempted_agents = plan.target_agent_count
+        successful_agents = len(findings)
+        failed_agents = len(agent_errors)
+
+        status = "success"
+        error_code: Optional[str] = None
         notes = "Aggregated results from Manus wide-research swarm."
 
-        findings.sort(key=lambda item: item.get("confidence", 0), reverse=True)
+        if successful_agents == 0:
+            status = "failed"
+            error_code = self._classify_failure_code(agent_errors)
+            notes = (
+                "All Manus wide-research agents failed; escalation should fall back to "
+                "local-first D_T processing."
+            )
+            timeline.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "event": "swarm_failed",
+                    "details": {
+                        "error_code": error_code,
+                        "attempted_agents": attempted_agents,
+                        "failed_agents": failed_agents,
+                    },
+                }
+            )
+        elif failed_agents > 0:
+            status = "degraded"
+            notes = (
+                "Aggregated results from Manus wide-research swarm with degraded health "
+                f"({successful_agents}/{attempted_agents} agents succeeded)."
+            )
+            timeline.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "event": "swarm_degraded",
+                    "details": {
+                        "attempted_agents": attempted_agents,
+                        "successful_agents": successful_agents,
+                        "failed_agents": failed_agents,
+                    },
+                }
+            )
 
         return SwarmExecutionSummary(
             findings=findings,
             artifacts=artifacts,
             timeline=timeline,
             notes=notes,
+            status=status,
+            error_code=error_code,
+            attempted_agents=attempted_agents,
+            successful_agents=successful_agents,
+            failed_agents=failed_agents,
         )
+
+    def _classify_failure_code(self, errors: List[str]) -> str:
+        if not errors:
+            return "no_successful_agents"
+        combined = " ".join(errors).lower()
+        puter_markers = [
+            "puter bridge",
+            "remote puter",
+            "failed to communicate",
+            "connection refused",
+            "timed out",
+            "timeout",
+            "cannot connect",
+        ]
+        if any(marker in combined for marker in puter_markers):
+            return "puter_bridge_unavailable"
+        return "no_successful_agents"
 
     async def _run_agent(
         self,
