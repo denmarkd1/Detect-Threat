@@ -134,8 +134,9 @@ mapfile -t changed_files < <(printf '%s\n' "${!changed_map[@]}" | sort)
 echo "[+] precommit_guard: changed files (${#changed_files[@]}):"
 printf '    %s\n' "${changed_files[@]}"
 
-KEY_ASSIGN_PATTERN='(password|passwd|secret|token|api[_-]?key|private[_-]?key)[[:space:]]*[:=]'
-VALUE_ASSIGN_PATTERN='(password|passwd|secret|token|api[_-]?key|private[_-]?key)[[:space:]]*[:=][[:space:]]*[^[:space:],;]+'
+SENSITIVE_KEY_PATTERN='(password|passwd|secret|token|api[_-]?key|private[_-]?key)'
+KEY_ASSIGN_PATTERN="[[:alnum:]_]*${SENSITIVE_KEY_PATTERN}[[:alnum:]_]*[[:space:]]*[:=]"
+HARDCODED_SECRET_ASSIGN_PATTERN="[[:alnum:]_]*${SENSITIVE_KEY_PATTERN}[[:alnum:]_]*[[:space:]]*[:=][[:space:]]*[\"'][A-Za-z0-9_+=/-]{12,}[\"']"
 
 tmp_file="$(mktemp)"
 cleanup() {
@@ -144,6 +145,7 @@ cleanup() {
 trap cleanup EXIT
 
 declare -a secret_hits=()
+declare -a hardcoded_secret_hits=()
 scan_text_for_secret_assignments() {
   local relative_path="$1"
   local mode="$2"
@@ -165,19 +167,37 @@ scan_text_for_secret_assignments() {
   if ! LC_ALL=C grep -Iq . "${tmp_file}"; then
     return 0
   fi
-  if ! grep -Eiq "${VALUE_ASSIGN_PATTERN}" "${tmp_file}"; then
-    return 0
+
+  local normalized_tmp
+  normalized_tmp="$(mktemp)"
+  if ! perl -pe "s/\"(?:\\\\.|[^\"\\\\])*\"/\"\"/g; s/'(?:\\\\.|[^'\\\\])*'/' '/g" "${tmp_file}" > "${normalized_tmp}" 2>/dev/null; then
+    cp "${tmp_file}" "${normalized_tmp}"
   fi
 
-  local key_summary
-  key_summary="$(
-    grep -Eio "${KEY_ASSIGN_PATTERN}" "${tmp_file}" \
-      | sed -E 's/[[:space:]]*[:=][[:space:]]*$//' \
-      | tr '[:upper:]' '[:lower:]' \
-      | sort -u \
-      | paste -sd, -
-  )"
-  secret_hits+=("${relative_path}:${key_summary:-unknown}")
+  if grep -Eiq "${KEY_ASSIGN_PATTERN}" "${normalized_tmp}"; then
+    local key_summary
+    key_summary="$(
+      grep -Eio "${KEY_ASSIGN_PATTERN}" "${normalized_tmp}" \
+        | sed -E 's/[[:space:]]*[:=][[:space:]]*$//' \
+        | tr '[:upper:]' '[:lower:]' \
+        | sort -u \
+        | paste -sd, -
+    )"
+    secret_hits+=("${relative_path}:${key_summary:-unknown}")
+  fi
+
+  if grep -Einq "${HARDCODED_SECRET_ASSIGN_PATTERN}" "${tmp_file}"; then
+    local literal_lines
+    literal_lines="$(
+      grep -Ein "${HARDCODED_SECRET_ASSIGN_PATTERN}" "${tmp_file}" \
+        | cut -d: -f1 \
+        | sort -u \
+        | paste -sd, -
+    )"
+    hardcoded_secret_hits+=("${relative_path}:${literal_lines:-unknown}")
+  fi
+
+  rm -f "${normalized_tmp}"
 }
 
 for path in "${changed_files[@]}"; do
@@ -194,12 +214,19 @@ done
 failures=0
 
 if (( ${#secret_hits[@]} > 0 )); then
-  echo "[!] precommit_guard: potential secret assignments detected (token names only):"
+  echo "[!] precommit_guard: identifier-based secret assignment matches (warning only):"
   printf '    %s\n' "${secret_hits[@]}"
+else
+  echo "[+] precommit_guard: identifier assignment scan passed."
+fi
+
+if (( ${#hardcoded_secret_hits[@]} > 0 )); then
+  echo "[!] precommit_guard: potential hardcoded secrets detected:"
+  printf '    %s\n' "${hardcoded_secret_hits[@]}"
   echo "[!] precommit_guard: refusing commit until reviewed."
   failures=$((failures + 1))
 else
-  echo "[+] precommit_guard: secret assignment scan passed."
+  echo "[+] precommit_guard: hardcoded secret scan passed."
 fi
 
 declare -a binary_warn=()
