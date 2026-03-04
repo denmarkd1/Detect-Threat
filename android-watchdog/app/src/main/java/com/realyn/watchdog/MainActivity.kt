@@ -16,6 +16,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.net.Uri
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_HOME_INTRO_REPLAY_EVERY_LAUNCH = "home_intro_replay_every_launch_v1"
         private const val KEY_HOME_INTRO_WIDGET_MOTION = "home_intro_widget_motion_v1"
         private const val KEY_HOME_TUTORIAL_POPUP_SHOWN = "home_tutorial_popup_shown_v1"
+        private const val KEY_HOME_TUTORIAL_COMPLETED = "home_tutorial_completed_v1"
         private const val HOME_SURFACE_CACHE_PREFS_FILE = "dt_home_surface_cache"
         private const val HOME_SURFACE_CACHE_PAYLOAD_KEY = "home_surface_snapshot_payload_v1"
         private const val HOME_SURFACE_CACHE_VERSION = 1
@@ -154,6 +156,11 @@ class MainActivity : AppCompatActivity() {
         THREATS,
         CREDENTIALS,
         SERVICES
+    }
+
+    private enum class HomeTutorialMode {
+        GUIDED,
+        LEARN_BY_DOING
     }
 
     private enum class NavSlotPosition {
@@ -273,6 +280,16 @@ class MainActivity : AppCompatActivity() {
         val destination: GuidedDestination,
         val destinationLabel: String,
         val bodyText: String
+    )
+
+    private data class HomeTutorialStep(
+        val stepId: String,
+        val titleRes: Int,
+        val bodyRes: Int,
+        val hintRes: Int,
+        val targetViewProvider: () -> View,
+        val widgetPageIndex: Int? = null,
+        val navPageIndex: Int? = null
     )
 
     private data class HomeViewportProfile(
@@ -406,6 +423,13 @@ class MainActivity : AppCompatActivity() {
     private val startupTraceMarks = linkedMapOf<String, Long>()
     private var startupFreshHydrationReady: Boolean = false
     private var startupReadyReported: Boolean = false
+    private var homeTutorialActive: Boolean = false
+    private var homeTutorialMode: HomeTutorialMode? = null
+    private var homeTutorialSteps: List<HomeTutorialStep> = emptyList()
+    private var homeTutorialStepIndex: Int = 0
+    private var homeTutorialTargetTouched: Boolean = false
+    private val tutorialOverlayLocation = IntArray(2)
+    private val tutorialTargetLocation = IntArray(2)
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -520,6 +544,12 @@ class MainActivity : AppCompatActivity() {
         binding.widgetServicesCard.setOnClickListener { routeWidgetSlot(NavSlotPosition.RIGHT_OUTER) }
         binding.goProButton.setOnClickListener { openPlanSelectionDialog() }
         binding.lionModeToggleButton.setOnClickListener { openGuardianSettingsDialog() }
+        binding.homeTutorialBackButton.setOnClickListener { moveHomeTutorialStep(-1) }
+        binding.homeTutorialSkipButton.setOnClickListener { finishHomeTutorial(completed = false) }
+        binding.homeTutorialActionButton.setOnClickListener { handleHomeTutorialActionPressed() }
+        binding.homeTutorialCoachView.onHighlightTapped = {
+            onHomeTutorialTargetTapped()
+        }
 
         lionFillMode = LionThemePrefs.readFillMode(this)
         refreshLionHeroVisuals()
@@ -582,6 +612,8 @@ class MainActivity : AppCompatActivity() {
         homeNavButtons().forEach { it.animate().cancel() }
         binding.navLionButton.animate().cancel()
         binding.bottomNavCard.animate().cancel()
+        binding.homeTutorialCoachView.clearHighlight()
+        binding.homeTutorialOverlay.visibility = View.GONE
         super.onDestroy()
     }
 
@@ -3044,7 +3076,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val prefs = getSharedPreferences(UI_PREFS_FILE, MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, false)) {
+        if (
+            prefs.getBoolean(KEY_HOME_TUTORIAL_POPUP_SHOWN, false) ||
+            prefs.getBoolean(KEY_HOME_TUTORIAL_COMPLETED, false)
+        ) {
             return
         }
         val state = latestSecurityHeroState ?: buildSecurityHeroState()
@@ -3062,7 +3097,10 @@ class MainActivity : AppCompatActivity() {
                 )
             )
             .setPositiveButton(R.string.home_tutorial_popup_action) { _, _ ->
-                routeToGuidedDestination(suggestion.destination)
+                startHomeTutorial(mode = HomeTutorialMode.GUIDED)
+            }
+            .setNeutralButton(R.string.home_tutorial_popup_learn_action) { _, _ ->
+                startHomeTutorial(mode = HomeTutorialMode.LEARN_BY_DOING)
             }
             .setNegativeButton(R.string.home_tutorial_popup_later, null)
             .show()
@@ -3081,7 +3119,8 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.lion_nav_action_vpn_status),
             getString(R.string.lion_nav_action_timeline_report),
             getString(R.string.lion_nav_action_security_details),
-            getString(R.string.lion_nav_action_guardian_settings)
+            getString(R.string.lion_nav_action_guardian_settings),
+            getString(R.string.lion_nav_action_tutorial_overlay)
         )
         LionAlertDialogBuilder(this)
             .setTitle(R.string.lion_nav_dialog_title)
@@ -3092,10 +3131,362 @@ class MainActivity : AppCompatActivity() {
                     2 -> openTimelineReportDialog()
                     3 -> openSecurityDetailsDialog()
                     4 -> openGuardianSettingsDialog()
+                    5 -> openHomeTutorialModeDialog()
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun openHomeTutorialModeDialog() {
+        if (homeTutorialActive) {
+            return
+        }
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_tutorial_mode_dialog_title)
+            .setMessage(R.string.home_tutorial_mode_dialog_message)
+            .setPositiveButton(R.string.home_tutorial_mode_guided) { _, _ ->
+                startHomeTutorial(mode = HomeTutorialMode.GUIDED)
+            }
+            .setNeutralButton(R.string.home_tutorial_mode_learn) { _, _ ->
+                startHomeTutorial(mode = HomeTutorialMode.LEARN_BY_DOING)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startHomeTutorial(mode: HomeTutorialMode) {
+        if (isFinishing || isDestroyed || homeTutorialActive) {
+            return
+        }
+        val steps = buildHomeTutorialSteps()
+        if (steps.isEmpty()) {
+            return
+        }
+        homeTutorialActive = true
+        homeTutorialMode = mode
+        homeTutorialSteps = steps
+        homeTutorialStepIndex = 0
+        homeTutorialTargetTouched = false
+        binding.homeTutorialOverlay.visibility = View.VISIBLE
+        binding.homeTutorialCard.alpha = 0f
+        showHomeTutorialStep(index = 0, announce = false)
+    }
+
+    private fun finishHomeTutorial(completed: Boolean) {
+        if (!homeTutorialActive) {
+            binding.homeTutorialOverlay.visibility = View.GONE
+            binding.homeTutorialCoachView.clearHighlight()
+            return
+        }
+        if (completed) {
+            getSharedPreferences(UI_PREFS_FILE, MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_HOME_TUTORIAL_COMPLETED, true)
+                .apply()
+            binding.subStatusLabel.text = getString(R.string.home_tutorial_complete_status)
+        }
+        binding.homeTutorialOverlay.animate()
+            .alpha(0f)
+            .setDuration(160L)
+            .withEndAction {
+                binding.homeTutorialOverlay.visibility = View.GONE
+                binding.homeTutorialOverlay.alpha = 1f
+                binding.homeTutorialCoachView.clearHighlight()
+                binding.homeTutorialCard.alpha = 1f
+            }
+            .start()
+        homeTutorialActive = false
+        homeTutorialMode = null
+        homeTutorialSteps = emptyList()
+        homeTutorialStepIndex = 0
+        homeTutorialTargetTouched = false
+    }
+
+    private fun buildHomeTutorialSteps(): List<HomeTutorialStep> {
+        return listOf(
+            HomeTutorialStep(
+                stepId = "sweep_primary",
+                titleRes = R.string.home_tutorial_step_sweep_title,
+                bodyRes = R.string.home_tutorial_step_sweep_body,
+                hintRes = R.string.home_tutorial_step_sweep_hint,
+                targetViewProvider = { binding.securityTopActionButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "threats_widget",
+                titleRes = R.string.home_tutorial_step_threats_title,
+                bodyRes = R.string.home_tutorial_step_threats_body,
+                hintRes = R.string.home_tutorial_step_threats_hint,
+                targetViewProvider = { binding.widgetThreatsCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "credentials_widget",
+                titleRes = R.string.home_tutorial_step_credentials_title,
+                bodyRes = R.string.home_tutorial_step_credentials_body,
+                hintRes = R.string.home_tutorial_step_credentials_hint,
+                targetViewProvider = { binding.widgetCredentialsCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "services_widget",
+                titleRes = R.string.home_tutorial_step_services_title,
+                bodyRes = R.string.home_tutorial_step_services_body,
+                hintRes = R.string.home_tutorial_step_services_hint,
+                targetViewProvider = { binding.widgetServicesCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "plan_button",
+                titleRes = R.string.home_tutorial_step_plan_title,
+                bodyRes = R.string.home_tutorial_step_plan_body,
+                hintRes = R.string.home_tutorial_step_plan_hint,
+                targetViewProvider = { binding.goProButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "settings_button",
+                titleRes = R.string.home_tutorial_step_settings_title,
+                bodyRes = R.string.home_tutorial_step_settings_body,
+                hintRes = R.string.home_tutorial_step_settings_hint,
+                targetViewProvider = { binding.lionModeToggleButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "home_risk_widget",
+                titleRes = R.string.home_tutorial_step_home_risk_title,
+                bodyRes = R.string.home_tutorial_step_home_risk_body,
+                hintRes = R.string.home_tutorial_step_home_risk_hint,
+                targetViewProvider = { binding.widgetSweepCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1
+            ),
+            HomeTutorialStep(
+                stepId = "vpn_widget",
+                titleRes = R.string.home_tutorial_step_vpn_title,
+                bodyRes = R.string.home_tutorial_step_vpn_body,
+                hintRes = R.string.home_tutorial_step_vpn_hint,
+                targetViewProvider = { binding.widgetThreatsCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1
+            ),
+            HomeTutorialStep(
+                stepId = "digital_key_widget",
+                titleRes = R.string.home_tutorial_step_digital_key_title,
+                bodyRes = R.string.home_tutorial_step_digital_key_body,
+                hintRes = R.string.home_tutorial_step_digital_key_hint,
+                targetViewProvider = { binding.widgetCredentialsCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1
+            ),
+            HomeTutorialStep(
+                stepId = "timeline_widget",
+                titleRes = R.string.home_tutorial_step_timeline_title,
+                bodyRes = R.string.home_tutorial_step_timeline_body,
+                hintRes = R.string.home_tutorial_step_timeline_hint,
+                targetViewProvider = { binding.widgetServicesCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1
+            ),
+            HomeTutorialStep(
+                stepId = "lion_nav",
+                titleRes = R.string.home_tutorial_step_lion_nav_title,
+                bodyRes = R.string.home_tutorial_step_lion_nav_body,
+                hintRes = R.string.home_tutorial_step_lion_nav_hint,
+                targetViewProvider = { binding.navLionButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "nav_scan",
+                titleRes = R.string.home_tutorial_step_nav_scan_title,
+                bodyRes = R.string.home_tutorial_step_nav_scan_body,
+                hintRes = R.string.home_tutorial_step_nav_scan_hint,
+                targetViewProvider = { binding.navScanButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "nav_guard",
+                titleRes = R.string.home_tutorial_step_nav_guard_title,
+                bodyRes = R.string.home_tutorial_step_nav_guard_body,
+                hintRes = R.string.home_tutorial_step_nav_guard_hint,
+                targetViewProvider = { binding.navGuardButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "nav_vault",
+                titleRes = R.string.home_tutorial_step_nav_vault_title,
+                bodyRes = R.string.home_tutorial_step_nav_vault_body,
+                hintRes = R.string.home_tutorial_step_nav_vault_hint,
+                targetViewProvider = { binding.navVaultButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "nav_support",
+                titleRes = R.string.home_tutorial_step_nav_support_title,
+                bodyRes = R.string.home_tutorial_step_nav_support_body,
+                hintRes = R.string.home_tutorial_step_nav_support_hint,
+                targetViewProvider = { binding.navSupportButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0
+            )
+        )
+    }
+
+    private fun moveHomeTutorialStep(direction: Int) {
+        if (!homeTutorialActive) {
+            return
+        }
+        val next = (homeTutorialStepIndex + direction).coerceIn(0, homeTutorialSteps.lastIndex)
+        if (next == homeTutorialStepIndex) {
+            return
+        }
+        showHomeTutorialStep(index = next, announce = true)
+    }
+
+    private fun showHomeTutorialStep(index: Int, announce: Boolean) {
+        if (!homeTutorialActive || index !in homeTutorialSteps.indices) {
+            return
+        }
+        val step = homeTutorialSteps[index]
+        homeTutorialStepIndex = index
+        homeTutorialTargetTouched = false
+
+        step.widgetPageIndex?.let { applyWidgetPage(pageIndex = it, animate = true) }
+        step.navPageIndex?.let { applyNavIconPage(pageIndex = it, animate = true) }
+
+        binding.homeTutorialModeLabel.text = when (homeTutorialMode) {
+            HomeTutorialMode.GUIDED -> getString(R.string.home_tutorial_mode_guided)
+            HomeTutorialMode.LEARN_BY_DOING -> getString(R.string.home_tutorial_mode_learn)
+            null -> ""
+        }
+        binding.homeTutorialTitleLabel.setText(step.titleRes)
+        binding.homeTutorialBodyLabel.setText(step.bodyRes)
+        binding.homeTutorialHintLabel.setText(step.hintRes)
+        binding.homeTutorialProgressLabel.text = getString(
+            R.string.home_tutorial_progress_template,
+            index + 1,
+            homeTutorialSteps.size
+        )
+        binding.homeTutorialBackButton.visibility = if (index == 0) View.GONE else View.VISIBLE
+        binding.homeTutorialCard.animate()
+            .alpha(1f)
+            .setDuration(180L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+
+        binding.homeTutorialOverlay.post {
+            val target = step.targetViewProvider()
+            val highlightRect = resolveTutorialHighlightRect(target)
+            positionTutorialCard(highlightRect)
+            binding.homeTutorialCoachView.setHighlight(highlightRect, dpToPx(14f).toFloat())
+            updateHomeTutorialActionUi()
+            if (announce) {
+                binding.homeTutorialTitleLabel.announceForAccessibility(binding.homeTutorialTitleLabel.text)
+            }
+        }
+    }
+
+    private fun resolveTutorialHighlightRect(target: View): RectF {
+        binding.homeTutorialCoachView.getLocationOnScreen(tutorialOverlayLocation)
+        target.getLocationOnScreen(tutorialTargetLocation)
+        val left = (tutorialTargetLocation[0] - tutorialOverlayLocation[0]).toFloat()
+        val top = (tutorialTargetLocation[1] - tutorialOverlayLocation[1]).toFloat()
+        val right = left + target.width.toFloat()
+        val bottom = top + target.height.toFloat()
+        val inset = dpToPx(6f).toFloat()
+        return RectF(
+            left - inset,
+            top - inset,
+            right + inset,
+            bottom + inset
+        )
+    }
+
+    private fun positionTutorialCard(highlightRect: RectF) {
+        val params = binding.homeTutorialCard.layoutParams as FrameLayout.LayoutParams
+        val overlayHeight = binding.homeTutorialOverlay.height.toFloat().coerceAtLeast(1f)
+        val placeTop = highlightRect.centerY() > (overlayHeight * 0.58f)
+        params.gravity = if (placeTop) {
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        } else {
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        }
+        params.topMargin = if (placeTop) {
+            latestSystemBarInsets.top + dpToPx(14f)
+        } else {
+            0
+        }
+        params.bottomMargin = if (!placeTop) {
+            latestSystemBarInsets.bottom + dpToPx(14f)
+        } else {
+            0
+        }
+        binding.homeTutorialCard.layoutParams = params
+    }
+
+    private fun onHomeTutorialTargetTapped() {
+        if (!homeTutorialActive || homeTutorialMode != HomeTutorialMode.LEARN_BY_DOING) {
+            return
+        }
+        if (!homeTutorialTargetTouched) {
+            homeTutorialTargetTouched = true
+            binding.homeTutorialHintLabel.text = getString(R.string.home_tutorial_status_target_done)
+            updateHomeTutorialActionUi()
+        }
+    }
+
+    private fun handleHomeTutorialActionPressed() {
+        if (!homeTutorialActive) {
+            return
+        }
+        val mode = homeTutorialMode ?: return
+        if (mode == HomeTutorialMode.LEARN_BY_DOING && !homeTutorialTargetTouched) {
+            return
+        }
+        if (homeTutorialStepIndex >= homeTutorialSteps.lastIndex) {
+            finishHomeTutorial(completed = true)
+            return
+        }
+        showHomeTutorialStep(index = homeTutorialStepIndex + 1, announce = true)
+    }
+
+    private fun updateHomeTutorialActionUi() {
+        val mode = homeTutorialMode ?: return
+        val last = homeTutorialStepIndex >= homeTutorialSteps.lastIndex
+        if (mode == HomeTutorialMode.GUIDED) {
+            binding.homeTutorialActionButton.isEnabled = true
+            binding.homeTutorialActionButton.text = if (last) {
+                getString(R.string.home_tutorial_action_finish)
+            } else {
+                getString(R.string.home_tutorial_action_next)
+            }
+            return
+        }
+
+        if (homeTutorialTargetTouched) {
+            binding.homeTutorialActionButton.isEnabled = true
+            binding.homeTutorialActionButton.text = if (last) {
+                getString(R.string.home_tutorial_action_finish)
+            } else {
+                getString(R.string.home_tutorial_action_next)
+            }
+            return
+        }
+
+        binding.homeTutorialActionButton.isEnabled = false
+        binding.homeTutorialActionButton.text = getString(R.string.home_tutorial_action_wait_for_tap)
+        binding.homeTutorialHintLabel.text = getString(R.string.home_tutorial_status_tap_target)
     }
 
     private fun openHomeRiskEntryPoint() {

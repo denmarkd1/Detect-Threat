@@ -37,7 +37,7 @@ tasks.named("preBuild") {
 
 android {
     namespace = "com.realyn.watchdog"
-    compileSdk = 34
+    compileSdk = 35
 
     signingConfigs {
         create("release") {
@@ -53,7 +53,7 @@ android {
     defaultConfig {
         applicationId = "com.realyn.watchdog"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 7
         versionName = "1.1.5"
 
