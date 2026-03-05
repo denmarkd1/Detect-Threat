@@ -290,7 +290,8 @@ class MainActivity : AppCompatActivity() {
         val hintRes: Int,
         val targetViewProvider: () -> View,
         val widgetPageIndex: Int? = null,
-        val navPageIndex: Int? = null
+        val navPageIndex: Int? = null,
+        val requireTargetTapInLearnMode: Boolean = true
     )
 
     private data class HomeViewportProfile(
@@ -3232,6 +3233,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 0
             ),
             HomeTutorialStep(
+                stepId = "sweep_window",
+                titleRes = R.string.home_tutorial_step_sweep_window_title,
+                bodyRes = R.string.home_tutorial_step_sweep_window_body,
+                hintRes = R.string.home_tutorial_step_sweep_window_hint,
+                targetViewProvider = { binding.securityTopActionButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "threats_widget",
                 titleRes = R.string.home_tutorial_step_threats_title,
                 bodyRes = R.string.home_tutorial_step_threats_body,
@@ -3239,6 +3250,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.widgetThreatsCard },
                 widgetPageIndex = 0,
                 navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "threats_window",
+                titleRes = R.string.home_tutorial_step_threats_window_title,
+                bodyRes = R.string.home_tutorial_step_threats_window_body,
+                hintRes = R.string.home_tutorial_step_threats_window_hint,
+                targetViewProvider = { binding.widgetThreatsCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
                 stepId = "credentials_widget",
@@ -3250,6 +3271,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 0
             ),
             HomeTutorialStep(
+                stepId = "credentials_window",
+                titleRes = R.string.home_tutorial_step_credentials_window_title,
+                bodyRes = R.string.home_tutorial_step_credentials_window_body,
+                hintRes = R.string.home_tutorial_step_credentials_window_hint,
+                targetViewProvider = { binding.widgetCredentialsCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "services_widget",
                 titleRes = R.string.home_tutorial_step_services_title,
                 bodyRes = R.string.home_tutorial_step_services_body,
@@ -3257,6 +3288,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.widgetServicesCard },
                 widgetPageIndex = 0,
                 navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "services_window",
+                titleRes = R.string.home_tutorial_step_services_window_title,
+                bodyRes = R.string.home_tutorial_step_services_window_body,
+                hintRes = R.string.home_tutorial_step_services_window_hint,
+                targetViewProvider = { binding.widgetServicesCard },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
                 stepId = "plan_button",
@@ -3268,6 +3309,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 0
             ),
             HomeTutorialStep(
+                stepId = "plan_window",
+                titleRes = R.string.home_tutorial_step_plan_window_title,
+                bodyRes = R.string.home_tutorial_step_plan_window_body,
+                hintRes = R.string.home_tutorial_step_plan_window_hint,
+                targetViewProvider = { binding.goProButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "settings_button",
                 titleRes = R.string.home_tutorial_step_settings_title,
                 bodyRes = R.string.home_tutorial_step_settings_body,
@@ -3275,6 +3326,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.lionModeToggleButton },
                 widgetPageIndex = 0,
                 navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "settings_windows",
+                titleRes = R.string.home_tutorial_step_settings_window_title,
+                bodyRes = R.string.home_tutorial_step_settings_window_body,
+                hintRes = R.string.home_tutorial_step_settings_window_hint,
+                targetViewProvider = { binding.lionModeToggleButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
                 stepId = "home_risk_widget",
@@ -3286,6 +3347,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 1
             ),
             HomeTutorialStep(
+                stepId = "home_risk_window",
+                titleRes = R.string.home_tutorial_step_home_risk_window_title,
+                bodyRes = R.string.home_tutorial_step_home_risk_window_body,
+                hintRes = R.string.home_tutorial_step_home_risk_window_hint,
+                targetViewProvider = { binding.widgetSweepCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "vpn_widget",
                 titleRes = R.string.home_tutorial_step_vpn_title,
                 bodyRes = R.string.home_tutorial_step_vpn_body,
@@ -3293,6 +3364,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.widgetThreatsCard },
                 widgetPageIndex = 1,
                 navPageIndex = 1
+            ),
+            HomeTutorialStep(
+                stepId = "vpn_window",
+                titleRes = R.string.home_tutorial_step_vpn_window_title,
+                bodyRes = R.string.home_tutorial_step_vpn_window_body,
+                hintRes = R.string.home_tutorial_step_vpn_window_hint,
+                targetViewProvider = { binding.widgetThreatsCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
                 stepId = "digital_key_widget",
@@ -3304,6 +3385,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 1
             ),
             HomeTutorialStep(
+                stepId = "digital_key_window",
+                titleRes = R.string.home_tutorial_step_digital_key_window_title,
+                bodyRes = R.string.home_tutorial_step_digital_key_window_body,
+                hintRes = R.string.home_tutorial_step_digital_key_window_hint,
+                targetViewProvider = { binding.widgetCredentialsCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "timeline_widget",
                 titleRes = R.string.home_tutorial_step_timeline_title,
                 bodyRes = R.string.home_tutorial_step_timeline_body,
@@ -3313,6 +3404,16 @@ class MainActivity : AppCompatActivity() {
                 navPageIndex = 1
             ),
             HomeTutorialStep(
+                stepId = "timeline_window",
+                titleRes = R.string.home_tutorial_step_timeline_window_title,
+                bodyRes = R.string.home_tutorial_step_timeline_window_body,
+                hintRes = R.string.home_tutorial_step_timeline_window_hint,
+                targetViewProvider = { binding.widgetServicesCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "lion_nav",
                 titleRes = R.string.home_tutorial_step_lion_nav_title,
                 bodyRes = R.string.home_tutorial_step_lion_nav_body,
@@ -3320,6 +3421,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.navLionButton },
                 widgetPageIndex = 0,
                 navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "lion_nav_window",
+                titleRes = R.string.home_tutorial_step_lion_nav_window_title,
+                bodyRes = R.string.home_tutorial_step_lion_nav_window_body,
+                hintRes = R.string.home_tutorial_step_lion_nav_window_hint,
+                targetViewProvider = { binding.navLionButton },
+                widgetPageIndex = 0,
+                navPageIndex = 0,
+                requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
                 stepId = "nav_scan",
@@ -3356,6 +3467,16 @@ class MainActivity : AppCompatActivity() {
                 targetViewProvider = { binding.navSupportButton },
                 widgetPageIndex = 0,
                 navPageIndex = 0
+            ),
+            HomeTutorialStep(
+                stepId = "nav_page2_routes",
+                titleRes = R.string.home_tutorial_step_nav_page2_title,
+                bodyRes = R.string.home_tutorial_step_nav_page2_body,
+                hintRes = R.string.home_tutorial_step_nav_page2_hint,
+                targetViewProvider = { binding.navScanButton },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
             )
         )
     }
@@ -3377,7 +3498,7 @@ class MainActivity : AppCompatActivity() {
         }
         val step = homeTutorialSteps[index]
         homeTutorialStepIndex = index
-        homeTutorialTargetTouched = false
+        homeTutorialTargetTouched = !step.requireTargetTapInLearnMode
 
         step.widgetPageIndex?.let { applyWidgetPage(pageIndex = it, animate = true) }
         step.navPageIndex?.let { applyNavIconPage(pageIndex = it, animate = true) }
@@ -3462,6 +3583,10 @@ class MainActivity : AppCompatActivity() {
         if (!homeTutorialActive || homeTutorialMode != HomeTutorialMode.LEARN_BY_DOING) {
             return
         }
+        val step = currentHomeTutorialStep() ?: return
+        if (!step.requireTargetTapInLearnMode) {
+            return
+        }
         if (!homeTutorialTargetTouched) {
             homeTutorialTargetTouched = true
             binding.homeTutorialHintLabel.text = getString(R.string.home_tutorial_status_target_done)
@@ -3474,7 +3599,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val mode = homeTutorialMode ?: return
-        if (mode == HomeTutorialMode.LEARN_BY_DOING && !homeTutorialTargetTouched) {
+        val step = currentHomeTutorialStep() ?: return
+        if (
+            mode == HomeTutorialMode.LEARN_BY_DOING &&
+            step.requireTargetTapInLearnMode &&
+            !homeTutorialTargetTouched
+        ) {
             return
         }
         if (homeTutorialStepIndex >= homeTutorialSteps.lastIndex) {
@@ -3486,8 +3616,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateHomeTutorialActionUi() {
         val mode = homeTutorialMode ?: return
+        val step = currentHomeTutorialStep() ?: return
         val last = homeTutorialStepIndex >= homeTutorialSteps.lastIndex
-        if (mode == HomeTutorialMode.GUIDED) {
+        if (mode == HomeTutorialMode.GUIDED || !step.requireTargetTapInLearnMode) {
             binding.homeTutorialActionButton.isEnabled = true
             binding.homeTutorialActionButton.text = if (last) {
                 getString(R.string.home_tutorial_action_finish)
@@ -3510,6 +3641,10 @@ class MainActivity : AppCompatActivity() {
         binding.homeTutorialActionButton.isEnabled = false
         binding.homeTutorialActionButton.text = getString(R.string.home_tutorial_action_wait_for_tap)
         binding.homeTutorialHintLabel.text = getString(R.string.home_tutorial_status_tap_target)
+    }
+
+    private fun currentHomeTutorialStep(): HomeTutorialStep? {
+        return homeTutorialSteps.getOrNull(homeTutorialStepIndex)
     }
 
     private fun openHomeRiskEntryPoint() {
@@ -6478,15 +6613,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            val opened = withContext(Dispatchers.IO) {
-                runCatching {
-                    MediaVaultFileStore.openSecureView(this@MainActivity, item.id)
-                }.isSuccess
-            }
-            binding.subStatusLabel.text = if (opened) {
-                getString(R.string.media_vault_opened)
-            } else {
-                getString(R.string.media_vault_open_failed)
+            val openError = runCatching {
+                MediaVaultFileStore.openSecureView(this@MainActivity, item.id)
+            }.exceptionOrNull()?.message.orEmpty()
+            binding.subStatusLabel.text = when {
+                openError.isBlank() -> getString(R.string.media_vault_opened)
+                openError == "secure_open_requires_export" -> getString(R.string.media_vault_open_requires_export)
+                else -> getString(R.string.media_vault_open_failed)
             }
             refreshUiState()
         }

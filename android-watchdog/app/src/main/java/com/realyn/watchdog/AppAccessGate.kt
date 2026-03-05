@@ -207,10 +207,24 @@ object AppAccessGate {
             maxLines = 1
         }
 
-        var attemptsRemaining = 5
+        fun entryMessage(state: PinLockoutState): String {
+            return if (state.locked) {
+                activity.getString(
+                    R.string.app_lock_pin_locked_message_template,
+                    state.lockoutRemainingSeconds
+                )
+            } else {
+                activity.getString(
+                    R.string.app_lock_pin_entry_message_template,
+                    state.attemptsRemaining
+                )
+            }
+        }
+
+        var currentState = PinFallbackStore.currentLockoutState(activity)
         val dialog = LionAlertDialogBuilder(activity)
             .setTitle(R.string.app_lock_pin_entry_title)
-            .setMessage(activity.getString(R.string.app_lock_pin_entry_message_template, attemptsRemaining))
+            .setMessage(entryMessage(currentState))
             .setView(pinInput)
             .setPositiveButton(R.string.action_confirm, null)
             .setNegativeButton(android.R.string.cancel) { _, _ -> onDenied() }
@@ -218,26 +232,38 @@ object AppAccessGate {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                currentState = PinFallbackStore.currentLockoutState(activity)
+                if (currentState.locked) {
+                    dialog.setMessage(entryMessage(currentState))
+                    pinInput.text?.clear()
+                    pinInput.error = activity.getString(R.string.app_lock_pin_locked_input_error)
+                    return@setOnClickListener
+                }
+
                 val pin = pinInput.text?.toString().orEmpty().trim()
-                if (PinFallbackStore.verifyPin(activity, pin)) {
+                val result = PinFallbackStore.verifyPinWithPolicy(activity, pin)
+                currentState = result.state
+                if (result.matched) {
                     dialog.dismiss()
                     onUnlocked()
                     return@setOnClickListener
                 }
 
-                attemptsRemaining -= 1
-                if (attemptsRemaining <= 0) {
-                    dialog.dismiss()
-                    Toast.makeText(activity, R.string.app_lock_pin_attempts_exhausted, Toast.LENGTH_LONG).show()
-                    onDenied()
-                    return@setOnClickListener
-                }
-
                 pinInput.text?.clear()
-                pinInput.error = activity.getString(R.string.app_lock_pin_invalid)
-                dialog.setMessage(
-                    activity.getString(R.string.app_lock_pin_entry_message_template, attemptsRemaining)
-                )
+                dialog.setMessage(entryMessage(currentState))
+                if (currentState.locked) {
+                    pinInput.error = activity.getString(R.string.app_lock_pin_locked_input_error)
+                    Toast.makeText(
+                        activity,
+                        activity.getString(
+                            R.string.app_lock_pin_locked_toast_template,
+                            currentState.lockoutRemainingSeconds
+                        ),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    pinInput.error = activity.getString(R.string.app_lock_pin_invalid)
+                }
             }
         }
 

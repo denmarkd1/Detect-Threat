@@ -99,6 +99,27 @@
     <string name="incident_no_open">No hay incidentes abiertos para iniciar.</string>
     <string name="incident_no_active">No hay incidentes abiertos o en progreso para resolver.</string>
     <string name="incident_no_resolved">No hay incidentes resueltos para reabrir.</string>
+    <string name="incident_assistant_action_prompt">¿Qué acción deseas tomar?</string>
+    <string name="incident_assistant_action_counts_template">Acciones disponibles: %1$d | la app puede aplicar: %2$d | manuales: %3$d</string>
+    <string name="incident_assistant_action_mode_auto">la app puede aplicar</string>
+    <string name="incident_assistant_action_mode_manual">manual</string>
+    <string name="incident_assistant_more_actions_template">+ %1$d acciones más en la guía paso a paso.</string>
+    <string name="incident_assistant_apply_choice">Aplicar arreglo por mí</string>
+    <string name="incident_assistant_guide_choice">Guíame paso a paso</string>
+    <string name="incident_assistant_skip_choice">Omitir por ahora</string>
+    <string name="incident_assistant_actions_title">Acciones disponibles</string>
+    <string name="incident_assistant_no_auto_actions">No hay acciones directas automáticas para este incidente.</string>
+    <string name="incident_assistant_confirm_title">Confirmar remediación automática</string>
+    <string name="incident_assistant_confirm_intro">La app intentará estas acciones ahora:</string>
+    <string name="incident_assistant_confirm_impact_template">Impacto: %1$s</string>
+    <string name="incident_assistant_confirm_reversible_template">Reversible: %1$s</string>
+    <string name="incident_assistant_confirm_destructive">Esta acción es destructiva y no se puede revertir automáticamente.</string>
+    <string name="incident_assistant_confirm_manual_remaining_template">%1$d acción(es) manual(es) aún requieren tu revisión después de esto.</string>
+    <string name="incident_assistant_confirm_prompt">¿Continuar con la remediación automática ahora?</string>
+    <string name="incident_assistant_apply_success_template">Se aplicaron %1$d acción(es). Revisa y marca como resuelto al verificar.</string>
+    <string name="incident_assistant_apply_partial_template">Se aplicaron %1$d acción(es), %2$d fallaron. Continúa con la guía.</string>
+    <string name="incident_assistant_apply_failed">La remediación automática falló en este dispositivo. Continúa con la guía.</string>
+    <string name="incident_assistant_action_request_uninstall">Solicitar desinstalación de %1$s</string>
 
     <string name="scam_shield_title">Scam Shield + Triaje de Riesgo</string>
     <string name="scam_shield_loading">Cargando estado de Scam Shield...</string>

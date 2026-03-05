@@ -2,6 +2,7 @@ package com.realyn.watchdog
 
 import android.Manifest
 import android.content.Context
+import android.app.admin.DevicePolicyManager
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -10,6 +11,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
@@ -149,6 +151,14 @@ object DeepThreatScanner {
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
     )
 
+    private val startupCriticalAbusePermissions = setOf(
+        "android.permission.READ_SMS",
+        "android.permission.RECEIVE_SMS",
+        "android.permission.SEND_SMS",
+        "android.permission.READ_CALL_LOG",
+        "android.permission.WRITE_CALL_LOG"
+    )
+
     private val persistenceNameKeywords = setOf(
         "spy",
         "stalker",
@@ -215,6 +225,13 @@ object DeepThreatScanner {
     private data class StorageScanOutput(
         val recordsScanned: Int,
         val findings: List<DeepScanFinding>
+    )
+
+    internal data class StartupRiskEvaluation(
+        val severity: Severity,
+        val score: Int,
+        val signalNotes: List<String>,
+        val trustedIntegrationApplied: Boolean
     )
 
     fun hasAllFilesAccess(context: Context): Boolean {
@@ -396,6 +413,9 @@ object DeepThreatScanner {
         progressCallback: DeepScanProgressCallback? = null
     ): StartupScanOutput {
         val pm = context.packageManager
+        val policy = StartupPersistencePolicyGate.load(context)
+        val activeAccessibilityPackages = collectActiveAccessibilityPackages(context)
+        val activeDeviceAdminPackages = collectActiveDeviceAdminPackages(context)
         val apps = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pm.getInstalledApplications(
@@ -446,68 +466,40 @@ object DeepThreatScanner {
             val unknownInstaller = installer.isBlank() || installer == "com.android.shell"
             val packageLower = app.packageName.lowercase(Locale.US)
             val keywordHit = persistenceNameKeywords.firstOrNull { packageLower.contains(it) }
+            val hasActiveAccessibilityService = packageLower in activeAccessibilityPackages
+            val hasActiveDeviceAdmin = packageLower in activeDeviceAdminPackages
+            val trustedRule = policy.ruleFor(app.packageName)
 
-            var score = 0
-            if (hasBootReceiver) {
-                score += 28
-            }
-            if (hasAccessibilityService) {
-                score += 32
-            }
-            if (hasDeviceAdminReceiver) {
-                score += 26
-            }
-            if (hasOverlay) {
-                score += 16
-            }
-            score += (riskyPermissions.size * 10).coerceAtMost(30)
-            if (unknownInstaller) {
-                score += 8
-            }
-            if (keywordHit != null) {
-                score += 22
-            }
-
-            val severity = when {
-                score >= 72 -> Severity.HIGH
-                score >= 48 -> Severity.MEDIUM
-                score >= 34 -> Severity.LOW
-                else -> null
-            }
-            if (severity != null) {
+            val risk = evaluateStartupRisk(
+                hasBootReceiver = hasBootReceiver,
+                hasOverlay = hasOverlay,
+                hasAccessibilityService = hasAccessibilityService,
+                hasDeviceAdminReceiver = hasDeviceAdminReceiver,
+                hasActiveAccessibilityService = hasActiveAccessibilityService,
+                hasActiveDeviceAdmin = hasActiveDeviceAdmin,
+                riskyPermissions = riskyPermissions,
+                unknownInstaller = unknownInstaller,
+                keywordHit = keywordHit,
+                trustedRule = trustedRule,
+                requireRuntimeAbuseForHigh = policy.requireRuntimeAbuseForHigh
+            )
+            if (risk != null) {
                 val appLabel = runCatching {
                     pm.getApplicationLabel(app).toString().trim().ifBlank { app.packageName }
                 }.getOrDefault(app.packageName)
 
-                val signalNotes = mutableListOf<String>()
-                if (hasBootReceiver) {
-                    signalNotes += "boot persistence permission"
-                }
-                if (hasAccessibilityService) {
-                    signalNotes += "accessibility service component"
-                }
-                if (hasDeviceAdminReceiver) {
-                    signalNotes += "device-admin receiver component"
-                }
-                if (hasOverlay) {
-                    signalNotes += "overlay permission"
-                }
-                if (riskyPermissions.isNotEmpty()) {
-                    signalNotes += "high-risk permissions=${riskyPermissions.take(6).joinToString(", ")}"
-                }
-                if (unknownInstaller) {
-                    signalNotes += "installer source unavailable/unknown"
-                }
-                if (keywordHit != null) {
-                    signalNotes += "suspicious package keyword='$keywordHit'"
-                }
-
                 findings += DeepScanFinding(
                     module = DeepScanModule.STARTUP_PERSISTENCE,
-                    severity = severity,
-                    score = score.coerceIn(0, 100),
+                    severity = risk.severity,
+                    score = risk.score.coerceIn(0, 100),
                     title = "Persistence-capable app profile: $appLabel",
-                    details = "Package: ${app.packageName}\nSignals: ${signalNotes.joinToString("; ")}"
+                    details = buildString {
+                        append("Package: ${app.packageName}\n")
+                        append("Signals: ${risk.signalNotes.joinToString("; ")}")
+                        if (risk.trustedIntegrationApplied) {
+                            append("\nPolicy: trusted startup integration profile applied")
+                        }
+                    }
                 )
             }
             val processed = index + 1
@@ -523,6 +515,118 @@ object DeepThreatScanner {
         return StartupScanOutput(
             packagesScanned = apps.size,
             findings = findings
+        )
+    }
+
+    internal fun evaluateStartupRisk(
+        hasBootReceiver: Boolean,
+        hasOverlay: Boolean,
+        hasAccessibilityService: Boolean,
+        hasDeviceAdminReceiver: Boolean,
+        hasActiveAccessibilityService: Boolean,
+        hasActiveDeviceAdmin: Boolean,
+        riskyPermissions: Set<String>,
+        unknownInstaller: Boolean,
+        keywordHit: String?,
+        trustedRule: StartupTrustedPackageRule?,
+        requireRuntimeAbuseForHigh: Boolean
+    ): StartupRiskEvaluation? {
+        var score = 0
+        val signalNotes = mutableListOf<String>()
+
+        if (hasBootReceiver) {
+            score += 28
+            signalNotes += "boot persistence permission"
+        }
+        if (hasAccessibilityService) {
+            score += 24
+            signalNotes += "accessibility service component (declared)"
+        }
+        if (hasDeviceAdminReceiver) {
+            score += 22
+            signalNotes += "device-admin receiver component (declared)"
+        }
+        if (hasOverlay) {
+            score += 16
+            signalNotes += "overlay permission"
+        }
+        if (riskyPermissions.isNotEmpty()) {
+            score += (riskyPermissions.size * 10).coerceAtMost(30)
+            signalNotes += "high-risk permissions=${riskyPermissions.take(6).joinToString(", ")}"
+        }
+        if (unknownInstaller) {
+            score += 8
+            signalNotes += "installer source unavailable/unknown"
+        }
+        if (keywordHit != null) {
+            score += 22
+            signalNotes += "suspicious package keyword='$keywordHit'"
+        }
+
+        var runtimeSignalCount = 0
+        if (hasActiveAccessibilityService) {
+            score += 26
+            runtimeSignalCount += 1
+            signalNotes += "active accessibility service enabled"
+        }
+        if (hasActiveDeviceAdmin) {
+            score += 26
+            runtimeSignalCount += 1
+            signalNotes += "active device-admin privilege enabled"
+        }
+        val hasCriticalPermissionAbusePattern =
+            riskyPermissions.any { it in startupCriticalAbusePermissions }
+        val hasOverlayRuntimePair = hasOverlay && (hasActiveAccessibilityService || hasActiveDeviceAdmin)
+        val hasStackedRuntimePrivileges = hasActiveAccessibilityService && hasActiveDeviceAdmin
+        val runtimeCorroborationCount = listOf(
+            unknownInstaller,
+            keywordHit != null,
+            hasOverlayRuntimePair,
+            hasStackedRuntimePrivileges,
+            hasCriticalPermissionAbusePattern
+        ).count { it }
+
+        var severity = when {
+            score >= 72 -> Severity.HIGH
+            score >= 48 -> Severity.MEDIUM
+            score >= 34 -> Severity.LOW
+            else -> return null
+        }
+        var adjustedScore = score.coerceIn(0, 100)
+
+        if (requireRuntimeAbuseForHigh && severity == Severity.HIGH && runtimeSignalCount == 0) {
+            severity = Severity.MEDIUM
+            adjustedScore = adjustedScore.coerceAtMost(69)
+            signalNotes += "high-severity downgraded: runtime abuse signals not active"
+        }
+        if (
+            requireRuntimeAbuseForHigh &&
+            severity == Severity.HIGH &&
+            runtimeSignalCount > 0 &&
+            runtimeCorroborationCount == 0
+        ) {
+            severity = Severity.MEDIUM
+            adjustedScore = adjustedScore.coerceAtMost(69)
+            signalNotes += "high-severity downgraded: privileged runtime signal lacks compromise corroboration"
+        }
+
+        var trustedIntegrationApplied = false
+        if (trustedRule != null && trustedRule.allowWithoutRuntimeAbuse && runtimeSignalCount == 0) {
+            severity = Severity.INFO
+            adjustedScore = adjustedScore.coerceAtMost(28)
+            trustedIntegrationApplied = true
+            signalNotes += "trusted integration allowlist: monitor mode (${trustedRule.mode})"
+        }
+
+        if (signalNotes.isEmpty()) {
+            signalNotes += "startup persistence profile match"
+        }
+
+        return StartupRiskEvaluation(
+            severity = severity,
+            score = adjustedScore,
+            signalNotes = signalNotes,
+            trustedIntegrationApplied = trustedIntegrationApplied
         )
     }
 
@@ -547,6 +651,36 @@ object DeepThreatScanner {
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun collectActiveAccessibilityPackages(context: Context): Set<String> {
+        val enabled = runCatching {
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ).orEmpty()
+        }.getOrDefault("")
+        if (enabled.isBlank()) {
+            return emptySet()
+        }
+        return enabled.split(':')
+            .mapNotNull { entry ->
+                val packageName = entry.substringBefore('/', "").trim().lowercase(Locale.US)
+                packageName.takeIf { it.contains(".") }
+            }
+            .toSet()
+    }
+
+    private fun collectActiveDeviceAdminPackages(context: Context): Set<String> {
+        val manager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            ?: return emptySet()
+        val admins = runCatching { manager.activeAdmins }.getOrNull().orEmpty()
+        if (admins.isEmpty()) {
+            return emptySet()
+        }
+        return admins.mapNotNull { component ->
+            component.packageName.trim().lowercase(Locale.US).takeIf { it.isNotBlank() }
+        }.toSet()
     }
 
     private fun scanStorageArtifacts(

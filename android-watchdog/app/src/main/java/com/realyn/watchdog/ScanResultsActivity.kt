@@ -181,14 +181,31 @@ class ScanResultsActivity : AppCompatActivity() {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(epochMs))
     }
 
+    private enum class IncidentActionExecution {
+        OPEN_INTENTS,
+        REQUEST_APP_UNINSTALL
+    }
+
+    private data class IncidentAction(
+        val actionId: String,
+        val title: String,
+        val impact: String,
+        val manualInstruction: String,
+        val automatable: Boolean,
+        val reversible: Boolean,
+        val destructive: Boolean,
+        val auditTag: String,
+        val execution: IncidentActionExecution,
+        val intents: List<Intent> = emptyList(),
+        val packageName: String = ""
+    )
+
     private data class IncidentGuidance(
-        val quickActionLabelResId: Int,
-        val quickActionIntents: List<Intent>,
-        val quickActionAuditTag: String,
         val confidence: String,
         val whyLine: String,
         val stepSignalMap: List<String>,
-        val steps: List<String>
+        val steps: List<String>,
+        val actions: List<IncidentAction>
     )
 
     private data class IncidentContext(
@@ -214,22 +231,115 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             next
         }
-        showIncidentGuidanceDialog(active)
+        showIncidentDecisionDialog(active)
     }
 
-    private fun showIncidentGuidanceDialog(incident: IncidentRecord) {
+    private fun showIncidentDecisionDialog(incident: IncidentRecord) {
         val unresolved = IncidentStore.loadIncidents(this)
             .filter { it.status == IncidentStatus.OPEN || it.status == IncidentStatus.IN_PROGRESS }
         val highRemaining = unresolved.count { it.severity == Severity.HIGH }
         val mediumRemaining = unresolved.count { it.severity == Severity.MEDIUM }
         val lowRemaining = unresolved.count { it.severity == Severity.LOW }
         val guidance = buildIncidentGuidance(incident)
+        val autoCount = guidance.actions.count { it.automatable }
+        val manualCount = guidance.actions.size - autoCount
+        val message = buildString {
+            appendLine(
+                getString(
+                    R.string.incident_guidance_queue_template,
+                    highRemaining,
+                    mediumRemaining,
+                    lowRemaining
+                )
+            )
+            appendLine()
+            appendLine(
+                getString(
+                    R.string.incident_guidance_incident_header_template,
+                    incident.severity.name,
+                    incident.title
+                )
+            )
+            appendLine()
+            appendLine(
+                getString(
+                    R.string.incident_guidance_confidence_template,
+                    guidance.confidence
+                )
+            )
+            appendLine(
+                getString(
+                    R.string.incident_guidance_why_template,
+                    guidance.whyLine
+                )
+            )
+            appendLine()
+            appendLine(getString(R.string.incident_assistant_action_prompt))
+            appendLine(
+                getString(
+                    R.string.incident_assistant_action_counts_template,
+                    guidance.actions.size,
+                    autoCount,
+                    manualCount
+                )
+            )
+            guidance.actions.take(3).forEachIndexed { index, action ->
+                val modeLabel = if (action.automatable) {
+                    getString(R.string.incident_assistant_action_mode_auto)
+                } else {
+                    getString(R.string.incident_assistant_action_mode_manual)
+                }
+                appendLine("${index + 1}. ${action.title} [$modeLabel]")
+            }
+            if (guidance.actions.size > 3) {
+                appendLine(getString(R.string.incident_assistant_more_actions_template, guidance.actions.size - 3))
+            }
+        }.trim()
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_guidance_dialog_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.incident_assistant_apply_choice) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_apply_requested",
+                    detail = JSONObject().put("actionCount", guidance.actions.size)
+                )
+                showIncidentApplyConfirmationDialog(incident, guidance)
+            }
+            .setNeutralButton(R.string.incident_assistant_guide_choice) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_manual_requested",
+                    detail = JSONObject().put("actionCount", guidance.actions.size)
+                )
+                showIncidentGuidanceDialog(incident, guidance)
+            }
+            .setNegativeButton(R.string.incident_assistant_skip_choice) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_skipped",
+                    detail = JSONObject().put("actionCount", guidance.actions.size)
+                )
+            }
+            .create()
+        showStyledDialog(dialog)
+    }
+
+    private fun showIncidentGuidanceDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance = buildIncidentGuidance(incident)
+    ) {
+        val unresolved = IncidentStore.loadIncidents(this)
+            .filter { it.status == IncidentStatus.OPEN || it.status == IncidentStatus.IN_PROGRESS }
+        val highRemaining = unresolved.count { it.severity == Severity.HIGH }
+        val mediumRemaining = unresolved.count { it.severity == Severity.MEDIUM }
+        val lowRemaining = unresolved.count { it.severity == Severity.LOW }
         val detailsPreview = incident.details
             .trim()
             .replace("\r", "")
             .ifBlank { getString(R.string.incident_guidance_details_unavailable) }
             .let { value ->
-                if (value.length <= 420) value else "${value.take(417)}..."
+                if (value.length <= 220) value else "${value.take(217)}..."
             }
         val message = buildString {
             appendLine(
@@ -250,23 +360,19 @@ class ScanResultsActivity : AppCompatActivity() {
             )
             appendLine(detailsPreview)
             appendLine()
-            appendLine(
-                getString(
-                    R.string.incident_guidance_confidence_template,
-                    guidance.confidence
-                )
-            )
-            appendLine(
-                getString(
-                    R.string.incident_guidance_why_template,
-                    guidance.whyLine
-                )
-            )
-            if (guidance.stepSignalMap.isNotEmpty()) {
+            appendLine(getString(R.string.incident_guidance_confidence_template, guidance.confidence))
+            appendLine(getString(R.string.incident_guidance_why_template, guidance.whyLine))
+            if (guidance.actions.isNotEmpty()) {
                 appendLine()
-                appendLine(getString(R.string.incident_guidance_signal_map_title))
-                guidance.stepSignalMap.forEachIndexed { index, line ->
-                    appendLine("${index + 1}. $line")
+                appendLine(getString(R.string.incident_assistant_actions_title))
+                guidance.actions.forEachIndexed { index, action ->
+                    val modeLabel = if (action.automatable) {
+                        getString(R.string.incident_assistant_action_mode_auto)
+                    } else {
+                        getString(R.string.incident_assistant_action_mode_manual)
+                    }
+                    appendLine("${index + 1}. ${action.title} [$modeLabel]")
+                    appendLine("   ${action.manualInstruction}")
                 }
             }
             appendLine()
@@ -279,58 +385,205 @@ class ScanResultsActivity : AppCompatActivity() {
             .setTitle(R.string.incident_guidance_dialog_title)
             .setMessage(message)
             .setPositiveButton(R.string.incident_guidance_mark_fixed_next) { _, _ ->
-                val resolved = IncidentStore.markResolved(this, incident.incidentId)
-                if (resolved == null) {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.incident_no_active),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@setPositiveButton
-                }
-                val remaining = IncidentStore.nextUnresolvedForWork(this)
-                if (remaining == null) {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.incident_guidance_queue_complete),
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@setPositiveButton
-                }
-                val candidate = if (remaining.status == IncidentStatus.OPEN) {
-                    IncidentStore.markInProgress(this, remaining.incidentId) ?: remaining
-                } else {
-                    remaining
-                }
-                showIncidentGuidanceDialog(candidate)
+                resolveIncidentAndContinue(incident)
             }
-            .setNeutralButton(guidance.quickActionLabelResId) { _, _ ->
-                val opened = guidance.quickActionIntents.any { intent ->
-                    runCatching {
-                        startActivity(intent)
-                        true
-                    }.getOrDefault(false)
-                }
-                if (!opened) {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.incident_guidance_open_failed),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@setNeutralButton
-                }
-                SafeHygieneToolkit.logMaintenanceAction(
-                    context = this,
-                    action = guidance.quickActionAuditTag,
-                    detail = JSONObject()
-                        .put("incidentId", incident.incidentId)
-                        .put("severity", incident.severity.name)
-                        .put("title", incident.title.take(120))
-                )
+            .setNeutralButton(R.string.incident_assistant_apply_choice) { _, _ ->
+                showIncidentApplyConfirmationDialog(incident, guidance)
             }
             .setNegativeButton(R.string.scan_results_cancel, null)
             .create()
         showStyledDialog(dialog)
+    }
+
+    private fun showIncidentApplyConfirmationDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ) {
+        val autoActions = guidance.actions.filter { it.automatable }
+        if (autoActions.isEmpty()) {
+            Toast.makeText(this, getString(R.string.incident_assistant_no_auto_actions), Toast.LENGTH_SHORT)
+                .show()
+            showIncidentGuidanceDialog(incident, guidance)
+            return
+        }
+        val manualCount = guidance.actions.count { !it.automatable }
+        val message = buildString {
+            appendLine(getString(R.string.incident_assistant_confirm_intro))
+            appendLine()
+            autoActions.forEachIndexed { index, action ->
+                appendLine("${index + 1}. ${action.title}")
+                appendLine(getString(R.string.incident_assistant_confirm_impact_template, action.impact))
+                appendLine(
+                    getString(
+                        R.string.incident_assistant_confirm_reversible_template,
+                        if (action.reversible) {
+                            getString(R.string.feedback_recommend_yes)
+                        } else {
+                            getString(R.string.feedback_recommend_no)
+                        }
+                    )
+                )
+                if (action.destructive) {
+                    appendLine(getString(R.string.incident_assistant_confirm_destructive))
+                }
+                appendLine()
+            }
+            if (manualCount > 0) {
+                appendLine(
+                    getString(
+                        R.string.incident_assistant_confirm_manual_remaining_template,
+                        manualCount
+                    )
+                )
+                appendLine()
+            }
+            append(getString(R.string.incident_assistant_confirm_prompt))
+        }.trim()
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_assistant_confirm_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.action_confirm) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_apply_confirmed",
+                    detail = JSONObject().put("autoActionCount", autoActions.size)
+                )
+                applyIncidentActions(incident, guidance, autoActions)
+            }
+            .setNeutralButton(R.string.incident_assistant_guide_choice) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_apply_manual_redirect",
+                    detail = JSONObject().put("autoActionCount", autoActions.size)
+                )
+                showIncidentGuidanceDialog(incident, guidance)
+            }
+            .setNegativeButton(R.string.scan_results_cancel) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_apply_canceled",
+                    detail = JSONObject().put("autoActionCount", autoActions.size)
+                )
+            }
+            .create()
+        showStyledDialog(dialog)
+    }
+
+    private fun applyIncidentActions(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        autoActions: List<IncidentAction>
+    ) {
+        var successCount = 0
+        var failedCount = 0
+        autoActions.forEach { action ->
+            logIncidentAssistantEvent(
+                incident = incident,
+                action = "incident_action_attempted",
+                detail = JSONObject()
+                    .put("actionId", action.actionId)
+                    .put("auditTag", action.auditTag)
+                    .put("destructive", action.destructive)
+            )
+            val success = executeIncidentAction(action)
+            if (success) {
+                successCount += 1
+            } else {
+                failedCount += 1
+            }
+            logIncidentAssistantEvent(
+                incident = incident,
+                action = if (success) "incident_action_succeeded" else "incident_action_failed",
+                detail = JSONObject()
+                    .put("actionId", action.actionId)
+                    .put("auditTag", action.auditTag)
+                    .put("destructive", action.destructive)
+            )
+        }
+        when {
+            successCount > 0 && failedCount == 0 -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_apply_success_template, successCount),
+                Toast.LENGTH_LONG
+            ).show()
+            successCount > 0 -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_apply_partial_template, successCount, failedCount),
+                Toast.LENGTH_LONG
+            ).show()
+            else -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_apply_failed),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        showIncidentGuidanceDialog(incident, guidance)
+    }
+
+    private fun executeIncidentAction(action: IncidentAction): Boolean {
+        return when (action.execution) {
+            IncidentActionExecution.OPEN_INTENTS -> action.intents.any { intent ->
+                runCatching {
+                    startActivity(intent)
+                    true
+                }.getOrDefault(false)
+            }
+            IncidentActionExecution.REQUEST_APP_UNINSTALL -> {
+                val packageName = action.packageName.trim()
+                if (packageName.isBlank()) {
+                    false
+                } else {
+                    runCatching {
+                        startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")))
+                        true
+                    }.getOrDefault(false)
+                }
+            }
+        }
+    }
+
+    private fun resolveIncidentAndContinue(incident: IncidentRecord) {
+        val resolved = IncidentStore.markResolved(this, incident.incidentId)
+        if (resolved == null) {
+            Toast.makeText(this, getString(R.string.incident_no_active), Toast.LENGTH_SHORT).show()
+            return
+        }
+        logIncidentAssistantEvent(
+            incident = incident,
+            action = "incident_assistant_marked_fixed",
+            detail = JSONObject().put("incidentId", incident.incidentId)
+        )
+        val remaining = IncidentStore.nextUnresolvedForWork(this)
+        if (remaining == null) {
+            Toast.makeText(
+                this,
+                getString(R.string.incident_guidance_queue_complete),
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        val candidate = if (remaining.status == IncidentStatus.OPEN) {
+            IncidentStore.markInProgress(this, remaining.incidentId) ?: remaining
+        } else {
+            remaining
+        }
+        showIncidentDecisionDialog(candidate)
+    }
+
+    private fun logIncidentAssistantEvent(
+        incident: IncidentRecord,
+        action: String,
+        detail: JSONObject = JSONObject()
+    ) {
+        SafeHygieneToolkit.logMaintenanceAction(
+            context = this,
+            action = action,
+            detail = JSONObject()
+                .put("incidentId", incident.incidentId)
+                .put("severity", incident.severity.name)
+                .put("title", incident.title.take(120))
+                .put("detail", detail)
+        )
     }
 
     private fun buildIncidentGuidance(incident: IncidentRecord): IncidentGuidance {
@@ -350,10 +603,20 @@ class ScanResultsActivity : AppCompatActivity() {
         }
         val lower = "${incident.title}\n${incident.details}".lowercase(Locale.US)
         if (lower.contains("accessibility")) {
+            val actions = mutableListOf<IncidentAction>()
+            actions += openIntentAction(
+                actionId = "open_accessibility",
+                title = getString(R.string.incident_guidance_open_accessibility),
+                impact = "Open Accessibility settings so suspicious services can be disabled quickly.",
+                manualInstruction = "Open Settings > Accessibility and turn off suspicious services.",
+                auditTag = "incident_action_open_accessibility",
+                intents = listOf(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
+                reversible = true
+            )
+            if (context.packageName.isNotBlank()) {
+                actions += requestUninstallAction(context.packageName)
+            }
             return IncidentGuidance(
-                quickActionLabelResId = R.string.incident_guidance_open_accessibility,
-                quickActionIntents = listOf(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
-                quickActionAuditTag = "incident_guidance_open_accessibility",
                 confidence = confidenceLabel(
                     incident = incident,
                     moduleDetected = false,
@@ -371,12 +634,12 @@ class ScanResultsActivity : AppCompatActivity() {
                     "Open Settings > Apps > See all apps and uninstall unknown tools tied to the service.",
                     "Re-run deep scan and verify accessibility findings are cleared.",
                     "Use Mark fixed + next only after the finding no longer returns."
-                )
+                ),
+                actions = actions
             )
         }
         return buildCoreGuidance(incident, context)
     }
-
     private fun parseIncidentContext(incident: IncidentRecord): IncidentContext {
         val lines = incident.details
             .lines()
@@ -509,6 +772,13 @@ class ScanResultsActivity : AppCompatActivity() {
         val hasOverlay = lowerSignals.any { it.contains("overlay") } ||
             incident.title.contains("overlay", ignoreCase = true)
         val riskyPermissionSignal = lowerSignals.firstOrNull { it.contains("high-risk permissions") }.orEmpty()
+        val hasActiveRuntimeAbuseSignal = lowerSignals.any {
+            it.contains("active accessibility service enabled") ||
+                it.contains("active device-admin privilege enabled")
+        }
+        val trustedRule = StartupPersistencePolicyGate.load(this).ruleFor(context.packageName)
+        val suppressUninstallForTrusted = trustedRule?.suppressUninstallAction == true &&
+            !hasActiveRuntimeAbuseSignal
 
         val intents = mutableListOf<Intent>()
         if (context.packageName.isNotBlank()) {
@@ -545,6 +815,7 @@ class ScanResultsActivity : AppCompatActivity() {
             if (hasDeviceAdmin) add("device-admin receiver")
             if (hasOverlay) add("overlay permission")
             if (riskyPermissionSignal.isNotBlank()) add(riskyPermissionSignal)
+            if (suppressUninstallForTrusted) add("trusted startup integration profile")
             if (isEmpty()) add("startup persistence profile match")
         }
         val signalsLine = if (riskyPermissionSignal.isBlank()) {
@@ -552,16 +823,32 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             "Target permission signal: $riskyPermissionSignal"
         }
+        val primaryIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" }
+        val actions = mutableListOf<IncidentAction>()
+        actions += openIntentAction(
+            actionId = "startup_open_primary",
+            title = getString(quickActionLabel),
+            impact = "Open the highest-priority settings screen for this startup persistence finding.",
+            manualInstruction = "Open the listed startup persistence settings manually if launch fails.",
+            auditTag = "incident_action_startup_open_primary",
+            intents = primaryIntents,
+            reversible = true
+        )
+        if (context.packageName.isNotBlank() && !suppressUninstallForTrusted) {
+            actions += requestUninstallAction(context.packageName)
+        }
         return IncidentGuidance(
-            quickActionLabelResId = quickActionLabel,
-            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
-            quickActionAuditTag = "incident_guidance_startup_playbook",
             confidence = confidenceLabel(
                 incident = incident,
                 moduleDetected = true,
                 contextualSignals = matchedSignals.size
             ),
-            whyLine = "Parsed startup persistence indicators for $packageRef: ${matchedSignals.joinToString(", ")}.",
+            whyLine = buildString {
+                append("Parsed startup persistence indicators for $packageRef: ${matchedSignals.joinToString(", ")}.")
+                if (suppressUninstallForTrusted) {
+                    append(" Trusted integration profile is active; monitor mode kept uninstall as manual-only.")
+                }
+            },
             stepSignalMap = buildList {
                 add("Step 1 targets package context from parsed package/signal metadata.")
                 add("Step 2 is driven by high-risk permission indicators.")
@@ -582,6 +869,8 @@ class ScanResultsActivity : AppCompatActivity() {
                 add(
                     if (hasDeviceAdmin) {
                         "Step 5 is triggered by device-admin receiver signal."
+                    } else if (suppressUninstallForTrusted) {
+                        "Step 5 shifts to monitor mode because this package is trusted in startup integration policy."
                     } else {
                         "Step 5 provides containment when ownership/source trust is low."
                     }
@@ -593,9 +882,16 @@ class ScanResultsActivity : AppCompatActivity() {
                 "Tap Permissions and set unnecessary high-risk permissions to Deny. $signalsLine",
                 if (hasAccessibility) "Open Settings > Accessibility and turn off services linked to $packageRef." else "Review special app access for autostart/background privileges and disable non-essential access.",
                 if (hasOverlay) "Open Settings > Special app access > Display over other apps and disable overlay for $packageRef." else "Verify the app cannot draw over other apps unless explicitly required.",
-                if (hasDeviceAdmin) "Open Settings > Security > Device admin apps and remove admin rights from $packageRef." else "If the app is unknown or unmanaged, uninstall it from Settings > Apps.",
+                if (hasDeviceAdmin) {
+                    "Open Settings > Security > Device admin apps and remove admin rights from $packageRef."
+                } else if (suppressUninstallForTrusted) {
+                    "This package is marked trusted by startup integration policy. Keep it installed, but monitor permissions and rerun deep scan after any permission/state change."
+                } else {
+                    "If the app is unknown or unmanaged, uninstall it from Settings > Apps."
+                },
                 "Run deep scan again and move to the next incident only when this startup finding is cleared."
-            )
+            ),
+            actions = actions
         )
     }
 
@@ -627,10 +923,21 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             "Open Settings > Apps > $packageFromPath and uninstall if suspicious artifacts keep regenerating."
         }
+        val primaryIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" }
+        val actions = mutableListOf<IncidentAction>()
+        actions += openIntentAction(
+            actionId = "storage_open_primary",
+            title = getString(quickActionLabel),
+            impact = "Open the storage location or app settings tied to this storage artifact finding.",
+            manualInstruction = "Open Downloads/Storage settings manually and inspect the flagged path.",
+            auditTag = "incident_action_storage_open_primary",
+            intents = primaryIntents,
+            reversible = true
+        )
+        if (packageFromPath.isNotBlank()) {
+            actions += requestUninstallAction(packageFromPath)
+        }
         return IncidentGuidance(
-            quickActionLabelResId = quickActionLabel,
-            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
-            quickActionAuditTag = "incident_guidance_storage_playbook",
             confidence = confidenceLabel(
                 incident = incident,
                 moduleDetected = true,
@@ -659,7 +966,8 @@ class ScanResultsActivity : AppCompatActivity() {
                 "Delete untrusted payloads/scripts/APKs from this location and empty trash/recycle bin.",
                 packageStep,
                 "Run deep scan again and mark fixed only after the storage artifact signal no longer appears."
-            )
+            ),
+            actions = actions
         )
     }
 
@@ -690,10 +998,21 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             "Verify Unknown app installs are disabled for browsers/file managers in Settings > Security."
         }
+        val primaryIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" }
+        val actions = mutableListOf<IncidentAction>()
+        actions += openIntentAction(
+            actionId = "embedded_open_primary",
+            title = getString(quickActionLabel),
+            impact = "Open the security or developer controls needed for embedded-path/root hardening.",
+            manualInstruction = "Open Security/Developer options manually to disable risky debug surfaces.",
+            auditTag = "incident_action_embedded_open_primary",
+            intents = primaryIntents,
+            reversible = true
+        )
+        if (context.packageName.isNotBlank()) {
+            actions += requestUninstallAction(context.packageName)
+        }
         return IncidentGuidance(
-            quickActionLabelResId = quickActionLabel,
-            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
-            quickActionAuditTag = "incident_guidance_embedded_playbook",
             confidence = confidenceLabel(
                 incident = incident,
                 moduleDetected = true,
@@ -728,7 +1047,8 @@ class ScanResultsActivity : AppCompatActivity() {
                 "Open Settings > Apps and remove unknown root-management/instrumentation apps linked to this signal.",
                 pathLine,
                 "Reboot device, run deep scan again, and only then mark fixed if embedded-path findings clear."
-            )
+            ),
+            actions = actions
         )
     }
 
@@ -751,10 +1071,18 @@ class ScanResultsActivity : AppCompatActivity() {
                 append("tier=${context.tier.ifBlank { "unknown" }} score=${context.score ?: -1}")
             }
         }
+        val actions = listOf(
+            openIntentAction(
+                actionId = "wifi_open_settings",
+                title = getString(R.string.incident_guidance_open_wifi),
+                impact = "Open Wi-Fi settings to disconnect risky networks and lock trusted posture.",
+                manualInstruction = "Open Wi-Fi settings manually and remove risky/open networks.",
+                auditTag = "incident_action_wifi_open_settings",
+                intents = listOf(Intent(Settings.ACTION_WIFI_SETTINGS)),
+                reversible = true
+            )
+        )
         return IncidentGuidance(
-            quickActionLabelResId = R.string.incident_guidance_open_wifi,
-            quickActionIntents = listOf(Intent(Settings.ACTION_WIFI_SETTINGS)),
-            quickActionAuditTag = "incident_guidance_wifi_playbook",
             confidence = confidenceLabel(
                 incident = incident,
                 moduleDetected = true,
@@ -785,7 +1113,8 @@ class ScanResultsActivity : AppCompatActivity() {
                 "Reconnect on a verified WPA2/WPA3 network before credentials, banking, or email actions.",
                 "Re-run Wi-Fi posture scan. Finding: $finding",
                 "Apply recommendation: $recommendation${if (networkLabel.isBlank()) "" else " ($networkLabel)"}"
-            )
+            ),
+            actions = actions
         )
     }
 
@@ -812,10 +1141,21 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             R.string.incident_guidance_open_security
         }
+        val primaryIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" }
+        val actions = mutableListOf<IncidentAction>()
+        actions += openIntentAction(
+            actionId = "core_open_primary",
+            title = getString(quickActionLabel),
+            impact = "Open the core settings surface tied to this incident so permissions can be tightened.",
+            manualInstruction = "Open Security or App settings manually and remove risky capabilities.",
+            auditTag = "incident_action_core_open_primary",
+            intents = primaryIntents,
+            reversible = true
+        )
+        if (packageName.isNotBlank()) {
+            actions += requestUninstallAction(packageName)
+        }
         return IncidentGuidance(
-            quickActionLabelResId = quickActionLabel,
-            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
-            quickActionAuditTag = "incident_guidance_core_playbook",
             confidence = confidenceLabel(
                 incident = incident,
                 moduleDetected = false,
@@ -846,7 +1186,46 @@ class ScanResultsActivity : AppCompatActivity() {
                 "Disable risky capabilities that are not required (SMS, call log, contacts, overlay, admin).",
                 "Uninstall unknown/suspicious apps if behavior persists after permission cleanup.",
                 "Run scan again and mark fixed only when this core finding no longer appears."
-            )
+            ),
+            actions = actions
+        )
+    }
+
+    private fun openIntentAction(
+        actionId: String,
+        title: String,
+        impact: String,
+        manualInstruction: String,
+        auditTag: String,
+        intents: List<Intent>,
+        reversible: Boolean
+    ): IncidentAction {
+        return IncidentAction(
+            actionId = actionId,
+            title = title,
+            impact = impact,
+            manualInstruction = manualInstruction,
+            automatable = intents.isNotEmpty(),
+            reversible = reversible,
+            destructive = false,
+            auditTag = auditTag,
+            execution = IncidentActionExecution.OPEN_INTENTS,
+            intents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" }
+        )
+    }
+
+    private fun requestUninstallAction(packageName: String): IncidentAction {
+        return IncidentAction(
+            actionId = "request_uninstall_${packageName.lowercase(Locale.US)}",
+            title = getString(R.string.incident_assistant_action_request_uninstall, packageName),
+            impact = "Launch Android uninstall confirmation for this package.",
+            manualInstruction = "Open Settings > Apps > $packageName and uninstall if this app is untrusted.",
+            automatable = true,
+            reversible = false,
+            destructive = true,
+            auditTag = "incident_action_request_uninstall",
+            execution = IncidentActionExecution.REQUEST_APP_UNINSTALL,
+            packageName = packageName
         )
     }
 

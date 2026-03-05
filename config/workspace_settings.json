@@ -356,6 +356,19 @@
     "max_items_free": 5,
     "retention_days_deleted": 7
   },
+  "startup_persistence": {
+    "require_runtime_abuse_for_high": true,
+    "trusted_packages": [
+      {
+        "package": "com.netqin.ps",
+        "label": "Vault",
+        "mode": "integration_observe",
+        "suppress_uninstall_action": true,
+        "allow_without_runtime_abuse": true,
+        "notes": "User-approved third-party vault utility integration profile."
+      }
+    ]
+  },
   "guardian_override": {
     "enabled": true,
     "require_for_vault_export": true,

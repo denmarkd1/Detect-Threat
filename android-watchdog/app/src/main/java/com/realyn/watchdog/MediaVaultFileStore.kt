@@ -4,20 +4,22 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import java.io.File
-import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
 
+data class MediaVaultSecureImage(
+    val item: VaultItem,
+    val bytes: ByteArray
+)
+
 object MediaVaultFileStore {
 
     private const val MAX_IMPORT_BYTES = 25 * 1024 * 1024L
     private const val DAY_MS = 24 * 60 * 60 * 1000L
-    private const val PREVIEW_TTL_MS = 5 * 60 * 1000L
 
     @Throws(IllegalStateException::class)
     fun importFromUri(context: Context, sourceUri: Uri, ownerRole: String): VaultItem {
@@ -94,17 +96,11 @@ object MediaVaultFileStore {
     @Throws(IllegalStateException::class)
     fun openSecureView(context: Context, itemId: String): VaultItem {
         val item = requireActiveItem(context, itemId)
-        val decrypted = readDecryptedBlob(context, item)
-        val previewFile = writePreviewFile(context, item, decrypted)
-        val contentUri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            previewFile
-        )
+        if (!isSecureOpenMimeAllowed(item.mimeType)) {
+            throw IllegalStateException("secure_open_requires_export")
+        }
 
-        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(contentUri, item.mimeType)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val viewIntent = MediaVaultSecureViewActivity.createIntent(context, item.id).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             if (context !is Activity) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -118,6 +114,22 @@ object MediaVaultFileStore {
         }
 
         return MediaVaultIndexStore.touchAccess(context, item.id) ?: item
+    }
+
+    @Throws(IllegalStateException::class)
+    fun loadSecureImageForViewer(context: Context, itemId: String): MediaVaultSecureImage {
+        val item = requireActiveItem(context, itemId)
+        if (!isSecureOpenMimeAllowed(item.mimeType)) {
+            throw IllegalStateException("secure_open_requires_export")
+        }
+        val decrypted = readDecryptedBlob(context, item)
+        if (decrypted.isEmpty()) {
+            throw IllegalStateException("secure_open_empty")
+        }
+        return MediaVaultSecureImage(
+            item = item,
+            bytes = decrypted
+        )
     }
 
     fun markDeleted(context: Context, itemId: String): VaultItem? {
@@ -211,30 +223,13 @@ object MediaVaultFileStore {
         }
     }
 
-    private fun writePreviewFile(context: Context, item: VaultItem, bytes: ByteArray): File {
-        val directory = File(context.cacheDir, WatchdogConfig.MEDIA_VAULT_PREVIEW_DIR).apply { mkdirs() }
-        cleanupOldPreviews(directory)
-        val extension = extensionForMime(item.mimeType)
-        val suffix = if (extension.isBlank()) "" else ".$extension"
-        val file = File(directory, "preview-${item.id.take(12)}-${
-            shortHash(item.id + System.currentTimeMillis())
-        }$suffix")
-        file.writeBytes(bytes)
-        return file
-    }
-
-    private fun cleanupOldPreviews(directory: File) {
-        val cutoff = System.currentTimeMillis() - PREVIEW_TTL_MS
-        directory.listFiles().orEmpty().forEach { file ->
-            if (file.lastModified() < cutoff) {
-                runCatching { file.delete() }
-            }
-        }
-    }
-
     private fun blobFile(context: Context, blobName: String): File {
         val directory = File(context.filesDir, WatchdogConfig.MEDIA_VAULT_STORAGE_DIR).apply { mkdirs() }
         return File(directory, blobName)
+    }
+
+    private fun isSecureOpenMimeAllowed(mimeType: String): Boolean {
+        return mimeType.trim().lowercase(Locale.US).startsWith("image/")
     }
 
     private fun extensionForMime(mimeType: String): String {
@@ -253,13 +248,6 @@ object MediaVaultFileStore {
 
     private fun newItemId(): String {
         return UUID.randomUUID().toString().replace("-", "").take(20)
-    }
-
-    private fun shortHash(value: String): String {
-        return MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-            .take(8)
     }
 
     private fun toIsoUtc(epochMs: Long): String {

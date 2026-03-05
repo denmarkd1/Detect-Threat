@@ -34,26 +34,31 @@ UMBRELLA_LAST_SCAN_PATH = STATE_DIR / "umbrella_last_scan.json"
 UMBRELLA_SCHEMA_VERSION = 1
 
 
-WATCHED_PERMISSIONS = {
-    "android.permission.ACCESS_FINE_LOCATION",
-    "android.permission.ACCESS_COARSE_LOCATION",
+CRITICAL_PERMISSION_SIGNALS = {
     "android.permission.READ_SMS",
     "android.permission.RECEIVE_SMS",
     "android.permission.SEND_SMS",
     "android.permission.READ_CALL_LOG",
     "android.permission.WRITE_CALL_LOG",
-    "android.permission.READ_CONTACTS",
     "android.permission.WRITE_CONTACTS",
-    "android.permission.READ_PHONE_STATE",
-    "android.permission.READ_MEDIA_AUDIO",
-    "android.permission.READ_MEDIA_IMAGES",
-    "android.permission.READ_MEDIA_VIDEO",
-    "android.permission.RECORD_AUDIO",
-    "android.permission.CAMERA",
-    "android.permission.POST_NOTIFICATIONS",
-    "android.permission.BODY_SENSORS",
     "android.permission.QUERY_ALL_PACKAGES",
 }
+
+SENSITIVE_PERMISSION_SIGNALS = CRITICAL_PERMISSION_SIGNALS.union(
+    {
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.BODY_SENSORS",
+    }
+)
 
 SUSPICIOUS_PACKAGE_KEYWORDS = {
     "spy",
@@ -343,11 +348,15 @@ def collect_snapshot(serial: str = "") -> Dict[str, object]:
     granted_perms = parse_granted_permissions_from_dumpsys(perms_dump)
 
     high_risk_permissions: Dict[str, List[str]] = {}
+    sensitive_permissions: Dict[str, List[str]] = {}
     for pkg in third_party_packages:
         pkg_perms = granted_perms.get(pkg, set())
-        risky = sorted(pkg_perms.intersection(WATCHED_PERMISSIONS))
-        if risky:
-            high_risk_permissions[pkg] = risky
+        critical = sorted(pkg_perms.intersection(CRITICAL_PERMISSION_SIGNALS))
+        sensitive = sorted(pkg_perms.intersection(SENSITIVE_PERMISSION_SIGNALS))
+        if critical:
+            high_risk_permissions[pkg] = critical
+        if sensitive:
+            sensitive_permissions[pkg] = sensitive
 
     suspicious_packages = sorted(
         [
@@ -373,15 +382,37 @@ def collect_snapshot(serial: str = "") -> Dict[str, object]:
             "enabled_accessibility_services": len(accessibility),
             "active_device_admin_packages": len(device_admins),
             "packages_with_high_risk_permissions": len(high_risk_permissions),
+            "packages_with_sensitive_permissions": len(sensitive_permissions),
         },
         "third_party_packages": third_party_packages,
         "enabled_accessibility_services": accessibility,
         "active_device_admin_packages": device_admins,
         "security_settings": get_security_settings(serial=selected_serial),
         "high_risk_permissions": high_risk_permissions,
+        "sensitive_permissions": sensitive_permissions,
         "suspicious_named_packages": suspicious_packages,
     }
     return snapshot
+
+
+def normalize_permission_map(payload: object) -> Dict[str, Set[str]]:
+    if not isinstance(payload, dict):
+        return {}
+    normalized: Dict[str, Set[str]] = {}
+    for pkg, permissions in payload.items():
+        package_name = str(pkg).strip()
+        if not package_name:
+            continue
+        if not isinstance(permissions, list):
+            continue
+        cleaned = {
+            permission.strip()
+            for permission in permissions
+            if isinstance(permission, str) and permission.strip()
+        }
+        if cleaned:
+            normalized[package_name] = cleaned
+    return normalized
 
 
 def read_json(path: Path) -> Dict[str, object]:
@@ -489,21 +520,51 @@ def make_alerts(
             )
         )
 
-    baseline_risk = baseline.get("high_risk_permissions", {})
-    current_risk = current.get("high_risk_permissions", {})
-    for pkg, permissions in current_risk.items():
-        old_permissions = set(baseline_risk.get(pkg, []))
-        new_permissions = sorted(set(permissions) - old_permissions)
+    baseline_sensitive = normalize_permission_map(baseline.get("sensitive_permissions", {}))
+    if not baseline_sensitive:
+        baseline_sensitive = normalize_permission_map(baseline.get("high_risk_permissions", {}))
+    current_sensitive = normalize_permission_map(current.get("sensitive_permissions", {}))
+    if not current_sensitive:
+        current_sensitive = normalize_permission_map(current.get("high_risk_permissions", {}))
+
+    for pkg, permissions in sorted(current_sensitive.items()):
+        old_permissions = baseline_sensitive.get(pkg, set())
+        new_permissions = sorted(permissions - old_permissions)
         if not new_permissions:
             continue
-        severity = "high" if pkg in added else "medium"
-        alerts.append(
-            Alert(
-                severity=severity,
-                title=f"High-risk permissions newly observed: {pkg}",
-                details="\n".join(f"- {perm}" for perm in new_permissions),
-            )
+        critical_new = sorted(
+            permission for permission in new_permissions if permission in CRITICAL_PERMISSION_SIGNALS
         )
+        sensitive_new = sorted(
+            permission
+            for permission in new_permissions
+            if permission in SENSITIVE_PERMISSION_SIGNALS and permission not in critical_new
+        )
+
+        if critical_new:
+            severity = "high" if pkg in added else "medium"
+            details = [f"- {perm}" for perm in critical_new]
+            if sensitive_new:
+                details.append("")
+                details.append("Additional sensitive permissions:")
+                details.extend(f"- {perm}" for perm in sensitive_new)
+            alerts.append(
+                Alert(
+                    severity=severity,
+                    title=f"Critical permissions newly observed: {pkg}",
+                    details="\n".join(details),
+                )
+            )
+            continue
+
+        if sensitive_new:
+            alerts.append(
+                Alert(
+                    severity="low",
+                    title=f"Sensitive permissions newly observed: {pkg}",
+                    details="\n".join(f"- {perm}" for perm in sensitive_new),
+                )
+            )
 
     return alerts
 

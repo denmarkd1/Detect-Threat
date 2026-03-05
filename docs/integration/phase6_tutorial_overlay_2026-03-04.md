@@ -1,6 +1,6 @@
 # Phase 6 - Embedded Tutorial Overlay
 
-Date: 2026-03-04  
+Date: 2026-03-05  
 APK surface: `android-watchdog` home dashboard (`MainActivity`)
 
 ## Goal
@@ -8,7 +8,7 @@ APK surface: `android-watchdog` home dashboard (`MainActivity`)
 Provide an in-app onboarding layer that highlights critical widgets/buttons and supports two learning styles:
 
 1. Guided walkthrough (Next/Back flow).
-2. Learn-by-doing (user must tap highlighted control before advancing).
+2. Learn-by-doing (tap-required on interactive steps, with informational steps for sub-window context).
 
 ## Implementation summary
 
@@ -21,29 +21,31 @@ Provide an in-app onboarding layer that highlights critical widgets/buttons and 
 ## ADHD-friendly behavior
 
 - Short, plain-language hint line per step.
-- Learn-by-doing mode disables Next until the highlighted control is tapped.
+- Learn-by-doing mode disables Next on tap-required steps, while informational sub-window steps can advance without extra taps.
 - High-contrast spotlight and pulse animation for visual focus.
 - Close anytime from tutorial card (`Close`).
 
 ## Covered controls/features
 
-Tutorial currently covers these home controls:
+Tutorial now covers both:
 
-1. Sweep control
-2. Threats widget
-3. Credentials widget
-4. Services widget
-5. Plan and billing button
-6. Guardian settings button
-7. Home Risk widget (page 2)
-8. VPN guard widget (page 2)
-9. Digital key guardrails widget (page 2)
-10. Timeline/report widget (page 2)
-11. Lion quick navigation button
-12. Bottom nav Scan
-13. Bottom nav Guard
-14. Bottom nav Vault
-15. Bottom nav Support
+1. Home controls (widgets, nav buttons, plan, settings, lion button).
+2. Destination sub-windows those controls open, including key options/actions in each window.
+
+Coverage includes these destination windows:
+
+1. Sweep workflow summary
+2. Threat triage dialog flow
+3. Credential Defense Center
+4. Security Details summary dialog
+5. Plan and billing dialog
+6. Guardian Settings routes (tutorial, billing, AI, language, locator, Home Risk setup, VPN setup, credential center)
+7. Home Risk status/setup windows
+8. VPN status/setup windows
+9. Digital Key guardrails/setup guidance windows
+10. Timeline/report dialog actions
+11. Lion quick-navigation menu actions
+12. Bottom-nav page 2 route map (Home Risk, VPN, Digital Key, Timeline)
 
 ## Completion behavior
 
