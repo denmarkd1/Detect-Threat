@@ -95,53 +95,50 @@ object IncidentStore {
 
         alerts.forEach { alert ->
             val incidentId = incidentIdFor(alert)
-            val existing = byId[incidentId]
-
-            if (existing == null) {
-                val created = IncidentRecord(
-                    incidentId = incidentId,
-                    severity = alert.severity,
-                    title = alert.title,
-                    details = alert.details,
-                    status = IncidentStatus.OPEN,
-                    occurrenceCount = 1,
-                    firstSeenAtEpochMs = scanTime,
-                    lastSeenAtEpochMs = scanTime,
-                    statusUpdatedAtEpochMs = scanTime
-                )
-                byId[incidentId] = created
-                appendEvent(
-                    context = context,
-                    timestampEpochMs = scanTime,
-                    incident = created,
-                    eventType = "incident_created",
-                    fromStatus = null,
-                    toStatus = IncidentStatus.OPEN
-                )
-            } else {
-                val reopened = existing.status == IncidentStatus.RESOLVED
-                val updated = existing.copy(
-                    details = if (alert.details.isBlank()) existing.details else alert.details,
-                    occurrenceCount = existing.occurrenceCount + 1,
-                    lastSeenAtEpochMs = scanTime,
-                    status = if (reopened) IncidentStatus.OPEN else existing.status,
-                    statusUpdatedAtEpochMs = if (reopened) scanTime else existing.statusUpdatedAtEpochMs
-                )
-                byId[incidentId] = updated
-
-                if (reopened) {
-                    appendEvent(
-                        context = context,
-                        timestampEpochMs = scanTime,
-                        incident = updated,
-                        eventType = "incident_reopened_on_signal",
-                        fromStatus = IncidentStatus.RESOLVED,
-                        toStatus = IncidentStatus.OPEN
-                    )
-                }
-            }
+            upsertIncident(
+                context = context,
+                byId = byId,
+                incidentId = incidentId,
+                severity = alert.severity,
+                title = alert.title,
+                details = alert.details,
+                seenAtEpochMs = scanTime,
+                createEventType = "incident_created"
+            )
         }
 
+        saveInternal(context, sortForStorage(byId.values.toList()))
+    }
+
+    @Synchronized
+    fun syncFromDeepScan(context: Context, result: DeepScanResult) {
+        val scanTime = result.scannedAtEpochMs
+        val findings = result.findings.filter { it.severity != Severity.INFO }
+        if (findings.isEmpty()) {
+            return
+        }
+
+        val byId = loadInternal(context).associateBy { it.incidentId }.toMutableMap()
+        findings.forEach { finding ->
+            val incidentId = incidentIdForDeepFinding(finding)
+            val details = buildString {
+                append("Module: ${finding.module.label} | Score: ${finding.score}")
+                if (finding.details.isNotBlank()) {
+                    append("\n")
+                    append(finding.details.trim())
+                }
+            }
+            upsertIncident(
+                context = context,
+                byId = byId,
+                incidentId = incidentId,
+                severity = finding.severity,
+                title = finding.title,
+                details = details,
+                seenAtEpochMs = scanTime,
+                createEventType = "deep_incident_created"
+            )
+        }
         saveInternal(context, sortForStorage(byId.values.toList()))
     }
 
@@ -155,7 +152,8 @@ object IncidentStore {
         val incidents = loadInternal(context)
         val target = incidents
             .filter { it.status == IncidentStatus.OPEN }
-            .maxByOrNull { it.lastSeenAtEpochMs }
+            .sortedWith(workPriorityComparator())
+            .firstOrNull()
             ?: return null
 
         return updateStatus(context, incidents, target.incidentId, IncidentStatus.IN_PROGRESS)
@@ -166,14 +164,36 @@ object IncidentStore {
         val incidents = loadInternal(context)
         val inProgress = incidents
             .filter { it.status == IncidentStatus.IN_PROGRESS }
-            .maxByOrNull { it.lastSeenAtEpochMs }
+            .sortedWith(workPriorityComparator())
+            .firstOrNull()
 
         val target = inProgress ?: incidents
             .filter { it.status == IncidentStatus.OPEN }
-            .maxByOrNull { it.lastSeenAtEpochMs }
+            .sortedWith(workPriorityComparator())
+            .firstOrNull()
             ?: return null
 
         return updateStatus(context, incidents, target.incidentId, IncidentStatus.RESOLVED)
+    }
+
+    @Synchronized
+    fun nextUnresolvedForWork(context: Context): IncidentRecord? {
+        return loadInternal(context)
+            .filter { it.status == IncidentStatus.OPEN || it.status == IncidentStatus.IN_PROGRESS }
+            .sortedWith(workPriorityComparator())
+            .firstOrNull()
+    }
+
+    @Synchronized
+    fun markInProgress(context: Context, incidentId: String): IncidentRecord? {
+        val incidents = loadInternal(context)
+        return updateStatus(context, incidents, incidentId, IncidentStatus.IN_PROGRESS)
+    }
+
+    @Synchronized
+    fun markResolved(context: Context, incidentId: String): IncidentRecord? {
+        val incidents = loadInternal(context)
+        return updateStatus(context, incidents, incidentId, IncidentStatus.RESOLVED)
     }
 
     @Synchronized
@@ -254,6 +274,65 @@ object IncidentStore {
         return incident
     }
 
+    private fun upsertIncident(
+        context: Context,
+        byId: MutableMap<String, IncidentRecord>,
+        incidentId: String,
+        severity: Severity,
+        title: String,
+        details: String,
+        seenAtEpochMs: Long,
+        createEventType: String
+    ) {
+        val existing = byId[incidentId]
+        if (existing == null) {
+            val created = IncidentRecord(
+                incidentId = incidentId,
+                severity = severity,
+                title = title,
+                details = details,
+                status = IncidentStatus.OPEN,
+                occurrenceCount = 1,
+                firstSeenAtEpochMs = seenAtEpochMs,
+                lastSeenAtEpochMs = seenAtEpochMs,
+                statusUpdatedAtEpochMs = seenAtEpochMs
+            )
+            byId[incidentId] = created
+            appendEvent(
+                context = context,
+                timestampEpochMs = seenAtEpochMs,
+                incident = created,
+                eventType = createEventType,
+                fromStatus = null,
+                toStatus = IncidentStatus.OPEN
+            )
+            return
+        }
+
+        val reopened = existing.status == IncidentStatus.RESOLVED
+        val updated = existing.copy(
+            severity = severity,
+            title = title.ifBlank { existing.title },
+            details = if (details.isBlank()) existing.details else details,
+            occurrenceCount = existing.occurrenceCount + 1,
+            lastSeenAtEpochMs = seenAtEpochMs,
+            status = if (reopened) IncidentStatus.OPEN else existing.status,
+            statusUpdatedAtEpochMs = if (reopened) seenAtEpochMs else existing.statusUpdatedAtEpochMs
+        )
+        byId[incidentId] = updated
+
+        if (reopened) {
+            appendEvent(
+                context = context,
+                timestampEpochMs = seenAtEpochMs,
+                incident = updated,
+                eventType = "incident_reopened_on_signal",
+                fromStatus = IncidentStatus.RESOLVED,
+                toStatus = IncidentStatus.OPEN
+            )
+        }
+    }
+
     private fun loadInternal(context: Context): List<IncidentRecord> {
         val file = stateFile(context)
         if (!file.exists()) {
@@ -314,6 +393,21 @@ object IncidentStore {
         return digest.joinToString("") { "%02x".format(it) }.take(20)
     }
 
+    private fun incidentIdForDeepFinding(finding: DeepScanFinding): String {
+        val raw = buildString {
+            append("deep|")
+            append(finding.module.id)
+            append("|")
+            append(finding.severity)
+            append("|")
+            append(finding.title.trim())
+            append("|")
+            append(finding.details.trim())
+        }
+        val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }.take(20)
+    }
+
     private fun sortForStorage(incidents: List<IncidentRecord>): List<IncidentRecord> {
         return incidents.sortedByDescending { it.lastSeenAtEpochMs }
     }
@@ -321,8 +415,15 @@ object IncidentStore {
     private fun sortForDisplay(incidents: List<IncidentRecord>): List<IncidentRecord> {
         return incidents.sortedWith(
             compareBy<IncidentRecord> { statusOrder(it.status) }
+                .thenByDescending { severityRank(it.severity) }
                 .thenByDescending { it.lastSeenAtEpochMs }
         )
+    }
+
+    private fun workPriorityComparator(): Comparator<IncidentRecord> {
+        return compareByDescending<IncidentRecord> { severityRank(it.severity) }
+            .thenBy { statusWorkOrder(it.status) }
+            .thenByDescending { it.lastSeenAtEpochMs }
     }
 
     private fun statusOrder(status: IncidentStatus): Int {
@@ -330,6 +431,23 @@ object IncidentStore {
             IncidentStatus.OPEN -> 0
             IncidentStatus.IN_PROGRESS -> 1
             IncidentStatus.RESOLVED -> 2
+        }
+    }
+
+    private fun statusWorkOrder(status: IncidentStatus): Int {
+        return when (status) {
+            IncidentStatus.IN_PROGRESS -> 0
+            IncidentStatus.OPEN -> 1
+            IncidentStatus.RESOLVED -> 2
+        }
+    }
+
+    private fun severityRank(severity: Severity): Int {
+        return when (severity) {
+            Severity.HIGH -> 4
+            Severity.MEDIUM -> 3
+            Severity.LOW -> 2
+            Severity.INFO -> 1
         }
     }
 

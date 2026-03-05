@@ -1887,6 +1887,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     )
                 }
+                withContext(Dispatchers.IO) {
+                    IncidentStore.syncFromDeepScan(this@MainActivity, deepResult)
+                }
                 updateLionProcessingCheckpoint(0.82f, getString(R.string.scan_stage_deep_complete))
                 if (selection.includeWifiPostureSweep) {
                     updateLionProcessingCheckpoint(0.85f, getString(R.string.scan_stage_wifi_running))

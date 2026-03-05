@@ -1,0 +1,26 @@
+{
+  "timestamp_utc": "20260304T231659Z",
+  "action": "mcp_memory_contamination_relocation_plan",
+  "source_scope": "global_mcp_graph",
+  "target_workspace": "/home/danicous/security",
+  "entity_names": [
+    "security_workspace",
+    "DT Guardian Lion Hero Styling",
+    "security-workspace-mcp-harmony-2026-02-24",
+    "GuardianSettingsPreviewClipping",
+    "android-watchdog-home-intro-choreography-2026-02-24",
+    "security-zen-precommit-timeout-remediation-2026-02-25",
+    "security-workspace-home-danicous-security",
+    "security",
+    "security_phase6_launch_readiness_2026_03_04",
+    "security_phase6_masvs_report_20260304T102443Z",
+    "security_phase6_lyra_report_20260304T102544Z",
+    "security_phase6_play_submission_guide_20260304",
+    "security_phase6_tutorial_overlay_20260304",
+    "security_memory_sync_20260304T103214Z",
+    "security_memory_contamination_cleanup_20260304T105218Z",
+    "security_legacy_realyn_phone_merge_20260220",
+    "security_memory_cleanup_correction_20260304T105423Z"
+  ],
+  "reason": "Entities are security-scoped and unrelated to EA_System / Dark_Coder DT upgrade work."
+}

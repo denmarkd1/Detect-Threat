@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -119,16 +120,7 @@ class ScanResultsActivity : AppCompatActivity() {
         renderMaintenanceActions(maintenancePayload)
 
         binding.scanResultsStartIncidentButton.setOnClickListener {
-            val moved = IncidentStore.markNextOpenInProgress(this)
-            if (moved != null) {
-                Toast.makeText(
-                    this,
-                    getString(R.string.incident_started_template, moved.title),
-                    Toast.LENGTH_SHORT
-                ).show()
-            } else {
-                Toast.makeText(this, getString(R.string.incident_no_open), Toast.LENGTH_SHORT).show()
-            }
+            startIncidentGuidanceFlow()
         }
         binding.scanResultsOpenCredentialButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
@@ -187,6 +179,253 @@ class ScanResultsActivity : AppCompatActivity() {
 
     private fun formatDisplayTime(epochMs: Long): String {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(epochMs))
+    }
+
+    private data class IncidentGuidance(
+        val quickActionLabelResId: Int,
+        val quickActionIntent: Intent,
+        val quickActionAuditTag: String,
+        val steps: List<String>
+    )
+
+    private fun startIncidentGuidanceFlow() {
+        val next = IncidentStore.nextUnresolvedForWork(this)
+        if (next == null) {
+            Toast.makeText(this, getString(R.string.incident_no_open), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val active = if (next.status == IncidentStatus.OPEN) {
+            IncidentStore.markInProgress(this, next.incidentId) ?: next
+        } else {
+            next
+        }
+        showIncidentGuidanceDialog(active)
+    }
+
+    private fun showIncidentGuidanceDialog(incident: IncidentRecord) {
+        val unresolved = IncidentStore.loadIncidents(this)
+            .filter { it.status == IncidentStatus.OPEN || it.status == IncidentStatus.IN_PROGRESS }
+        val highRemaining = unresolved.count { it.severity == Severity.HIGH }
+        val mediumRemaining = unresolved.count { it.severity == Severity.MEDIUM }
+        val lowRemaining = unresolved.count { it.severity == Severity.LOW }
+        val guidance = buildIncidentGuidance(incident)
+        val detailsPreview = incident.details
+            .trim()
+            .replace("\r", "")
+            .ifBlank { getString(R.string.incident_guidance_details_unavailable) }
+            .let { value ->
+                if (value.length <= 420) value else "${value.take(417)}..."
+            }
+        val message = buildString {
+            appendLine(
+                getString(
+                    R.string.incident_guidance_queue_template,
+                    highRemaining,
+                    mediumRemaining,
+                    lowRemaining
+                )
+            )
+            appendLine()
+            appendLine(
+                getString(
+                    R.string.incident_guidance_incident_header_template,
+                    incident.severity.name,
+                    incident.title
+                )
+            )
+            appendLine(detailsPreview)
+            appendLine()
+            appendLine(getString(R.string.incident_guidance_steps_title))
+            guidance.steps.forEachIndexed { index, step ->
+                appendLine("${index + 1}. $step")
+            }
+        }.trim()
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_guidance_dialog_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.incident_guidance_mark_fixed_next) { _, _ ->
+                val resolved = IncidentStore.markResolved(this, incident.incidentId)
+                if (resolved == null) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.incident_no_active),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setPositiveButton
+                }
+                val remaining = IncidentStore.nextUnresolvedForWork(this)
+                if (remaining == null) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.incident_guidance_queue_complete),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+                val candidate = if (remaining.status == IncidentStatus.OPEN) {
+                    IncidentStore.markInProgress(this, remaining.incidentId) ?: remaining
+                } else {
+                    remaining
+                }
+                showIncidentGuidanceDialog(candidate)
+            }
+            .setNeutralButton(guidance.quickActionLabelResId) { _, _ ->
+                val opened = runCatching {
+                    startActivity(guidance.quickActionIntent)
+                    true
+                }.getOrDefault(false)
+                if (!opened) {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.incident_guidance_open_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setNeutralButton
+                }
+                SafeHygieneToolkit.logMaintenanceAction(
+                    context = this,
+                    action = guidance.quickActionAuditTag,
+                    detail = JSONObject()
+                        .put("incidentId", incident.incidentId)
+                        .put("severity", incident.severity.name)
+                        .put("title", incident.title.take(120))
+                )
+            }
+            .setNegativeButton(R.string.scan_results_cancel, null)
+            .create()
+        showStyledDialog(dialog)
+    }
+
+    private fun buildIncidentGuidance(incident: IncidentRecord): IncidentGuidance {
+        val lower = "${incident.title}\n${incident.details}".lowercase(Locale.US)
+        val packageName = Regex("""(?im)package:\s*([a-zA-Z0-9._]+)""")
+            .find(incident.details)
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
+        val path = Regex("""(?im)path:\s*([^\n]+)""")
+            .find(incident.details)
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
+        if (lower.contains("accessibility")) {
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.incident_guidance_open_accessibility,
+                quickActionIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                quickActionAuditTag = "incident_guidance_open_accessibility",
+                steps = listOf(
+                    "Open Android Accessibility settings.",
+                    "Locate the suspicious service and disable it.",
+                    "If tied to an unknown app, uninstall that app from App settings.",
+                    "Run a deep scan again and mark this incident fixed only if it no longer appears."
+                )
+            )
+        }
+        if (lower.contains("device-admin") || lower.contains("device admin")) {
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.incident_guidance_open_security,
+                quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
+                quickActionAuditTag = "incident_guidance_open_security",
+                steps = listOf(
+                    "Open Android Security settings.",
+                    "Review device-admin apps and remove admin rights from unknown apps.",
+                    "Uninstall any app that should not have admin control.",
+                    "Run a deep scan again and mark this incident fixed when the signal is gone."
+                )
+            )
+        }
+        if (lower.contains("overlay")) {
+            val overlayIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && packageName.isNotBlank()) {
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+            } else {
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            }
+            val packageNote = if (packageName.isBlank()) {
+                "Review apps with overlay permission and disable any app you do not trust."
+            } else {
+                "Focus on package $packageName and remove overlay permission if not required."
+            }
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.incident_guidance_open_overlay,
+                quickActionIntent = overlayIntent,
+                quickActionAuditTag = "incident_guidance_open_overlay",
+                steps = listOf(
+                    "Open overlay permission controls.",
+                    packageNote,
+                    "Uninstall apps that re-enable risky overlays unexpectedly.",
+                    "Run another scan and confirm this incident no longer appears."
+                )
+            )
+        }
+        if (
+            lower.contains("magisk") ||
+            lower.contains("xposed") ||
+            lower.contains("frida") ||
+            lower.contains("su binary") ||
+            lower.contains("root")
+        ) {
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.incident_guidance_open_security,
+                quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
+                quickActionAuditTag = "incident_guidance_open_security",
+                steps = listOf(
+                    "Open Android Security settings and confirm Play Protect is enabled.",
+                    "If this is an expected rooted device, isolate sensitive apps (banking/email) to a clean device.",
+                    "If root tooling is unexpected, remove suspicious root frameworks and unknown modules.",
+                    "Reboot, run deep scan again, then mark fixed when high-risk root signals disappear."
+                )
+            )
+        }
+        if (
+            lower.contains("storage artifact") ||
+            lower.contains("download") ||
+            lower.contains("payload") ||
+            lower.contains("suspicious storage")
+        ) {
+            val pathHint = if (path.isBlank()) {
+                "Use Downloads and file managers to locate suspicious artifacts."
+            } else {
+                "Locate and inspect: $path"
+            }
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.scan_results_open_downloads,
+                quickActionIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS),
+                quickActionAuditTag = "incident_guidance_open_downloads",
+                steps = listOf(
+                    "Open Downloads and recent files.",
+                    pathHint,
+                    "Delete suspicious scripts/binaries/APKs that are not trusted or expected.",
+                    "Run deep scan again and mark fixed once the artifact signal clears."
+                )
+            )
+        }
+        if (lower.contains("wifi")) {
+            return IncidentGuidance(
+                quickActionLabelResId = R.string.incident_guidance_open_wifi,
+                quickActionIntent = Intent(Settings.ACTION_WIFI_SETTINGS),
+                quickActionAuditTag = "incident_guidance_open_wifi",
+                steps = listOf(
+                    "Open Wi-Fi settings and disconnect from risky/open networks.",
+                    "Forget suspicious SSIDs and reconnect only to trusted encrypted networks.",
+                    "Disable auto-join for unknown hotspots.",
+                    "Run posture/deep scan again and mark fixed when the warning is no longer present."
+                )
+            )
+        }
+        return IncidentGuidance(
+            quickActionLabelResId = R.string.incident_guidance_open_security,
+            quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
+            quickActionAuditTag = "incident_guidance_open_security",
+            steps = listOf(
+                "Open Security settings and review related app permissions and protections.",
+                "Remove or disable unknown/high-risk app capabilities tied to this incident.",
+                "Uninstall suspicious apps if remediation is unclear or behavior persists.",
+                "Run scan again and mark fixed when this finding no longer appears."
+            )
+        )
     }
 
     private fun renderMaintenanceActions(payload: MaintenancePayload?) {
