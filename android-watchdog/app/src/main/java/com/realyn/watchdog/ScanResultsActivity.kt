@@ -183,9 +183,24 @@ class ScanResultsActivity : AppCompatActivity() {
 
     private data class IncidentGuidance(
         val quickActionLabelResId: Int,
-        val quickActionIntent: Intent,
+        val quickActionIntents: List<Intent>,
         val quickActionAuditTag: String,
+        val confidence: String,
+        val whyLine: String,
+        val stepSignalMap: List<String>,
         val steps: List<String>
+    )
+
+    private data class IncidentContext(
+        val moduleLabel: String,
+        val score: Int?,
+        val tier: String,
+        val packageName: String,
+        val network: String,
+        val path: String,
+        val finding: String,
+        val recommendation: String,
+        val signals: List<String>
     )
 
     private fun startIncidentGuidanceFlow() {
@@ -235,6 +250,26 @@ class ScanResultsActivity : AppCompatActivity() {
             )
             appendLine(detailsPreview)
             appendLine()
+            appendLine(
+                getString(
+                    R.string.incident_guidance_confidence_template,
+                    guidance.confidence
+                )
+            )
+            appendLine(
+                getString(
+                    R.string.incident_guidance_why_template,
+                    guidance.whyLine
+                )
+            )
+            if (guidance.stepSignalMap.isNotEmpty()) {
+                appendLine()
+                appendLine(getString(R.string.incident_guidance_signal_map_title))
+                guidance.stepSignalMap.forEachIndexed { index, line ->
+                    appendLine("${index + 1}. $line")
+                }
+            }
+            appendLine()
             appendLine(getString(R.string.incident_guidance_steps_title))
             guidance.steps.forEachIndexed { index, step ->
                 appendLine("${index + 1}. $step")
@@ -270,10 +305,12 @@ class ScanResultsActivity : AppCompatActivity() {
                 showIncidentGuidanceDialog(candidate)
             }
             .setNeutralButton(guidance.quickActionLabelResId) { _, _ ->
-                val opened = runCatching {
-                    startActivity(guidance.quickActionIntent)
-                    true
-                }.getOrDefault(false)
+                val opened = guidance.quickActionIntents.any { intent ->
+                    runCatching {
+                        startActivity(intent)
+                        true
+                    }.getOrDefault(false)
+                }
                 if (!opened) {
                     Toast.makeText(
                         this,
@@ -297,135 +334,560 @@ class ScanResultsActivity : AppCompatActivity() {
     }
 
     private fun buildIncidentGuidance(incident: IncidentRecord): IncidentGuidance {
+        val context = parseIncidentContext(incident)
+        val module = context.moduleLabel.lowercase(Locale.US)
+        if (module.contains("startup persistence")) {
+            return buildStartupModuleGuidance(incident, context)
+        }
+        if (module.contains("storage")) {
+            return buildStorageModuleGuidance(incident, context)
+        }
+        if (module.contains("embedded path probe")) {
+            return buildEmbeddedModuleGuidance(incident, context)
+        }
+        if (module.contains("wi-fi posture") || module.contains("wifi posture")) {
+            return buildWifiModuleGuidance(incident, context)
+        }
         val lower = "${incident.title}\n${incident.details}".lowercase(Locale.US)
-        val packageName = Regex("""(?im)package:\s*([a-zA-Z0-9._]+)""")
-            .find(incident.details)
-            ?.groupValues
-            ?.getOrNull(1)
-            .orEmpty()
-        val path = Regex("""(?im)path:\s*([^\n]+)""")
-            .find(incident.details)
-            ?.groupValues
-            ?.getOrNull(1)
-            .orEmpty()
         if (lower.contains("accessibility")) {
             return IncidentGuidance(
                 quickActionLabelResId = R.string.incident_guidance_open_accessibility,
-                quickActionIntent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                quickActionIntents = listOf(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)),
                 quickActionAuditTag = "incident_guidance_open_accessibility",
+                confidence = confidenceLabel(
+                    incident = incident,
+                    moduleDetected = false,
+                    contextualSignals = 2
+                ),
+                whyLine = "Accessibility indicator parsed from incident title/details.",
+                stepSignalMap = listOf(
+                    "Step 1 maps to accessibility-service indicator.",
+                    "Step 2 maps to app-origin containment for the same service.",
+                    "Step 3 verifies the signal clears on re-scan.",
+                    "Step 4 enforces queue progression only after verification."
+                ),
                 steps = listOf(
-                    "Open Android Accessibility settings.",
-                    "Locate the suspicious service and disable it.",
-                    "If tied to an unknown app, uninstall that app from App settings.",
-                    "Run a deep scan again and mark this incident fixed only if it no longer appears."
+                    "Open Settings > Accessibility and disable suspicious services.",
+                    "Open Settings > Apps > See all apps and uninstall unknown tools tied to the service.",
+                    "Re-run deep scan and verify accessibility findings are cleared.",
+                    "Use Mark fixed + next only after the finding no longer returns."
                 )
             )
         }
-        if (lower.contains("device-admin") || lower.contains("device admin")) {
-            return IncidentGuidance(
-                quickActionLabelResId = R.string.incident_guidance_open_security,
-                quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
-                quickActionAuditTag = "incident_guidance_open_security",
-                steps = listOf(
-                    "Open Android Security settings.",
-                    "Review device-admin apps and remove admin rights from unknown apps.",
-                    "Uninstall any app that should not have admin control.",
-                    "Run a deep scan again and mark this incident fixed when the signal is gone."
-                )
-            )
+        return buildCoreGuidance(incident, context)
+    }
+
+    private fun parseIncidentContext(incident: IncidentRecord): IncidentContext {
+        val lines = incident.details
+            .lines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        var moduleLabel = ""
+        var score: Int? = null
+        var tier = ""
+        var packageName = ""
+        var network = ""
+        var path = ""
+        var finding = ""
+        var recommendation = ""
+        val signals = mutableListOf<String>()
+
+        lines.forEach { line ->
+            when {
+                line.startsWith("Module:", ignoreCase = true) -> {
+                    val payload = line.substringAfter(":", "").trim()
+                    moduleLabel = payload.substringBefore("|").trim()
+                    score = Regex("""(?i)\bscore\s*:\s*(\d{1,3})\b""")
+                        .find(payload)
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        ?.toIntOrNull()
+                        ?.coerceIn(0, 100)
+                    tier = Regex("""(?i)\btier\s*:\s*([a-z_]+)\b""")
+                        .find(payload)
+                        ?.groupValues
+                        ?.getOrNull(1)
+                        .orEmpty()
+                }
+                line.startsWith("Package:", ignoreCase = true) -> {
+                    packageName = line.substringAfter(":", "").trim()
+                }
+                line.startsWith("Path:", ignoreCase = true) -> {
+                    path = line.substringAfter(":", "").trim()
+                }
+                line.startsWith("Network:", ignoreCase = true) -> {
+                    network = line.substringAfter(":", "").trim()
+                }
+                line.startsWith("Resolved path:", ignoreCase = true) -> {
+                    path = line.substringAfter(":", "").trim()
+                }
+                line.startsWith("Signals:", ignoreCase = true) -> {
+                    val rawSignals = line.substringAfter(":", "").trim()
+                    val splitSignals = if (rawSignals.contains(";")) {
+                        rawSignals.split(";")
+                    } else {
+                        rawSignals.split(",")
+                    }
+                    splitSignals
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .forEach { signals += it }
+                }
+                line.startsWith("Finding:", ignoreCase = true) -> {
+                    finding = line.substringAfter(":", "").trim()
+                }
+                line.startsWith("Recommendation:", ignoreCase = true) -> {
+                    recommendation = line.substringAfter(":", "").trim()
+                }
+            }
         }
-        if (lower.contains("overlay")) {
-            val overlayIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && packageName.isNotBlank()) {
-                Intent(
+
+        if (packageName.isBlank()) {
+            packageName = Regex("""(?im)package:\s*([a-zA-Z0-9._]+)""")
+                .find(incident.details)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        }
+        if (path.isBlank()) {
+            path = Regex("""(?im)path:\s*([^\n]+)""")
+                .find(incident.details)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        }
+        if (packageName.isBlank()) {
+            packageName = extractPackageFromPath(path)
+        }
+        if (finding.isBlank()) {
+            finding = incident.title
+        }
+        return IncidentContext(
+            moduleLabel = moduleLabel,
+            score = score,
+            tier = tier,
+            packageName = packageName,
+            network = network,
+            path = path,
+            finding = finding,
+            recommendation = recommendation,
+            signals = signals
+        )
+    }
+
+    private fun extractPackageFromPath(path: String): String {
+        val value = path.trim()
+        if (value.isBlank()) {
+            return ""
+        }
+        val candidates = listOf(
+            Regex("""(?i)/android/data/([a-zA-Z0-9._]+)/"""),
+            Regex("""(?i)/android/data/([a-zA-Z0-9._]+)$"""),
+            Regex("""(?i)/data/data/([a-zA-Z0-9._]+)/"""),
+            Regex("""(?i)/data/data/([a-zA-Z0-9._]+)$""")
+        )
+        candidates.forEach { pattern ->
+            val match = pattern.find(value)
+            val pkg = match?.groupValues?.getOrNull(1).orEmpty()
+            if (pkg.contains(".")) {
+                return pkg
+            }
+        }
+        return ""
+    }
+
+    private fun buildStartupModuleGuidance(
+        incident: IncidentRecord,
+        context: IncidentContext
+    ): IncidentGuidance {
+        val packageRef = context.packageName.ifBlank { "flagged app" }
+        val lowerSignals = context.signals.map { it.lowercase(Locale.US) }
+        val hasAccessibility = lowerSignals.any { it.contains("accessibility") } ||
+            incident.title.contains("accessibility", ignoreCase = true)
+        val hasDeviceAdmin = lowerSignals.any { it.contains("device-admin") || it.contains("device admin") } ||
+            incident.title.contains("device-admin", ignoreCase = true)
+        val hasOverlay = lowerSignals.any { it.contains("overlay") } ||
+            incident.title.contains("overlay", ignoreCase = true)
+        val riskyPermissionSignal = lowerSignals.firstOrNull { it.contains("high-risk permissions") }.orEmpty()
+
+        val intents = mutableListOf<Intent>()
+        if (context.packageName.isNotBlank()) {
+            intents += appDetailsIntent(context.packageName)
+        }
+        if (hasAccessibility) {
+            intents += Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        }
+        if (hasOverlay) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && context.packageName.isNotBlank()) {
+                intents += Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
+                    Uri.parse("package:${context.packageName}")
                 )
-            } else {
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                intents += Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
             }
-            val packageNote = if (packageName.isBlank()) {
-                "Review apps with overlay permission and disable any app you do not trust."
-            } else {
-                "Focus on package $packageName and remove overlay permission if not required."
-            }
-            return IncidentGuidance(
-                quickActionLabelResId = R.string.incident_guidance_open_overlay,
-                quickActionIntent = overlayIntent,
-                quickActionAuditTag = "incident_guidance_open_overlay",
-                steps = listOf(
-                    "Open overlay permission controls.",
-                    packageNote,
-                    "Uninstall apps that re-enable risky overlays unexpectedly.",
-                    "Run another scan and confirm this incident no longer appears."
-                )
-            )
         }
-        if (
-            lower.contains("magisk") ||
-            lower.contains("xposed") ||
-            lower.contains("frida") ||
-            lower.contains("su binary") ||
-            lower.contains("root")
-        ) {
-            return IncidentGuidance(
-                quickActionLabelResId = R.string.incident_guidance_open_security,
-                quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
-                quickActionAuditTag = "incident_guidance_open_security",
-                steps = listOf(
-                    "Open Android Security settings and confirm Play Protect is enabled.",
-                    "If this is an expected rooted device, isolate sensitive apps (banking/email) to a clean device.",
-                    "If root tooling is unexpected, remove suspicious root frameworks and unknown modules.",
-                    "Reboot, run deep scan again, then mark fixed when high-risk root signals disappear."
-                )
-            )
+        if (hasDeviceAdmin) {
+            intents += Intent(Settings.ACTION_SECURITY_SETTINGS)
         }
-        if (
-            lower.contains("storage artifact") ||
-            lower.contains("download") ||
-            lower.contains("payload") ||
-            lower.contains("suspicious storage")
-        ) {
-            val pathHint = if (path.isBlank()) {
-                "Use Downloads and file managers to locate suspicious artifacts."
-            } else {
-                "Locate and inspect: $path"
-            }
-            return IncidentGuidance(
-                quickActionLabelResId = R.string.scan_results_open_downloads,
-                quickActionIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS),
-                quickActionAuditTag = "incident_guidance_open_downloads",
-                steps = listOf(
-                    "Open Downloads and recent files.",
-                    pathHint,
-                    "Delete suspicious scripts/binaries/APKs that are not trusted or expected.",
-                    "Run deep scan again and mark fixed once the artifact signal clears."
-                )
-            )
+        if (intents.isEmpty()) {
+            intents += Intent(Settings.ACTION_APPLICATION_SETTINGS)
         }
-        if (lower.contains("wifi")) {
-            return IncidentGuidance(
-                quickActionLabelResId = R.string.incident_guidance_open_wifi,
-                quickActionIntent = Intent(Settings.ACTION_WIFI_SETTINGS),
-                quickActionAuditTag = "incident_guidance_open_wifi",
-                steps = listOf(
-                    "Open Wi-Fi settings and disconnect from risky/open networks.",
-                    "Forget suspicious SSIDs and reconnect only to trusted encrypted networks.",
-                    "Disable auto-join for unknown hotspots.",
-                    "Run posture/deep scan again and mark fixed when the warning is no longer present."
-                )
-            )
+
+        val quickActionLabel = when {
+            context.packageName.isNotBlank() -> R.string.incident_guidance_open_app_settings
+            hasAccessibility -> R.string.incident_guidance_open_accessibility
+            hasOverlay -> R.string.incident_guidance_open_overlay
+            else -> R.string.incident_guidance_open_security
+        }
+        val matchedSignals = buildList {
+            if (hasAccessibility) add("accessibility service component")
+            if (hasDeviceAdmin) add("device-admin receiver")
+            if (hasOverlay) add("overlay permission")
+            if (riskyPermissionSignal.isNotBlank()) add(riskyPermissionSignal)
+            if (isEmpty()) add("startup persistence profile match")
+        }
+        val signalsLine = if (riskyPermissionSignal.isBlank()) {
+            "Review risky permissions for $packageRef and keep only what is required."
+        } else {
+            "Target permission signal: $riskyPermissionSignal"
         }
         return IncidentGuidance(
-            quickActionLabelResId = R.string.incident_guidance_open_security,
-            quickActionIntent = Intent(Settings.ACTION_SECURITY_SETTINGS),
-            quickActionAuditTag = "incident_guidance_open_security",
+            quickActionLabelResId = quickActionLabel,
+            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
+            quickActionAuditTag = "incident_guidance_startup_playbook",
+            confidence = confidenceLabel(
+                incident = incident,
+                moduleDetected = true,
+                contextualSignals = matchedSignals.size
+            ),
+            whyLine = "Parsed startup persistence indicators for $packageRef: ${matchedSignals.joinToString(", ")}.",
+            stepSignalMap = buildList {
+                add("Step 1 targets package context from parsed package/signal metadata.")
+                add("Step 2 is driven by high-risk permission indicators.")
+                add(
+                    if (hasAccessibility) {
+                        "Step 3 is triggered by accessibility-service detection."
+                    } else {
+                        "Step 3 enforces startup/autostart hardening because persistence behavior was detected."
+                    }
+                )
+                add(
+                    if (hasOverlay) {
+                        "Step 4 is triggered by overlay permission signal."
+                    } else {
+                        "Step 4 verifies overlay is not silently enabled for this app."
+                    }
+                )
+                add(
+                    if (hasDeviceAdmin) {
+                        "Step 5 is triggered by device-admin receiver signal."
+                    } else {
+                        "Step 5 provides containment when ownership/source trust is low."
+                    }
+                )
+                add("Step 6 validates closure by rescanning for the same startup signal.")
+            },
             steps = listOf(
-                "Open Security settings and review related app permissions and protections.",
-                "Remove or disable unknown/high-risk app capabilities tied to this incident.",
-                "Uninstall suspicious apps if remediation is unclear or behavior persists.",
-                "Run scan again and mark fixed when this finding no longer appears."
+                "Open Settings > Apps > See all apps > $packageRef.",
+                "Tap Permissions and set unnecessary high-risk permissions to Deny. $signalsLine",
+                if (hasAccessibility) "Open Settings > Accessibility and turn off services linked to $packageRef." else "Review special app access for autostart/background privileges and disable non-essential access.",
+                if (hasOverlay) "Open Settings > Special app access > Display over other apps and disable overlay for $packageRef." else "Verify the app cannot draw over other apps unless explicitly required.",
+                if (hasDeviceAdmin) "Open Settings > Security > Device admin apps and remove admin rights from $packageRef." else "If the app is unknown or unmanaged, uninstall it from Settings > Apps.",
+                "Run deep scan again and move to the next incident only when this startup finding is cleared."
             )
         )
+    }
+
+    private fun buildStorageModuleGuidance(
+        incident: IncidentRecord,
+        context: IncidentContext
+    ): IncidentGuidance {
+        val pathRef = context.path.ifBlank { "recent Downloads/Files entries" }
+        val packageFromPath = context.packageName
+        val lower = "${incident.title}\n${incident.details}".lowercase(Locale.US)
+        val pointsToDownloads = lower.contains("download") || pathRef.lowercase(Locale.US).contains("download")
+        val intents = mutableListOf<Intent>()
+        val quickActionLabel: Int
+        if (packageFromPath.isNotBlank() && pathRef.lowercase(Locale.US).contains("/android/data/")) {
+            quickActionLabel = R.string.incident_guidance_open_app_settings
+            intents += appDetailsIntent(packageFromPath)
+            intents += Intent(Settings.ACTION_APPLICATION_SETTINGS)
+        } else if (pointsToDownloads) {
+            quickActionLabel = R.string.scan_results_open_downloads
+            intents += Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+            intents += storageSettingsIntents()
+        } else {
+            quickActionLabel = R.string.scan_results_open_storage
+            intents += storageSettingsIntents()
+            intents += Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+        }
+        val packageStep = if (packageFromPath.isBlank()) {
+            "If the artifact keeps returning, identify the responsible app and uninstall it from Settings > Apps."
+        } else {
+            "Open Settings > Apps > $packageFromPath and uninstall if suspicious artifacts keep regenerating."
+        }
+        return IncidentGuidance(
+            quickActionLabelResId = quickActionLabel,
+            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
+            quickActionAuditTag = "incident_guidance_storage_playbook",
+            confidence = confidenceLabel(
+                incident = incident,
+                moduleDetected = true,
+                contextualSignals = listOf(pathRef, packageFromPath, context.finding)
+                    .count { it.isNotBlank() }
+            ),
+            whyLine = buildString {
+                append("Parsed storage artifact signal")
+                if (context.finding.isNotBlank()) {
+                    append(": ${context.finding}")
+                }
+                if (pathRef.isNotBlank()) {
+                    append(" | path=$pathRef")
+                }
+            },
+            stepSignalMap = listOf(
+                "Step 1 is driven by parsed artifact path/location.",
+                "Step 2 maps to suspicious extension/keyword signals in storage finding.",
+                "Step 3 removes artifacts associated with the exact storage indicator.",
+                "Step 4 targets source-app containment when artifacts regenerate.",
+                "Step 5 confirms remediation by rerunning deep storage sweep."
+            ),
+            steps = listOf(
+                "Open Downloads/Files and navigate to: $pathRef.",
+                "Inspect suspicious file names, extensions, and signals before opening anything.",
+                "Delete untrusted payloads/scripts/APKs from this location and empty trash/recycle bin.",
+                packageStep,
+                "Run deep scan again and mark fixed only after the storage artifact signal no longer appears."
+            )
+        )
+    }
+
+    private fun buildEmbeddedModuleGuidance(
+        incident: IncidentRecord,
+        context: IncidentContext
+    ): IncidentGuidance {
+        val lower = "${incident.title}\n${incident.details}".lowercase(Locale.US)
+        val hasFrida = lower.contains("frida")
+        val intents = mutableListOf<Intent>()
+        val quickActionLabel: Int
+        if (hasFrida) {
+            quickActionLabel = R.string.incident_guidance_open_developer_options
+            intents += Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            intents += Intent(Settings.ACTION_SECURITY_SETTINGS)
+        } else {
+            quickActionLabel = R.string.incident_guidance_open_security
+            intents += Intent(Settings.ACTION_SECURITY_SETTINGS)
+            intents += Intent(Settings.ACTION_APPLICATION_SETTINGS)
+        }
+        val pathLine = if (context.path.isBlank()) {
+            "Review rooted tool artifacts referenced in the finding details."
+        } else {
+            "Investigate and remove the flagged artifact path if present: ${context.path}"
+        }
+        val fridaStep = if (hasFrida) {
+            "Open Settings > System > Developer options and disable USB debugging/Wireless debugging when not needed."
+        } else {
+            "Verify Unknown app installs are disabled for browsers/file managers in Settings > Security."
+        }
+        return IncidentGuidance(
+            quickActionLabelResId = quickActionLabel,
+            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
+            quickActionAuditTag = "incident_guidance_embedded_playbook",
+            confidence = confidenceLabel(
+                incident = incident,
+                moduleDetected = true,
+                contextualSignals = listOf(context.finding, context.path)
+                    .count { it.isNotBlank() } + if (hasFrida) 1 else 0
+            ),
+            whyLine = buildString {
+                append("Embedded-path/root indicator parsed")
+                if (context.finding.isNotBlank()) {
+                    append(": ${context.finding}")
+                } else {
+                    append(": ${incident.title}")
+                }
+                if (context.path.isNotBlank()) {
+                    append(" | path=${context.path}")
+                }
+            },
+            stepSignalMap = listOf(
+                "Step 1 is triggered by root/instrumentation indicator severity.",
+                if (hasFrida) {
+                    "Step 2 specifically maps to Frida/instrumentation signal."
+                } else {
+                    "Step 2 maps to generic root/injection hardening requirements."
+                },
+                "Step 3 maps to removal of associated toolchain apps.",
+                "Step 4 maps to parsed path artifact inspection/removal.",
+                "Step 5 confirms closure by reboot + deep rescan."
+            ),
+            steps = listOf(
+                "Open Settings > Security and run Play Protect scan immediately.",
+                fridaStep,
+                "Open Settings > Apps and remove unknown root-management/instrumentation apps linked to this signal.",
+                pathLine,
+                "Reboot device, run deep scan again, and only then mark fixed if embedded-path findings clear."
+            )
+        )
+    }
+
+    private fun buildWifiModuleGuidance(
+        incident: IncidentRecord,
+        context: IncidentContext
+    ): IncidentGuidance {
+        val finding = context.finding.ifBlank { incident.title }
+        val recommendation = context.recommendation.ifBlank {
+            "Use trusted WPA2/WPA3 networks before any sensitive account actions."
+        }
+        val networkLabel = buildString {
+            if (context.network.isNotBlank()) {
+                append(context.network)
+            }
+            if (context.tier.isNotBlank() || context.score != null) {
+                if (isNotBlank()) {
+                    append(" | ")
+                }
+                append("tier=${context.tier.ifBlank { "unknown" }} score=${context.score ?: -1}")
+            }
+        }
+        return IncidentGuidance(
+            quickActionLabelResId = R.string.incident_guidance_open_wifi,
+            quickActionIntents = listOf(Intent(Settings.ACTION_WIFI_SETTINGS)),
+            quickActionAuditTag = "incident_guidance_wifi_playbook",
+            confidence = confidenceLabel(
+                incident = incident,
+                moduleDetected = true,
+                contextualSignals = listOf(context.finding, context.recommendation, context.network)
+                    .count { it.isNotBlank() }
+            ),
+            whyLine = buildString {
+                append("Wi-Fi posture finding parsed: $finding")
+                if (context.network.isNotBlank()) {
+                    append(" | network=${context.network}")
+                }
+                if (context.score != null) {
+                    append(" | score=${context.score}")
+                }
+            },
+            stepSignalMap = listOf(
+                "Step 1 opens Wi-Fi controls because finding source is Wi-Fi posture module.",
+                "Step 2 maps to open/weak/captive-network indicators.",
+                "Step 3 maps to repeated-SSID/open-nearby risk controls.",
+                "Step 4 maps to secure-channel requirement before sensitive actions.",
+                "Step 5 validates that the same Wi-Fi finding is cleared on re-scan.",
+                "Step 6 enforces module recommendation generated from posture evaluator."
+            ),
+            steps = listOf(
+                "Open Settings > Network & internet > Wi-Fi.",
+                "Tap current SSID details and disconnect/forget networks that are open, weak, or captive-portal based.",
+                "Disable auto-join for unknown/open hotspots and keep only trusted networks saved.",
+                "Reconnect on a verified WPA2/WPA3 network before credentials, banking, or email actions.",
+                "Re-run Wi-Fi posture scan. Finding: $finding",
+                "Apply recommendation: $recommendation${if (networkLabel.isBlank()) "" else " ($networkLabel)"}"
+            )
+        )
+    }
+
+    private fun buildCoreGuidance(
+        incident: IncidentRecord,
+        context: IncidentContext
+    ): IncidentGuidance {
+        val packageName = if (context.packageName.isBlank()) {
+            Regex("""(?i)new high-risk permissions:\s*([a-zA-Z0-9._]+)""")
+                .find(incident.title)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        } else {
+            context.packageName
+        }
+        val intents = mutableListOf<Intent>()
+        if (packageName.isNotBlank()) {
+            intents += appDetailsIntent(packageName)
+        }
+        intents += Intent(Settings.ACTION_SECURITY_SETTINGS)
+        val quickActionLabel = if (packageName.isNotBlank()) {
+            R.string.incident_guidance_open_app_settings
+        } else {
+            R.string.incident_guidance_open_security
+        }
+        return IncidentGuidance(
+            quickActionLabelResId = quickActionLabel,
+            quickActionIntents = intents.distinctBy { "${it.action}|${it.dataString.orEmpty()}" },
+            quickActionAuditTag = "incident_guidance_core_playbook",
+            confidence = confidenceLabel(
+                incident = incident,
+                moduleDetected = false,
+                contextualSignals = listOf(packageName, context.finding, context.path)
+                    .count { it.isNotBlank() }
+            ),
+            whyLine = buildString {
+                append("Core incident routing matched title/details")
+                if (packageName.isNotBlank()) {
+                    append(" | package=$packageName")
+                }
+                if (context.finding.isNotBlank()) {
+                    append(" | finding=${context.finding}")
+                }
+            },
+            stepSignalMap = listOf(
+                "Step 1 uses parsed package context when available.",
+                "Step 2 maps to high-risk permission/capability indicators.",
+                "Step 3 maps to unresolved trust signals after permission hardening.",
+                "Step 4 verifies remediation by rescanning for the same core finding."
+            ),
+            steps = listOf(
+                if (packageName.isBlank()) {
+                    "Open Settings > Security and review protections related to this finding."
+                } else {
+                    "Open Settings > Apps > $packageName and inspect granted permissions."
+                },
+                "Disable risky capabilities that are not required (SMS, call log, contacts, overlay, admin).",
+                "Uninstall unknown/suspicious apps if behavior persists after permission cleanup.",
+                "Run scan again and mark fixed only when this core finding no longer appears."
+            )
+        )
+    }
+
+    private fun appDetailsIntent(packageName: String): Intent {
+        return Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName")
+        )
+    }
+
+    private fun storageSettingsIntents(): List<Intent> {
+        return listOf(
+            Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_SETTINGS),
+            Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS)
+        )
+    }
+
+    private fun confidenceLabel(
+        incident: IncidentRecord,
+        moduleDetected: Boolean,
+        contextualSignals: Int
+    ): String {
+        var score = 0
+        if (moduleDetected) {
+            score += 50
+        }
+        score += (contextualSignals * 12).coerceAtMost(36)
+        score += when (incident.severity) {
+            Severity.HIGH -> 14
+            Severity.MEDIUM -> 8
+            Severity.LOW -> 4
+            Severity.INFO -> 0
+        }
+        val bounded = score.coerceIn(0, 100)
+        val tier = when {
+            bounded >= 80 -> "high"
+            bounded >= 60 -> "medium"
+            else -> "low"
+        }
+        return "$tier ($bounded/100)"
     }
 
     private fun renderMaintenanceActions(payload: MaintenancePayload?) {

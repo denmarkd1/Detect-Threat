@@ -143,6 +143,30 @@ object IncidentStore {
     }
 
     @Synchronized
+    fun syncFromWifiPosture(context: Context, snapshot: WifiPostureSnapshot) {
+        val seeds = snapshot.findings
+            .mapNotNull { finding -> wifiIncidentSeed(snapshot, finding) }
+        if (seeds.isEmpty()) {
+            return
+        }
+
+        val byId = loadInternal(context).associateBy { it.incidentId }.toMutableMap()
+        seeds.forEach { seed ->
+            upsertIncident(
+                context = context,
+                byId = byId,
+                incidentId = seed.incidentId,
+                severity = seed.severity,
+                title = seed.title,
+                details = seed.details,
+                seenAtEpochMs = snapshot.scannedAtEpochMs,
+                createEventType = "wifi_incident_created"
+            )
+        }
+        saveInternal(context, sortForStorage(byId.values.toList()))
+    }
+
+    @Synchronized
     fun loadIncidents(context: Context): List<IncidentRecord> {
         return sortForDisplay(loadInternal(context))
     }
@@ -405,6 +429,70 @@ object IncidentStore {
             append(finding.details.trim())
         }
         val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }.take(20)
+    }
+
+    private data class IncidentSeed(
+        val incidentId: String,
+        val severity: Severity,
+        val title: String,
+        val details: String
+    )
+
+    private fun wifiIncidentSeed(snapshot: WifiPostureSnapshot, finding: String): IncidentSeed? {
+        val normalizedFinding = finding.trim()
+        if (normalizedFinding.isBlank()) {
+            return null
+        }
+        if (normalizedFinding.contains("stable with no immediate red flags", ignoreCase = true)) {
+            return null
+        }
+        val findingLower = normalizedFinding.lowercase(Locale.US)
+        val (key, severity, title) = when {
+            findingLower.contains("connected wi-fi appears open") ->
+                Triple("wifi_connected_open", Severity.HIGH, "Wi-Fi posture: connected network is open")
+
+            findingLower.contains("connected wi-fi uses weak encryption") ->
+                Triple("wifi_connected_weak", Severity.MEDIUM, "Wi-Fi posture: connected network uses weak encryption")
+
+            findingLower.contains("unable to verify wi-fi encryption posture") ->
+                Triple("wifi_encryption_unknown", Severity.LOW, "Wi-Fi posture: encryption posture could not be verified")
+
+            findingLower.contains("nearby scan found") && findingLower.contains("open network") ->
+                Triple("wifi_nearby_open", Severity.LOW, "Wi-Fi posture: nearby open networks detected")
+
+            findingLower.contains("nearby scan found") && findingLower.contains("weak-encryption network") ->
+                Triple("wifi_nearby_weak", Severity.LOW, "Wi-Fi posture: nearby weak-encryption networks detected")
+
+            findingLower.contains("captive-portal behavior") ->
+                Triple("wifi_captive_portal", Severity.HIGH, "Wi-Fi posture: captive-portal behavior detected")
+
+            findingLower.contains("marked metered") ->
+                Triple("wifi_metered", Severity.LOW, "Wi-Fi posture: current network appears metered/untrusted")
+
+            findingLower.contains("frequent ssid shifts") ->
+                Triple("wifi_ssid_shift", Severity.MEDIUM, "Wi-Fi posture: frequent SSID changes detected")
+
+            else -> Triple("wifi_generic_risk", Severity.LOW, "Wi-Fi posture risk detected")
+        }
+
+        val recommendation = snapshot.recommendations.firstOrNull().orEmpty()
+        val details = listOf(
+            "Module: Wi-Fi posture | Score: ${snapshot.score} | Tier: ${snapshot.tier}",
+            "Network: ${snapshot.ssid.ifBlank { "unknown_ssid" }} (${snapshot.securityType})",
+            "Finding: $normalizedFinding",
+            "Recommendation: ${if (recommendation.isBlank()) "Use a trusted WPA2/WPA3 network for sensitive actions." else recommendation}"
+        ).joinToString("\n")
+        return IncidentSeed(
+            incidentId = incidentIdForWifiKey(key),
+            severity = severity,
+            title = title,
+            details = details
+        )
+    }
+
+    private fun incidentIdForWifiKey(key: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest("wifi|$key".toByteArray())
         return digest.joinToString("") { "%02x".format(it) }.take(20)
     }
 

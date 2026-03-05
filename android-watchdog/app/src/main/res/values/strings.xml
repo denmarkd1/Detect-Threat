@@ -381,10 +381,15 @@
     <string name="incident_guidance_queue_complete">All queued incidents are now marked resolved.</string>
     <string name="incident_guidance_open_failed">Unable to open guided settings on this device.</string>
     <string name="incident_guidance_details_unavailable">No additional details were captured for this incident.</string>
+    <string name="incident_guidance_confidence_template">Confidence: %1$s</string>
+    <string name="incident_guidance_why_template">Why this playbook: %1$s</string>
+    <string name="incident_guidance_signal_map_title">Signal-to-step map</string>
     <string name="incident_guidance_open_accessibility">Open accessibility settings</string>
     <string name="incident_guidance_open_security">Open security settings</string>
     <string name="incident_guidance_open_overlay">Open overlay settings</string>
     <string name="incident_guidance_open_wifi">Open Wi-Fi settings</string>
+    <string name="incident_guidance_open_app_settings">Open app settings</string>
+    <string name="incident_guidance_open_developer_options">Open developer options</string>
 
     <string name="scam_shield_title">Anti-phishing triage</string>
     <string name="scam_shield_loading">Loading anti-phishing status...</string>

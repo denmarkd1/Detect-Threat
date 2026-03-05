@@ -1795,8 +1795,11 @@ class MainActivity : AppCompatActivity() {
             val wifiEnabled = WifiPostureScanner.config(this@MainActivity).enabled
             if (wifiEnabled) {
                 updateLionProcessingCheckpoint(0.74f, getString(R.string.scan_stage_wifi_running))
-                withContext(Dispatchers.Default) {
+                val wifiSnapshot = withContext(Dispatchers.Default) {
                     WifiPostureScanner.runPostureScan(this@MainActivity)
+                }
+                withContext(Dispatchers.IO) {
+                    IncidentStore.syncFromWifiPosture(this@MainActivity, wifiSnapshot)
                 }
                 updateLionProcessingCheckpoint(0.88f, getString(R.string.scan_stage_wifi_complete))
             } else {
@@ -1893,8 +1896,11 @@ class MainActivity : AppCompatActivity() {
                 updateLionProcessingCheckpoint(0.82f, getString(R.string.scan_stage_deep_complete))
                 if (selection.includeWifiPostureSweep) {
                     updateLionProcessingCheckpoint(0.85f, getString(R.string.scan_stage_wifi_running))
-                    withContext(Dispatchers.Default) {
+                    val wifiSnapshot = withContext(Dispatchers.Default) {
                         WifiPostureScanner.runPostureScan(this@MainActivity)
+                    }
+                    withContext(Dispatchers.IO) {
+                        IncidentStore.syncFromWifiPosture(this@MainActivity, wifiSnapshot)
                     }
                     updateLionProcessingCheckpoint(0.89f, getString(R.string.scan_stage_wifi_complete))
                 }
@@ -6183,6 +6189,9 @@ class MainActivity : AppCompatActivity() {
             try {
                 val snapshot = withContext(Dispatchers.Default) {
                     WifiPostureScanner.runPostureScan(this@MainActivity)
+                }
+                withContext(Dispatchers.IO) {
+                    IncidentStore.syncFromWifiPosture(this@MainActivity, snapshot)
                 }
                 latestWifiSnapshot = WifiScanSnapshotStore.latest(this@MainActivity)
                 binding.subStatusLabel.text = getString(R.string.wifi_posture_scan_completed)
