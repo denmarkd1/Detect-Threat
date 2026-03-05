@@ -614,7 +614,7 @@ class ScanResultsActivity : AppCompatActivity() {
                 reversible = true
             )
             if (context.packageName.isNotBlank()) {
-                actions += requestUninstallAction(context.packageName)
+                requestUninstallAction(context.packageName)?.let { actions += it }
             }
             return IncidentGuidance(
                 confidence = confidenceLabel(
@@ -835,7 +835,7 @@ class ScanResultsActivity : AppCompatActivity() {
             reversible = true
         )
         if (context.packageName.isNotBlank() && !suppressUninstallForTrusted) {
-            actions += requestUninstallAction(context.packageName)
+            requestUninstallAction(context.packageName)?.let { actions += it }
         }
         return IncidentGuidance(
             confidence = confidenceLabel(
@@ -935,7 +935,7 @@ class ScanResultsActivity : AppCompatActivity() {
             reversible = true
         )
         if (packageFromPath.isNotBlank()) {
-            actions += requestUninstallAction(packageFromPath)
+            requestUninstallAction(packageFromPath)?.let { actions += it }
         }
         return IncidentGuidance(
             confidence = confidenceLabel(
@@ -1010,7 +1010,7 @@ class ScanResultsActivity : AppCompatActivity() {
             reversible = true
         )
         if (context.packageName.isNotBlank()) {
-            actions += requestUninstallAction(context.packageName)
+            requestUninstallAction(context.packageName)?.let { actions += it }
         }
         return IncidentGuidance(
             confidence = confidenceLabel(
@@ -1122,7 +1122,7 @@ class ScanResultsActivity : AppCompatActivity() {
         incident: IncidentRecord,
         context: IncidentContext
     ): IncidentGuidance {
-        val packageName = if (context.packageName.isBlank()) {
+        val detectedPackageName = if (context.packageName.isBlank()) {
             Regex("""(?i)new high-risk permissions:\s*([a-zA-Z0-9._]+)""")
                 .find(incident.title)
                 ?.groupValues
@@ -1131,6 +1131,7 @@ class ScanResultsActivity : AppCompatActivity() {
         } else {
             context.packageName
         }
+        val packageName = detectedPackageName.takeUnless { isProtectedPackage(it) }.orEmpty()
         val intents = mutableListOf<Intent>()
         if (packageName.isNotBlank()) {
             intents += appDetailsIntent(packageName)
@@ -1153,7 +1154,7 @@ class ScanResultsActivity : AppCompatActivity() {
             reversible = true
         )
         if (packageName.isNotBlank()) {
-            actions += requestUninstallAction(packageName)
+            requestUninstallAction(packageName)?.let { actions += it }
         }
         return IncidentGuidance(
             confidence = confidenceLabel(
@@ -1214,19 +1215,37 @@ class ScanResultsActivity : AppCompatActivity() {
         )
     }
 
-    private fun requestUninstallAction(packageName: String): IncidentAction {
+    private fun requestUninstallAction(packageName: String): IncidentAction? {
+        val normalized = packageName.trim()
+        if (normalized.isBlank() || isProtectedPackage(normalized)) {
+            return null
+        }
         return IncidentAction(
-            actionId = "request_uninstall_${packageName.lowercase(Locale.US)}",
-            title = getString(R.string.incident_assistant_action_request_uninstall, packageName),
+            actionId = "request_uninstall_${normalized.lowercase(Locale.US)}",
+            title = getString(R.string.incident_assistant_action_request_uninstall, normalized),
             impact = "Launch Android uninstall confirmation for this package.",
-            manualInstruction = "Open Settings > Apps > $packageName and uninstall if this app is untrusted.",
+            manualInstruction = "Open Settings > Apps > $normalized and uninstall if this app is untrusted.",
             automatable = true,
             reversible = false,
             destructive = true,
             auditTag = "incident_action_request_uninstall",
             execution = IncidentActionExecution.REQUEST_APP_UNINSTALL,
-            packageName = packageName
+            packageName = normalized
         )
+    }
+
+    private fun isProtectedPackage(packageName: String): Boolean {
+        val normalized = packageName.trim().lowercase(Locale.US)
+        if (normalized.isBlank()) {
+            return false
+        }
+        val protectedRoots = setOf(
+            this.packageName.lowercase(Locale.US),
+            "com.realyn.watchdog"
+        )
+        return protectedRoots.any { root ->
+            normalized == root || normalized.startsWith("$root.")
+        }
     }
 
     private fun appDetailsIntent(packageName: String): Intent {

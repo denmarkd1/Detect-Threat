@@ -27,6 +27,11 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.text.TextUtils
 import android.text.InputType
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
@@ -497,7 +502,7 @@ class MainActivity : AppCompatActivity() {
         pendingGuardianSettingsAction = intent?.getStringExtra(EXTRA_GUARDIAN_SETTINGS_ACTION)
         configureResponsiveHomeLayout()
 
-        binding.oneTimeScanButton.setOnClickListener { runOneTimeScan() }
+        binding.oneTimeScanButton.setOnClickListener { runQuickGuardianSweep() }
         binding.continuousScanButton.setOnClickListener { toggleContinuousMode() }
         binding.refreshButton.setOnClickListener { refreshUiState() }
         binding.supportButton.setOnClickListener { openSupportCenter() }
@@ -514,7 +519,7 @@ class MainActivity : AppCompatActivity() {
         binding.mediaVaultOpenButton.setOnClickListener { openMediaVaultDialog() }
         binding.deviceLocatorOpenButton.setOnClickListener { openDeviceLocatorProvider() }
         binding.deviceLocatorSetupButton.setOnClickListener { openDeviceLocatorSetupDialog() }
-        binding.securityTopActionButton.setOnClickListener { runOneTimeScan() }
+        binding.securityTopActionButton.setOnClickListener { runScanNowDeepCustom() }
         binding.securityActionDetailsButton.setOnClickListener { openSecurityDetailsDialog() }
         binding.advancedControlsToggleButton.setOnClickListener { toggleAdvancedControls() }
         binding.pricingManageButton.setOnClickListener { openPlanSelectionDialog() }
@@ -1066,7 +1071,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun routeHomeDestination(destination: HomeNavDestination) {
         when (destination) {
-            HomeNavDestination.SWEEP -> runOneTimeScan()
+            HomeNavDestination.SWEEP -> runQuickGuardianSweep()
             HomeNavDestination.THREATS -> openPhishingTriageDialog()
             HomeNavDestination.CREDENTIALS -> openCredentialCenter()
             HomeNavDestination.SERVICES -> openSecurityDetailsDialog()
@@ -1077,17 +1082,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun shouldShowSweepNavAction(): Boolean {
+        val signals = if (latestHomeNavSignals.isNotEmpty()) {
+            latestHomeNavSignals
+        } else {
+            buildNavSignalMap()
+        }
+        return signals[HomeNavDestination.SWEEP] == true
+    }
+
     private fun destinationForSlot(pageIndex: Int, slot: NavSlotPosition): HomeNavDestination {
         return if (pageIndex == 0) {
             when (slot) {
-                NavSlotPosition.LEFT_OUTER -> HomeNavDestination.SWEEP
+                NavSlotPosition.LEFT_OUTER -> HomeNavDestination.HOME_RISK
                 NavSlotPosition.LEFT_INNER -> HomeNavDestination.THREATS
                 NavSlotPosition.RIGHT_INNER -> HomeNavDestination.CREDENTIALS
                 NavSlotPosition.RIGHT_OUTER -> HomeNavDestination.SERVICES
             }
         } else {
             when (slot) {
-                NavSlotPosition.LEFT_OUTER -> HomeNavDestination.HOME_RISK
+                NavSlotPosition.LEFT_OUTER -> if (shouldShowSweepNavAction()) {
+                    HomeNavDestination.SWEEP
+                } else {
+                    HomeNavDestination.HOME_RISK
+                }
                 NavSlotPosition.LEFT_INNER -> HomeNavDestination.VPN
                 NavSlotPosition.RIGHT_INNER -> HomeNavDestination.DIGITAL_KEY
                 NavSlotPosition.RIGHT_OUTER -> HomeNavDestination.TIMELINE
@@ -1600,27 +1618,22 @@ class MainActivity : AppCompatActivity() {
         runCatching { reportFullyDrawn() }
     }
 
-    private fun runOneTimeScan() {
+    private fun runScanNowDeepCustom() {
         if (homeIntroAnimating || lionBusyInProgress) {
             return
         }
-        showScanModeDialog()
+        showDeepScanOptionsDialog()
     }
 
-    private fun showScanModeDialog() {
-        val dialog = LionAlertDialogBuilder(this)
-            .setTitle(R.string.scan_mode_dialog_title)
-            .setMessage(R.string.scan_mode_dialog_message)
-            .setPositiveButton(R.string.scan_mode_option_quick) { _, _ ->
-                runHomeFullScan()
-            }
-            .setNeutralButton(R.string.scan_mode_option_deep_custom) { _, _ ->
-                showDeepScanOptionsDialog()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-        dialog.show()
-        LionDialogStyler.applyForActivity(this, dialog)
+    private fun runQuickGuardianSweep() {
+        if (homeIntroAnimating || lionBusyInProgress) {
+            return
+        }
+        runHomeFullScan()
+    }
+
+    private fun runOneTimeScan() {
+        runQuickGuardianSweep()
     }
 
     private fun showDeepScanOptionsDialog() {
@@ -3344,7 +3357,7 @@ class MainActivity : AppCompatActivity() {
                 hintRes = R.string.home_tutorial_step_home_risk_hint,
                 targetViewProvider = { binding.widgetSweepCard },
                 widgetPageIndex = 1,
-                navPageIndex = 1
+                navPageIndex = 0
             ),
             HomeTutorialStep(
                 stepId = "home_risk_window",
@@ -3353,7 +3366,7 @@ class MainActivity : AppCompatActivity() {
                 hintRes = R.string.home_tutorial_step_home_risk_window_hint,
                 targetViewProvider = { binding.widgetSweepCard },
                 widgetPageIndex = 1,
-                navPageIndex = 1,
+                navPageIndex = 0,
                 requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
@@ -3439,7 +3452,7 @@ class MainActivity : AppCompatActivity() {
                 hintRes = R.string.home_tutorial_step_nav_scan_hint,
                 targetViewProvider = { binding.navScanButton },
                 widgetPageIndex = 0,
-                navPageIndex = 0
+                navPageIndex = 1
             ),
             HomeTutorialStep(
                 stepId = "nav_guard",
@@ -8857,32 +8870,88 @@ class MainActivity : AppCompatActivity() {
         val riskCard = latestRiskCards.firstOrNull() ?: toRiskCardModel(state).also {
             latestRiskCards = listOf(it)
         }
-        val actionsBlock = if (state.actions.isEmpty()) {
-            getString(R.string.security_urgent_actions_none)
-        } else {
-            state.actions.mapIndexed { index, action ->
-                "${index + 1}. ${action.label}"
-            }.joinToString("\n")
-        }
-        val detailsBlock = state.details.mapIndexed { index, line ->
-            "${index + 1}. $line"
-        }.joinToString("\n")
+        var detailsDialog: AlertDialog? = null
+        val message = buildSecurityDetailsMessage(
+            state = state,
+            riskCard = riskCard,
+            onActionSelected = { action ->
+                detailsDialog?.dismiss()
+                executeSecurityAction(action.route)
+            }
+        )
 
-        val message = buildString {
-            appendLine(getString(R.string.security_score_template, riskCard.score))
-            appendLine(state.tierLabel)
-            appendLine()
-            appendLine(getString(R.string.security_urgent_actions_title))
-            appendLine(actionsBlock)
-            appendLine()
-            appendLine(detailsBlock)
-        }.trim()
-
-        LionAlertDialogBuilder(this)
+        detailsDialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.security_action_details_title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
             .show()
+
+        detailsDialog.findViewById<TextView>(android.R.id.message)?.apply {
+            linksClickable = true
+            movementMethod = LinkMovementMethod.getInstance()
+            highlightColor = Color.TRANSPARENT
+        }
+    }
+
+    private fun buildSecurityDetailsMessage(
+        state: SecurityHeroState,
+        riskCard: RiskCardModel,
+        onActionSelected: (SecurityHeroAction) -> Unit
+    ): CharSequence {
+        val message = SpannableStringBuilder().apply {
+            appendLine(getString(R.string.security_score_template, riskCard.score))
+            appendLine(state.tierLabel)
+            appendLine()
+            appendLine(getString(R.string.security_urgent_actions_title))
+
+            if (state.actions.isEmpty()) {
+                appendLine(getString(R.string.security_urgent_actions_none))
+            } else {
+                state.actions.forEachIndexed { index, action ->
+                    append("${index + 1}. ")
+                    val linkStart = length
+                    append(action.label)
+                    val linkEnd = length
+                    setSpan(
+                        object : ClickableSpan() {
+                            override fun onClick(widget: View) {
+                                onActionSelected(action)
+                            }
+
+                            override fun updateDrawState(ds: TextPaint) {
+                                super.updateDrawState(ds)
+                                ds.isUnderlineText = true
+                            }
+                        },
+                        linkStart,
+                        linkEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    appendLine()
+                    securityActionGuidance(action.route)?.let { guidance ->
+                        appendLine("   $guidance")
+                    }
+                }
+            }
+
+            appendLine()
+            state.details.forEachIndexed { index, line ->
+                appendLine("${index + 1}. $line")
+            }
+        }
+        while (message.isNotEmpty() && message.last() == '\n') {
+            message.delete(message.length - 1, message.length)
+        }
+        return message
+    }
+
+    private fun securityActionGuidance(route: SecurityActionRoute): String? {
+        return when (route) {
+            SecurityActionRoute.FIX_OVERLAY -> getString(R.string.security_action_guidance_fix_overlay)
+            SecurityActionRoute.OPEN_DEVICE_LOCATOR_SETUP -> getString(R.string.security_action_guidance_setup_locator)
+            SecurityActionRoute.START_INCIDENT -> getString(R.string.security_action_guidance_start_incident)
+            else -> null
+        }
     }
 
     private fun refreshReadinessPanel() {

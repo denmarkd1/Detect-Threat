@@ -35,6 +35,9 @@
     <string name="security_action_setup_locator">Set up locator provider</string>
     <string name="security_action_open_support">Open support guidance</string>
     <string name="security_action_open_credentials">Open credential center</string>
+    <string name="security_action_guidance_fix_overlay">Opens Android overlay settings. Allow display over other apps for Watchdog, then return.</string>
+    <string name="security_action_guidance_setup_locator">Opens locator setup. Pick a provider and link your primary account for faster recovery.</string>
+    <string name="security_action_guidance_start_incident">Starts the next queued incident so you can remediate it immediately.</string>
     <string name="security_detail_notification_missing">Notifications permission still needs action.</string>
     <string name="security_detail_overlay_missing">Overlay permission is currently disabled.</string>
     <string name="security_detail_scan_missing">No recent scan snapshot is available yet.</string>
@@ -131,8 +134,6 @@
     <string name="scan_terminal_complete_full">$ [100%] full guardian sweep complete</string>
     <string name="scan_terminal_complete_deep">$ [100%] deep guardian scan complete</string>
     <string name="scan_terminal_failed">$ [error] scan pipeline failed before completion</string>
-    <string name="scan_mode_dialog_title">Choose scan mode</string>
-    <string name="scan_mode_dialog_message">Quick mode runs core watchdog checks. Deep mode lets you choose extra modules for deeper threat hunting.</string>
     <string name="scan_mode_option_quick">Quick guardian sweep</string>
     <string name="scan_mode_option_deep_custom">Deep scan (custom)</string>
     <string name="deep_scan_options_title">Deep scan modules</string>
@@ -872,12 +873,12 @@
     <string name="home_tutorial_status_target_done">Nice. You triggered this control. Tap Next to continue.</string>
     <string name="home_tutorial_complete_status">Tutorial completed. Reopen it from Lion navigation anytime.</string>
 
-    <string name="home_tutorial_step_sweep_title">Sweep control</string>
-    <string name="home_tutorial_step_sweep_body">This is the fastest entry for a protection sweep and score refresh.</string>
-    <string name="home_tutorial_step_sweep_hint">Use this first when status feels outdated.</string>
-    <string name="home_tutorial_step_sweep_window_title">Sweep workflow options</string>
-    <string name="home_tutorial_step_sweep_window_body">Sweep refreshes score and updates readiness, Wi-Fi posture, threat, and incident panels across home.</string>
-    <string name="home_tutorial_step_sweep_window_hint">Run Sweep before triage windows when status appears stale.</string>
+    <string name="home_tutorial_step_sweep_title">Scan now control</string>
+    <string name="home_tutorial_step_sweep_body">Scan now opens deep scan custom mode so you can choose modules before starting.</string>
+    <string name="home_tutorial_step_sweep_hint">Use this for deeper checks when you need module-level control.</string>
+    <string name="home_tutorial_step_sweep_window_title">Deep scan custom options</string>
+    <string name="home_tutorial_step_sweep_window_body">Select startup persistence, storage artifacts, embedded probes, and Wi-Fi posture modules, then start deep scan.</string>
+    <string name="home_tutorial_step_sweep_window_hint">Use Sweep for fast refresh, and Scan now for custom deep coverage.</string>
     <string name="home_tutorial_step_threats_title">Threats widget</string>
     <string name="home_tutorial_step_threats_body">Threat triage shows suspicious links, app signals, and alert severity.</string>
     <string name="home_tutorial_step_threats_hint">Clear high/medium alerts before moving to lower-priority tasks.</string>
@@ -909,7 +910,7 @@
     <string name="home_tutorial_step_settings_window_body">Inside settings: Run tutorial, Plan and billing, AI connection, Language, Locator setup, Home Risk setup, VPN setup, and Credential Center buttons.</string>
     <string name="home_tutorial_step_settings_window_hint">Use these routes when a module reports setup, rollout, or consent requirements.</string>
     <string name="home_tutorial_step_home_risk_title">Home Risk feature</string>
-    <string name="home_tutorial_step_home_risk_body">Page 2 Home Risk opens connected-home posture status or setup when connector consent is missing.</string>
+    <string name="home_tutorial_step_home_risk_body">Page 1 Home Risk opens connected-home posture status or setup when connector consent is missing.</string>
     <string name="home_tutorial_step_home_risk_hint">Swipe widgets or use guided pages to reach Home Risk quickly.</string>
     <string name="home_tutorial_step_home_risk_window_title">Home Risk windows</string>
     <string name="home_tutorial_step_home_risk_window_body">Home Risk status shows connector score/findings. Setup flow can open SmartThings install/app or route back to settings.</string>
@@ -938,9 +939,9 @@
     <string name="home_tutorial_step_lion_nav_window_title">Lion navigation menu</string>
     <string name="home_tutorial_step_lion_nav_window_body">Lion menu routes to Home Risk, VPN status, Timeline/report, Security details, Guardian settings, and Tutorial overlay.</string>
     <string name="home_tutorial_step_lion_nav_window_hint">Use Lion menu as the fastest cross-window jump on home.</string>
-    <string name="home_tutorial_step_nav_scan_title">Bottom nav: Scan</string>
-    <string name="home_tutorial_step_nav_scan_body">On nav page 1, Scan runs a one-time sweep immediately.</string>
-    <string name="home_tutorial_step_nav_scan_hint">Use this when you need a quick refresh before opening triage windows.</string>
+    <string name="home_tutorial_step_nav_scan_title">Bottom nav: Sweep</string>
+    <string name="home_tutorial_step_nav_scan_body">On nav page 2, Sweep appears when a refresh is needed and runs a quick guardian sweep immediately.</string>
+    <string name="home_tutorial_step_nav_scan_hint">When no sweep is needed, this slot shows Home Risk instead.</string>
     <string name="home_tutorial_step_nav_guard_title">Bottom nav: Guard</string>
     <string name="home_tutorial_step_nav_guard_body">On nav page 1, Guard opens the Threat triage window.</string>
     <string name="home_tutorial_step_nav_guard_hint">Run this when you need immediate phishing/scam risk scoring.</string>
@@ -951,8 +952,8 @@
     <string name="home_tutorial_step_nav_support_body">On nav page 1, Support opens Security Details summary.</string>
     <string name="home_tutorial_step_nav_support_hint">Use this for a fast severity summary and urgent-action snapshot.</string>
     <string name="home_tutorial_step_nav_page2_title">Bottom nav: page 2 routes</string>
-    <string name="home_tutorial_step_nav_page2_body">Swipe nav to page 2 for Home Risk, VPN, Digital Key, and Timeline routes on Scan/Guard/Vault/Support slots.</string>
-    <string name="home_tutorial_step_nav_page2_hint">Use page 2 nav when you want connector posture and policy windows without switching widgets.</string>
+    <string name="home_tutorial_step_nav_page2_body">Swipe nav to page 2 for conditional Sweep, VPN, Digital Key, and Timeline routes on Scan/Guard/Vault/Support slots.</string>
+    <string name="home_tutorial_step_nav_page2_hint">Sweep only appears here when needed; otherwise page 2 starts with Home Risk.</string>
     <string name="home_status_block_template">Device scan: %1$s\nWi-Fi posture: %2$s\nThreat triage: %3$s\nCredential readiness: %4$s</string>
     <string name="home_state_ready">ready</string>
     <string name="home_state_pending">pending</string>

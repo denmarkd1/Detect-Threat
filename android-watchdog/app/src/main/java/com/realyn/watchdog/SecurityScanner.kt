@@ -573,7 +573,9 @@ object SecurityScanner {
             .filter { app ->
                 val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
                 val isUpdatedSystem = (app.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                !isSystem && !isUpdatedSystem
+                !isSystem &&
+                    !isUpdatedSystem &&
+                    app.packageName != context.packageName
             }
             .map { it.packageName }
             .toSet()

@@ -366,6 +366,30 @@
         "suppress_uninstall_action": true,
         "allow_without_runtime_abuse": true,
         "notes": "User-approved third-party vault utility integration profile."
+      },
+      {
+        "package": "com.azure.authenticator",
+        "label": "Microsoft Authenticator",
+        "mode": "integration_observe",
+        "suppress_uninstall_action": true,
+        "allow_without_runtime_abuse": true,
+        "notes": "Family-approved daily authentication app. Keep elevated findings when runtime abuse/corroborating compromise signals exist."
+      },
+      {
+        "package": "com.microsoft.office.outlook",
+        "label": "Microsoft Outlook",
+        "mode": "integration_observe",
+        "suppress_uninstall_action": true,
+        "allow_without_runtime_abuse": true,
+        "notes": "Family-approved daily email app. Keep elevated findings when runtime abuse/corroborating compromise signals exist."
+      },
+      {
+        "package": "ph.com.globe.globeonesuperapp",
+        "label": "GlobeOne",
+        "mode": "integration_observe",
+        "suppress_uninstall_action": true,
+        "allow_without_runtime_abuse": true,
+        "notes": "Family-approved daily carrier app. Keep elevated findings when runtime abuse/corroborating compromise signals exist."
       }
     ]
   },
