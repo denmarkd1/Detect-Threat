@@ -1,6 +1,7 @@
 # Phase 6 - Lyra QA Trainer (Device-Backed)
 
 Date: 2026-03-04
+Last updated: 2026-03-06
 
 ## Purpose
 
@@ -57,6 +58,8 @@ Exit code:
 3. Manually verify scan-results UX split:
    - Open Scan results.
    - Tap `Start incident` and confirm Incident assistant opens as a separate screen.
+   - Confirm `Work on this now` renders app identity for high/medium/low incidents as:
+     compact app icon + bold common app name (when package metadata is available).
    - Confirm both `Apply fix for me` and `Guide me step-by-step` first ask whether to apply recommended best settings.
    - Confirm Apply path can request required Android permission before recommended auto actions.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.

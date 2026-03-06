@@ -102,6 +102,8 @@ Tutorial guidance is now aligned to the latest remediation UX:
 7. Validation notes for QA/tutorial checks
    - Start incident flow from scan results.
    - Confirm `Start incident` opens a separate Incident assistant page (not layered over scan results).
+   - Confirm `Work on this now` shows app identity consistently for high/medium/low incidents:
+     app icon + bold common app name when package metadata is available.
    - Confirm both actions (`Apply fix for me`, `Guide me step-by-step`) first show the `Apply recommended best settings?` decision.
    - Confirm Apply path requests Android permission when required before recommended auto actions.
    - Confirm uninstall remains available as a containment action in the automatic flow for high-risk findings.

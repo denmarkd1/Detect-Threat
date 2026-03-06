@@ -3,13 +3,20 @@ package com.realyn.watchdog
 import android.Manifest
 import android.app.DownloadManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ImageSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -19,6 +26,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -39,6 +47,7 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class ScanResultsActivity : AppCompatActivity() {
 
@@ -501,7 +510,7 @@ class ScanResultsActivity : AppCompatActivity() {
         headerView: TextView,
         bodyView: TextView,
         title: String,
-        body: String,
+        body: CharSequence,
         expandedByDefault: Boolean
     ) {
         var expanded = expandedByDefault
@@ -523,6 +532,73 @@ class ScanResultsActivity : AppCompatActivity() {
             refresh()
         }
         refresh()
+    }
+
+    private fun buildWorkNowSectionBody(
+        incident: IncidentRecord,
+        severityLabel: String
+    ): CharSequence {
+        val baseLine = "$severityLabel risk: ${incident.title}"
+        val appSummary = resolveIncidentAppSummary(incident) ?: return baseLine
+        val styled = SpannableStringBuilder(baseLine)
+        styled.append(" | App: ")
+        val iconStart = styled.length
+        styled.append('\uFFFC')
+        val iconEnd = styled.length
+
+        val iconSizePx = (14f * resources.displayMetrics.density).roundToInt().coerceAtLeast(12)
+        val iconDrawable = appSummary.icon.constantState?.newDrawable()?.mutate()
+            ?: appSummary.icon.mutate()
+        iconDrawable.setBounds(0, 0, iconSizePx, iconSizePx)
+        styled.setSpan(
+            ImageSpan(iconDrawable, ImageSpan.ALIGN_BOTTOM),
+            iconStart,
+            iconEnd,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        styled.append(" ")
+        val labelStart = styled.length
+        styled.append(appSummary.displayName)
+        styled.setSpan(
+            StyleSpan(Typeface.BOLD),
+            labelStart,
+            styled.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        return styled
+    }
+
+    private fun resolveIncidentAppSummary(incident: IncidentRecord): IncidentAppSummary? {
+        val packageName = parseIncidentContext(incident).packageName.trim()
+        if (packageName.isBlank()) {
+            return null
+        }
+        val pm = packageManager
+        val appInfo = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getApplicationInfo(packageName, 0)
+            }
+        }.getOrNull()
+        val displayName = appInfo?.let { info ->
+            runCatching {
+                pm.getApplicationLabel(info).toString().trim().ifBlank { packageName }
+            }.getOrDefault(packageName)
+        } ?: packageName
+        val icon = appInfo?.let { info ->
+            runCatching { pm.getApplicationIcon(info) }.getOrNull()
+        } ?: runCatching { pm.getApplicationIcon(packageName) }.getOrNull()
+            ?: ContextCompat.getDrawable(this, android.R.drawable.sym_def_app_icon)
+            ?: return null
+        return IncidentAppSummary(
+            displayName = displayName,
+            icon = icon
+        )
     }
 
     private fun formatDisplayTime(epochMs: Long): String {
@@ -581,8 +657,13 @@ class ScanResultsActivity : AppCompatActivity() {
 
     private data class CollapsibleSection(
         val title: String,
-        val body: String,
+        val body: CharSequence,
         val expandedByDefault: Boolean = false
+    )
+
+    private data class IncidentAppSummary(
+        val displayName: String,
+        val icon: Drawable
     )
 
     private fun startIncidentGuidanceFlow(): Boolean {
@@ -626,7 +707,10 @@ class ScanResultsActivity : AppCompatActivity() {
         val sectionModels = listOf(
             CollapsibleSection(
                 title = getString(R.string.incident_assistant_section_work_now),
-                body = "$severityLabel risk: ${incident.title}",
+                body = buildWorkNowSectionBody(
+                    incident = incident,
+                    severityLabel = severityLabel
+                ),
                 expandedByDefault = true
             ),
             CollapsibleSection(

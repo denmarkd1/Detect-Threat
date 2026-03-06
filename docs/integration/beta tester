@@ -13,3 +13,5 @@ Manual verification focus for this adjustment:
 8. Tap `Guide me step-by-step` and confirm the same recommended-settings decision appears first.
 9. On Guide path, confirm manual recommended-settings guidance appears before full step-by-step flow.
 10. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.
+11. Verify `Work on this now` uses the same app identity standard for high/medium/low incidents:
+    compact app icon + bold common app name (when package metadata is present).
