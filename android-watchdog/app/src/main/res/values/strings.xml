@@ -439,7 +439,9 @@
     <string name="incident_assistant_recommended_open_settings_now">Open settings now</string>
     <string name="incident_assistant_recommended_overlay_hint_ready">Tip: Use Open with overlay guide for floating, step-by-step instructions while you are in Android Settings.</string>
     <string name="incident_assistant_recommended_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep instructions visible in Android Settings.</string>
+    <string name="incident_assistant_recommended_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">Overlay guide permission was not granted. Opening settings without overlay guidance.</string>
+    <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. If the overlay disappears, follow the listed tap target manually and reopen the overlay guide when you return.</string>
     <string name="incident_assistant_recommended_manual_continue">After this, continue with the full incident step-by-step guide.</string>
     <string name="incident_assistant_tip_auto_template">Tip: %1$d quick action(s) can be opened by the app.</string>
     <string name="incident_assistant_tip_manual">Tip: This incident needs manual steps.</string>
@@ -967,11 +969,11 @@
     <string name="home_tutorial_step_timeline_body">Page 2 Timeline opens guardian events, connector anomalies, accountability, and KPI summary report.</string>
     <string name="home_tutorial_step_timeline_hint">Use export when you need a shareable incident package without raw secrets.</string>
     <string name="home_tutorial_step_timeline_window_title">Timeline window actions</string>
-    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog. From scan results, Start incident now opens Incident assistant on a dedicated screen. In assistant flow, both Apply fix for me and Guide me step-by-step first ask whether to apply recommended best settings. Manual guidance now includes OEM path packs (MIUI/Samsung/Pixel/Generic) and can launch a compact overlay guide.</string>
+    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog. From scan results, Start incident now opens Incident assistant on a dedicated screen. In assistant flow, both Apply fix for me and Guide me step-by-step first ask whether to apply recommended best settings. Manual guidance now includes OEM path packs (MIUI/Samsung/Pixel/Generic), exact permission labels, and a compact overlay guide.</string>
     <string name="home_tutorial_step_timeline_window_hint">Use export for non-secret evidence sharing. In remediation queue, expand only the sections you need (What happened, What to do now, Technical details, Recommended best settings) to reduce overload.</string>
     <string name="home_tutorial_step_incident_assistant_title">Incident assistant screen</string>
     <string name="home_tutorial_step_incident_assistant_body">Incident assistant opens as its own page and uses expandable sections so users can focus only on needed content: Work on this now, Why this needs attention, Choose one option below, and Recommended best settings. Manual flow now shows an OEM-specific path pack and exact tap targets.</string>
-    <string name="home_tutorial_step_incident_assistant_hint">Apply path can request Android permission before recommended auto actions and still offer uninstall for high-risk containment. Open with overlay guide provides a compact one-target-at-a-time helper (Previous/Done this step/Finish guide). Skip for now keeps flow in-place when more incidents exist. Use Back to scan results to return to the scan summary page.</string>
+    <string name="home_tutorial_step_incident_assistant_hint">Apply path can request Android permission before recommended auto actions and still offer uninstall for high-risk containment. Open with overlay guide provides a compact one-target-at-a-time helper (Previous/Done this step/Finish guide); after first-time overlay permission grant, the app re-opens manual guidance so users can start the overlay cleanly. Skip for now keeps flow in-place when more incidents exist. Use Back to scan results to return to the scan summary page.</string>
     <string name="home_tutorial_step_lion_nav_title">Lion quick navigation</string>
     <string name="home_tutorial_step_lion_nav_body">The center lion opens quick links to critical security surfaces and this tutorial.</string>
     <string name="home_tutorial_step_lion_nav_hint">Long-press remains a fast path for Home Risk posture.</string>
@@ -1237,7 +1239,7 @@
     <string name="incident_overlay_step_template">Step %1$d of %2$d</string>
     <string name="incident_overlay_prev">Previous</string>
     <string name="incident_overlay_next">Next</string>
-    <string name="incident_overlay_focus_label">Current target</string>
+    <string name="incident_overlay_focus_label">Current tap target</string>
     <string name="incident_overlay_complete_step">Done this step</string>
     <string name="incident_overlay_finish">Finish guide</string>
     <string name="incident_overlay_done">Done</string>

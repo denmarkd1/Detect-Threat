@@ -91,6 +91,7 @@ class ScanResultsActivity : AppCompatActivity() {
     private var incidentAssistantOnlyMode: Boolean = false
     private var pendingRecommendedPermissionRequest: PendingRecommendedPermissionRequest? = null
     private var pendingIncidentOverlayLaunch: PendingIncidentOverlayLaunch? = null
+    private var incidentOverlaySessionActive: Boolean = false
 
     private val incidentOverlayPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -119,12 +120,16 @@ class ScanResultsActivity : AppCompatActivity() {
                 incident = pending.incident,
                 action = "incident_assistant_overlay_permission_granted"
             )
-            launchRecommendedSettingsWithOverlayOption(
+            Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_recommended_overlay_permission_granted),
+                Toast.LENGTH_LONG
+            ).show()
+            showManualRecommendedSettingsGuideDialog(
                 incident = pending.incident,
                 guidance = pending.guidance,
                 launchActions = pending.launchActions,
-                continueWithContainmentAfterLaunch = pending.continueWithContainmentAfterLaunch,
-                useOverlayGuide = true
+                continueWithContainmentAfterLaunch = pending.continueWithContainmentAfterLaunch
             )
         }
 
@@ -279,8 +284,17 @@ class ScanResultsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        stopIncidentGuideOverlay()
+        if (!Settings.canDrawOverlays(this)) {
+            incidentOverlaySessionActive = false
+        }
         applyScanResultsTheme()
+    }
+
+    override fun onDestroy() {
+        if (isFinishing && incidentOverlaySessionActive) {
+            stopIncidentGuideOverlay()
+        }
+        super.onDestroy()
     }
 
     private fun configureResponsiveLayout() {
@@ -835,7 +849,7 @@ class ScanResultsActivity : AppCompatActivity() {
         when {
             module.contains("startup persistence") -> {
                 recommendations += "Disable Accessibility, overlay, and device-admin access for untrusted apps."
-                recommendations += "Set risky permissions to Deny unless the app cannot function without them."
+                recommendations += "Review Camera, Microphone, Location, Contacts, Phone, SMS, and Files/Media permissions; keep each set to Deny unless the app cannot function without it."
             }
             module.contains("storage") -> {
                 recommendations += "Keep Downloads and shared storage free of unknown installers/scripts."
@@ -1048,6 +1062,11 @@ class ScanResultsActivity : AppCompatActivity() {
                         }
                     )
                 )
+                val caveat = overlayVisibilityCaveatForPack(oemPack)
+                if (caveat != null) {
+                    appendLine()
+                    appendLine(caveat)
+                }
             }
             appendLine()
             append(getString(R.string.incident_assistant_recommended_manual_continue))
@@ -1143,12 +1162,18 @@ class ScanResultsActivity : AppCompatActivity() {
         incident: IncidentRecord,
         guidance: IncidentGuidance
     ) {
+        if (!Settings.canDrawOverlays(this)) {
+            incidentOverlaySessionActive = false
+            Toast.makeText(this, R.string.incident_overlay_permission_required, Toast.LENGTH_SHORT).show()
+            return
+        }
         val steps = buildRecommendedTapTargets(
             incident = incident,
             guidance = guidance,
             oemPack = resolveOemStepPack()
         )
             .ifEmpty { guidance.steps.take(5) }
+        incidentOverlaySessionActive = true
         startService(
             Intent(this, IncidentGuideOverlayService::class.java).apply {
                 action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
@@ -1175,11 +1200,28 @@ class ScanResultsActivity : AppCompatActivity() {
     }
 
     private fun stopIncidentGuideOverlay() {
+        incidentOverlaySessionActive = false
         startService(
             Intent(this, IncidentGuideOverlayService::class.java).apply {
                 action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
             }
         )
+    }
+
+    private fun overlayVisibilityCaveatForPack(oemPack: OemStepPack): String? {
+        return when (oemPack) {
+            OemStepPack.MIUI,
+            OemStepPack.SAMSUNG -> getString(
+                R.string.incident_assistant_recommended_overlay_visibility_caveat,
+                oemStepPackLabel(oemPack)
+            )
+            OemStepPack.PIXEL,
+            OemStepPack.GENERIC -> null
+        }
+    }
+
+    private fun riskyPermissionNamesForGuide(): String {
+        return "\"Camera\", \"Microphone\", \"Location\", \"Contacts\", \"Phone\", \"SMS\", and \"Files/Media\""
     }
 
     private fun startAutoRecommendedSettingsFlow(
@@ -1356,35 +1398,36 @@ class ScanResultsActivity : AppCompatActivity() {
     }
 
     private fun startupTapTargets(oemPack: OemStepPack, packageRef: String): List<String> {
+        val riskyPermissionNames = riskyPermissionNamesForGuide()
         return when (oemPack) {
             OemStepPack.MIUI -> listOf(
-                "Tap \"Permissions\".",
-                "Tap \"Other permissions\" and set risky access to \"Deny\".",
-                "Tap \"Display pop-up windows while running in background\" and set to \"Deny\".",
+                "Tap \"App permissions\" (inside the \"Permissions\" section).",
+                "In \"App permissions\", review $riskyPermissionNames and keep each one at \"Deny\" unless the app breaks without it.",
+                "Go back, tap \"Other permissions\", then set \"Display pop-up windows while running in background\" to \"Deny\".",
                 "Tap \"Autostart\" and switch it Off for $packageRef.",
                 "Open Settings > Privacy protection > Special permissions > Device admin apps, then remove admin access for $packageRef.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.SAMSUNG -> listOf(
-                "Tap \"Permissions\".",
-                "Set risky permissions to \"Don't allow\" unless the app needs them.",
-                "Tap \"Appear on top\" and switch it Off.",
-                "Tap \"Install unknown apps\" and switch it Off.",
+                "Tap \"Permissions\" in App info.",
+                "In \"Permissions\", review $riskyPermissionNames and keep each one at \"Don't allow\" unless the app breaks without it.",
+                "Go back, tap \"Appear on top\", then switch it Off.",
+                "Tap \"Install unknown apps\" and set it to \"Not allowed\".",
                 "Open Settings > Security and privacy > Other security settings > Device admin apps, then disable $packageRef.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.PIXEL -> listOf(
-                "Tap \"Permissions\".",
-                "Set risky permissions to \"Don't allow\" unless the app needs them.",
-                "Tap \"Display over other apps\" and set it to \"Not allowed\".",
+                "Tap \"Permissions\" in App info.",
+                "In \"Permissions\", review $riskyPermissionNames and keep each one at \"Don't allow\" unless the app breaks without it.",
+                "Go back, tap \"Display over other apps\", then set it to \"Not allowed\".",
                 "Tap \"Modify system settings\" and set it to \"Not allowed\".",
                 "Open Settings > Security and privacy > More security settings > Device admin apps, then disable $packageRef.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.GENERIC -> listOf(
-                "Tap \"Permissions\".",
-                "Tap \"App permissions\" and set risky access to \"Deny\".",
-                "Tap \"Display over other apps\" and set it to \"Not allowed\".",
+                "Tap \"Permissions\" or \"App permissions\" in App info.",
+                "Review $riskyPermissionNames and keep each one at \"Deny\" or \"Don't allow\" unless the app breaks without it.",
+                "Go back, tap \"Display over other apps\", then set it to \"Not allowed\".",
                 "If shown, tap \"Device admin apps\" and remove admin access for $packageRef.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
@@ -1467,28 +1510,30 @@ class ScanResultsActivity : AppCompatActivity() {
     }
 
     private fun coreTapTargets(oemPack: OemStepPack, packageRef: String): List<String> {
+        val riskyPermissionNames = riskyPermissionNamesForGuide()
         return when (oemPack) {
             OemStepPack.MIUI -> listOf(
-                "Tap \"Permissions\".",
-                "Tap \"Other permissions\" and set risky access to \"Deny\".",
+                "Tap \"App permissions\" (inside the \"Permissions\" section).",
+                "Review $riskyPermissionNames and keep each one at \"Deny\" unless the app breaks without it.",
+                "Go back and tap \"Other permissions\".",
                 "If shown, tap \"Display pop-up windows\" and set to \"Deny\".",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.SAMSUNG -> listOf(
-                "Tap \"Permissions\".",
-                "Set risky permissions to \"Don't allow\" unless required.",
+                "Tap \"Permissions\" in App info.",
+                "Review $riskyPermissionNames and keep each one at \"Don't allow\" unless the app breaks without it.",
                 "Tap \"Appear on top\" and switch it Off when not required.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.PIXEL -> listOf(
-                "Tap \"Permissions\".",
-                "Set risky permissions to \"Don't allow\" unless required.",
+                "Tap \"Permissions\" in App info.",
+                "Review $riskyPermissionNames and keep each one at \"Don't allow\" unless the app breaks without it.",
                 "Tap \"Display over other apps\" and set to \"Not allowed\" when not required.",
                 "If $packageRef is untrusted, tap \"Uninstall\"."
             )
             OemStepPack.GENERIC -> listOf(
-                "Tap \"Permissions\".",
-                "Review high-risk permissions and set each one to \"Deny\" unless required.",
+                "Tap \"Permissions\" or \"App permissions\" in App info.",
+                "Review $riskyPermissionNames and keep each one at \"Deny\" or \"Don't allow\" unless the app breaks without it.",
                 "If the app is untrusted, tap \"Uninstall\"."
             )
         }
@@ -2109,7 +2154,7 @@ class ScanResultsActivity : AppCompatActivity() {
             if (isEmpty()) add("startup persistence profile match")
         }
         val signalsLine = if (riskyPermissionSignal.isBlank()) {
-            "Review risky permissions for $packageRef and keep only what is required."
+            "Review Camera, Microphone, Location, Contacts, Phone, SMS, and Files/Media permissions for $packageRef and keep only what is required."
         } else {
             "Target permission signal: $riskyPermissionSignal"
         }
@@ -2169,7 +2214,7 @@ class ScanResultsActivity : AppCompatActivity() {
             },
             steps = listOf(
                 "Open Settings > Apps > See all apps > $packageRef.",
-                "Tap Permissions and set unnecessary high-risk permissions to Deny. $signalsLine",
+                "Tap App permissions and review Camera, Microphone, Location, Contacts, Phone, SMS, and Files/Media; set each to Deny unless required. $signalsLine",
                 if (hasAccessibility) "Open Settings > Accessibility and turn off services linked to $packageRef." else "Review special app access for autostart/background privileges and disable non-essential access.",
                 if (hasOverlay) "Open Settings > Special app access > Display over other apps and disable overlay for $packageRef." else "Verify the app cannot draw over other apps unless explicitly required.",
                 if (hasDeviceAdmin) {

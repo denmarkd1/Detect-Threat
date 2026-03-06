@@ -78,6 +78,8 @@ Tutorial guidance is now aligned to the latest remediation UX:
      - After recommended actions, containment actions are still offered, including uninstall for higher-risk findings.
    - `Guide me step-by-step` path:
      - If user accepts recommended settings, app shows manual recommended-settings guidance first.
+     - First-time overlay permission grant now returns to the manual dialog so the user can explicitly choose
+       `Open with overlay guide` again (prevents dead-end flow after permission toggle).
      - Then app continues to the full step-by-step incident guide.
 
 4. Skip behavior clarification
@@ -110,8 +112,14 @@ Tutorial guidance is now aligned to the latest remediation UX:
    - Confirm manual recommended-settings dialog shows `Path pack:` with the detected OEM profile
      (MIUI, Samsung One UI, Google Pixel, or Generic Android).
    - Confirm tap-target list wording matches OEM pack for the active device.
+   - Confirm startup/core tap targets use explicit labels:
+     `App permissions` vs `Permissions` by OEM, and explicit risky permissions
+     (`Camera`, `Microphone`, `Location`, `Contacts`, `Phone`, `SMS`, `Files/Media`).
    - Confirm `Open with overlay guide` appears in manual flow.
-   - If overlay permission is not granted, confirm app requests `display over other apps` and falls back safely if denied.
+   - If overlay permission is not granted, confirm app requests `display over other apps`; after user grants it, confirm
+     the app re-opens manual dialog so user can tap `Open with overlay guide` again.
+   - On Samsung/MIUI, confirm manual dialog warns that some native security/settings screens can temporarily hide overlays.
+     Validate user can still continue via exact tap targets even when overlay is hidden.
    - Confirm compact overlay guide shows one current target at a time with:
      `Previous`, `Done this step`, and `Finish guide`.
    - Confirm compact overlay advances step-by-step and closes cleanly at completion.

@@ -14,7 +14,12 @@ Manual verification focus for this adjustment:
 9. On Guide path, confirm manual recommended-settings guidance appears before full step-by-step flow.
 10. Confirm manual dialog shows `Path pack:` with device-specific wording (MIUI/Samsung One UI/Google Pixel/Generic Android).
 11. Confirm `Open with overlay guide` is shown; if overlay permission is off, verify permission prompt appears.
-12. Confirm compact overlay guide shows one current target at a time with `Previous`, `Done this step`, and `Finish guide`.
-13. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.
-14. Verify `Work on this now` uses the same app identity standard for high/medium/low incidents:
+12. After granting overlay permission the first time, confirm flow returns to the manual dialog and lets user tap `Open with overlay guide` again (no dead-end).
+13. Confirm compact overlay guide shows one current target at a time with `Previous`, `Done this step`, and `Finish guide`; on Samsung/MIUI secure screens, verify fallback still works if overlay is temporarily hidden.
+14. Confirm tap text is explicit for OEM path:
+    - Xiaomi/MIUI uses `App permissions` and `Other permissions`.
+    - Samsung/Pixel uses `Permissions` and special access rows.
+15. Confirm risky permission wording is explicit (`Camera`, `Microphone`, `Location`, `Contacts`, `Phone`, `SMS`, `Files/Media`) instead of generic "risky permissions".
+16. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.
+17. Verify `Work on this now` uses the same app identity standard for high/medium/low incidents:
     compact app icon + bold common app name (when package metadata is present).

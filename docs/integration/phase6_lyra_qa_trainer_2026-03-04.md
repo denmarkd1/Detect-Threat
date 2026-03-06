@@ -66,6 +66,14 @@ Exit code:
    - On manual recommended settings, confirm dialog shows `Path pack:` and device-appropriate OEM wording
      (MIUI/Samsung One UI/Google Pixel/Generic Android).
    - Confirm `Open with overlay guide` is available and requests overlay permission when needed.
+   - After first-time overlay permission grant, confirm flow returns to manual dialog and user can tap
+     `Open with overlay guide` again (no broken handoff).
+   - Confirm tap-target wording is explicit by OEM (`App permissions` vs `Permissions`) and does not use vague
+     "risky permissions" language.
+   - Confirm risky permission list is explicit (`Camera`, `Microphone`, `Location`, `Contacts`, `Phone`, `SMS`,
+     `Files/Media`) in the manual guidance.
+   - On Samsung/MIUI devices, confirm manual dialog warns that some native security/settings surfaces may hide overlays
+     temporarily and verify manual exact-tap fallback remains usable.
    - Confirm compact overlay mode displays one current target at a time and supports:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.

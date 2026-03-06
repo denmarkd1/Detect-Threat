@@ -6,6 +6,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -67,7 +68,7 @@ class IncidentGuideOverlayService : Service() {
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 24, 28, 24)
+            setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
             setBackgroundColor(0xEE2C1806.toInt())
         }
 
@@ -94,9 +95,14 @@ class IncidentGuideOverlayService : Service() {
             val targetButton = Button(this).apply {
                 isAllCaps = false
                 textSize = 16f
-                setPadding(28, 24, 28, 24)
+                setPadding(dpToPx(16), dpToPx(14), dpToPx(16), dpToPx(14))
+                maxLines = 4
+                ellipsize = TextUtils.TruncateAt.END
             }
             val controls = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            val primaryControls = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
             val prevButton = Button(this).apply {
@@ -115,15 +121,24 @@ class IncidentGuideOverlayService : Service() {
             ).apply {
                 marginEnd = 8
             }
-            controls.addView(prevButton, buttonLayout)
-            controls.addView(completeButton, buttonLayout)
-            controls.addView(
-                closeButton,
+            primaryControls.addView(prevButton, buttonLayout)
+            primaryControls.addView(
+                completeButton,
                 LinearLayout.LayoutParams(
                     0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     1f
                 )
+            )
+            controls.addView(primaryControls)
+            controls.addView(
+                closeButton,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx(6)
+                }
             )
 
             fun advanceStep() {
@@ -268,6 +283,12 @@ class IncidentGuideOverlayService : Service() {
     }
 
     private fun createOverlayParams(): WindowManager.LayoutParams {
+        val horizontalMargin = dpToPx(12)
+        val maxOverlayWidth = dpToPx(440)
+        val availableWidth = (resources.displayMetrics.widthPixels - (horizontalMargin * 2)).coerceAtLeast(
+            dpToPx(260)
+        )
+        val overlayWidth = minOf(availableWidth, maxOverlayWidth)
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -275,7 +296,7 @@ class IncidentGuideOverlayService : Service() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
         return WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -283,8 +304,12 @@ class IncidentGuideOverlayService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             x = 0
-            y = 160
+            y = dpToPx(72)
         }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
     }
 
     private fun removeOverlay() {

@@ -143,13 +143,15 @@
     <string name="incident_assistant_recommended_open_settings_now">Abrir ajustes ahora</string>
     <string name="incident_assistant_recommended_overlay_hint_ready">Consejo: usa Abrir con guía flotante para ver instrucciones paso a paso mientras estás en Ajustes de Android.</string>
     <string name="incident_assistant_recommended_overlay_hint_permission">Consejo: usa Abrir con guía flotante para permitir \"mostrar sobre otras apps\" y mantener visibles las instrucciones en Ajustes.</string>
+    <string name="incident_assistant_recommended_overlay_permission_granted">Permiso de guía flotante habilitado. Toca Abrir con guía flotante otra vez para continuar con los toques guiados.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">No se concedió el permiso de guía flotante. Se abrirán los ajustes sin guía superpuesta.</string>
+    <string name="incident_assistant_recommended_overlay_visibility_caveat">Nota: algunas pantallas de seguridad en %1$s ocultan temporalmente la guía flotante. Si desaparece, sigue el toque indicado manualmente y vuelve a abrir la guía al regresar.</string>
     <string name="incident_assistant_recommended_manual_continue">Después de esto, continúa con la guía completa paso a paso del incidente.</string>
     <string name="incident_overlay_title">Guía flotante de incidente</string>
     <string name="incident_overlay_step_template">Paso %1$d de %2$d</string>
     <string name="incident_overlay_prev">Anterior</string>
     <string name="incident_overlay_next">Siguiente</string>
-    <string name="incident_overlay_focus_label">Objetivo actual</string>
+    <string name="incident_overlay_focus_label">Objetivo de toque actual</string>
     <string name="incident_overlay_complete_step">Paso completado</string>
     <string name="incident_overlay_finish">Finalizar guia</string>
     <string name="incident_overlay_done">Listo</string>
