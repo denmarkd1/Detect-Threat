@@ -449,6 +449,11 @@ class QaRunner:
                         "EXTRA_SCREEN_MODE",
                         "SCREEN_MODE_INCIDENT_ASSISTANT",
                         "configureIncidentAssistantOnlyScreen",
+                        "showRecommendedSettingsDecisionDialog",
+                        "startAutoRecommendedSettingsFlow",
+                        "showManualRecommendedSettingsGuideDialog",
+                        "showRecommendedSettingsPermissionDialog",
+                        "continueWithContainmentOrGuidance",
                         "incident_guidance_why_template",
                         "incident_guidance_signal_map_title",
                         "incident_assistant_section_recommended",
@@ -465,9 +470,15 @@ class QaRunner:
                     "must_contain": [
                         "incident_assistant_skip_choice",
                         "incident_assistant_section_recommended",
+                        "incident_assistant_recommended_decision_title",
+                        "incident_assistant_recommended_decision_apply_message",
+                        "incident_assistant_recommended_permission_title",
+                        "incident_assistant_recommended_manual_title",
                         "incident_assistant_screen_subtitle",
                         "incident_assistant_back_to_scan_results",
+                        "home_tutorial_step_timeline_window_body",
                         "home_tutorial_step_incident_assistant_body",
+                        "home_tutorial_step_incident_assistant_hint",
                     ],
                 },
             ],
@@ -514,7 +525,10 @@ class QaRunner:
             errors.append("Memory summaries did not include the false-positive tuning issue.")
         if not any("home scan ux split" in entry for entry in lowered_summaries):
             errors.append("Memory summaries did not include the home scan UX split issue.")
-        if not any("incident assistant ux fixes" in entry for entry in lowered_summaries):
+        if not any(
+            ("incident assistant ux fixes" in entry) or ("recommended best settings" in entry)
+            for entry in lowered_summaries
+        ):
             errors.append("Memory summaries did not include the incident assistant UX fix issue.")
         if not any("startup ux regression" in entry for entry in lowered_summaries):
             errors.append("Memory summaries did not include the startup UX regression issue.")

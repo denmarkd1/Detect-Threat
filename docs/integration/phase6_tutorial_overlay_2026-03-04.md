@@ -62,24 +62,36 @@ Tutorial guidance is now aligned to the latest remediation UX:
    - `Start incident` from scan results now opens Incident assistant on its own screen.
    - Scan summary/details and Incident assistant no longer share one visual scroll surface.
 
-2. Incident assistant action order
+2. Incident assistant action order and decision branch
    - Primary action is `Apply fix for me`.
    - Secondary action is `Guide me step-by-step`.
    - `Skip for now` remains the tertiary action.
    - All three actions now render with the same full-width button treatment.
+   - Both `Apply fix for me` and `Guide me step-by-step` now ask first:
+     `Apply recommended best settings?`
+   - This keeps guidance consistent while allowing users to skip directly when needed.
 
-3. Skip behavior clarification
+3. Recommended best settings flow
+   - `Apply fix for me` path:
+     - If user accepts recommended settings, app attempts non-destructive recommended actions first.
+     - If Android permission is required (for example Wi-Fi posture runtime permissions), app asks for permission before continuing.
+     - After recommended actions, containment actions are still offered, including uninstall for higher-risk findings.
+   - `Guide me step-by-step` path:
+     - If user accepts recommended settings, app shows manual recommended-settings guidance first.
+     - Then app continues to the full step-by-step incident guide.
+
+4. Skip behavior clarification
    - `Skip for now` now advances to the next unresolved incident in-place.
    - It no longer drops users back to the main scan-results page when additional incidents remain.
 
-4. Progressive-disclosure sections in incident assistant
+5. Progressive-disclosure sections in incident assistant
    - `Work on this now`
    - `Why this needs attention`
    - `Choose one option below`
    - `Recommended best settings` (new)
    - Each section expands/collapses on demand so users can focus only on what they need.
 
-5. Progressive-disclosure in scan summary/details card
+6. Progressive-disclosure in scan summary/details card
    - Long report text is now broken into expandable sections:
      - `What happened`
      - `What to do now`
@@ -87,9 +99,13 @@ Tutorial guidance is now aligned to the latest remediation UX:
      - `Detailed findings (optional)`
    - This reduces cognitive load and supports ADHD-friendly flow control.
 
-6. Validation notes for QA/tutorial checks
+7. Validation notes for QA/tutorial checks
    - Start incident flow from scan results.
    - Confirm `Start incident` opens a separate Incident assistant page (not layered over scan results).
+   - Confirm both actions (`Apply fix for me`, `Guide me step-by-step`) first show the `Apply recommended best settings?` decision.
+   - Confirm Apply path requests Android permission when required before recommended auto actions.
+   - Confirm uninstall remains available as a containment action in the automatic flow for high-risk findings.
+   - Confirm Guide path can show manual recommended-settings guidance before full step-by-step flow.
    - Confirm `Skip for now` keeps user in assistant flow and loads next incident.
    - Confirm `Back to scan results` returns to scan results page cleanly.
    - Confirm section toggles open/close correctly in both incident assistant and report card.

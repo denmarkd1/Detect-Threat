@@ -122,6 +122,20 @@
     <string name="incident_assistant_apply_partial_template">Se aplicaron %1$d acción(es), %2$d fallaron. Continúa con la guía.</string>
     <string name="incident_assistant_apply_failed">La remediación automática falló en este dispositivo. Continúa con la guía.</string>
     <string name="incident_assistant_action_request_uninstall">Solicitar desinstalación de %1$s</string>
+    <string name="incident_assistant_recommended_decision_title">¿Aplicar configuración recomendada?</string>
+    <string name="incident_assistant_recommended_decision_apply_message">¿Quieres que la app aplique la configuración recomendada antes de las acciones de contención?</string>
+    <string name="incident_assistant_recommended_decision_guide_message">¿Quieres aplicar ahora la configuración recomendada con guía manual?</string>
+    <string name="incident_assistant_recommended_decision_yes">Sí, usar configuración recomendada</string>
+    <string name="incident_assistant_recommended_decision_no">No, continuar sin eso</string>
+    <string name="incident_assistant_recommended_permission_title">Permiso necesario para la configuración recomendada</string>
+    <string name="incident_assistant_recommended_permission_message">Concede los permisos Android requeridos para autoaplicar la configuración recomendada: %1$s</string>
+    <string name="incident_assistant_recommended_permission_denied">La configuración recomendada requiere permisos. Continuando con pasos guiados.</string>
+    <string name="incident_assistant_recommended_apply_success_template">Se abrieron %1$d acción(es) de configuración recomendada. Continúa con la verificación.</string>
+    <string name="incident_assistant_recommended_apply_partial_template">Se abrieron %1$d acción(es) de configuración recomendada, %2$d fallaron. Continúa con la guía.</string>
+    <string name="incident_assistant_recommended_apply_failed">No se pudo autoaplicar la configuración recomendada en este dispositivo.</string>
+    <string name="incident_assistant_recommended_manual_title">Configuración recomendada manual</string>
+    <string name="incident_assistant_recommended_manual_intro">Aplica manualmente esta configuración recomendada:</string>
+    <string name="incident_assistant_recommended_manual_continue">Después de esto, continúa con la guía completa paso a paso del incidente.</string>
 
     <string name="scam_shield_title">Scam Shield + Triaje de Riesgo</string>
     <string name="scam_shield_loading">Cargando estado de Scam Shield...</string>

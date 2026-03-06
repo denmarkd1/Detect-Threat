@@ -7,4 +7,9 @@ Manual verification focus for this adjustment:
 2. Tap `Start incident`.
 3. Confirm Incident assistant opens as a separate page (not layered over scan-results content).
 4. Confirm `Back to scan results` returns cleanly.
-5. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.
+5. Tap `Apply fix for me` and confirm the app first asks `Apply recommended best settings?`.
+6. On Apply path, confirm recommended auto actions run first and uninstall/containment can still be offered for high-risk incidents.
+7. If prompted, confirm Android permission request appears before recommended auto actions (Wi-Fi posture cases).
+8. Tap `Guide me step-by-step` and confirm the same recommended-settings decision appears first.
+9. On Guide path, confirm manual recommended-settings guidance appears before full step-by-step flow.
+10. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.

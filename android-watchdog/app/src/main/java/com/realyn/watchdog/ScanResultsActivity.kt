@@ -1,5 +1,6 @@
 package com.realyn.watchdog
 
+import android.Manifest
 import android.app.DownloadManager
 import android.content.Intent
 import android.graphics.Color
@@ -13,6 +14,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
@@ -74,6 +76,41 @@ class ScanResultsActivity : AppCompatActivity() {
     private lateinit var binding: ActivityScanResultsBinding
     private var maintenancePayload: MaintenancePayload? = null
     private var incidentAssistantOnlyMode: Boolean = false
+    private var pendingRecommendedPermissionRequest: PendingRecommendedPermissionRequest? = null
+
+    private val recommendedSettingsPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val pending = pendingRecommendedPermissionRequest ?: return@registerForActivityResult
+            pendingRecommendedPermissionRequest = null
+            val granted = grants.values.all { it }
+            if (!granted) {
+                logIncidentAssistantEvent(
+                    incident = pending.incident,
+                    action = "incident_assistant_recommended_permission_denied",
+                    detail = JSONObject().put("requestedCount", grants.size)
+                )
+                Toast.makeText(
+                    this,
+                    getString(R.string.incident_assistant_recommended_permission_denied),
+                    Toast.LENGTH_LONG
+                ).show()
+                continueWithContainmentOrGuidance(
+                    incident = pending.incident,
+                    guidance = pending.guidance
+                )
+                return@registerForActivityResult
+            }
+            logIncidentAssistantEvent(
+                incident = pending.incident,
+                action = "incident_assistant_recommended_permission_granted",
+                detail = JSONObject().put("requestedCount", grants.size)
+            )
+            applyRecommendedSettingsThenContinue(
+                incident = pending.incident,
+                guidance = pending.guidance,
+                recommendedActions = pending.recommendedActions
+            )
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -381,6 +418,17 @@ class ScanResultsActivity : AppCompatActivity() {
         val actions: List<IncidentAction>
     )
 
+    private data class IncidentActionApplyResult(
+        val successCount: Int,
+        val failedCount: Int
+    )
+
+    private data class PendingRecommendedPermissionRequest(
+        val incident: IncidentRecord,
+        val guidance: IncidentGuidance,
+        val recommendedActions: List<IncidentAction>
+    )
+
     private data class IncidentContext(
         val moduleLabel: String,
         val score: Int?,
@@ -483,7 +531,11 @@ class ScanResultsActivity : AppCompatActivity() {
                 detail = JSONObject().put("actionCount", guidance.actions.size)
             )
             dialog.dismiss()
-            showIncidentApplyConfirmationDialog(incident, guidance)
+            showRecommendedSettingsDecisionDialog(
+                incident = incident,
+                guidance = guidance,
+                entryPoint = RecommendedSettingsEntryPoint.APPLY
+            )
         }
         dialogView.findViewById<MaterialButton>(R.id.incidentAssistantGuideButton).setOnClickListener {
             logIncidentAssistantEvent(
@@ -492,7 +544,11 @@ class ScanResultsActivity : AppCompatActivity() {
                 detail = JSONObject().put("actionCount", guidance.actions.size)
             )
             dialog.dismiss()
-            showIncidentGuidanceDialog(incident, guidance)
+            showRecommendedSettingsDecisionDialog(
+                incident = incident,
+                guidance = guidance,
+                entryPoint = RecommendedSettingsEntryPoint.GUIDE
+            )
         }
         dialogView.findViewById<MaterialButton>(R.id.incidentAssistantSkipButton).setOnClickListener {
             skipIncidentAndContinue(incident, guidance, dialog)
@@ -604,6 +660,238 @@ class ScanResultsActivity : AppCompatActivity() {
         }
     }
 
+    private enum class RecommendedSettingsEntryPoint {
+        APPLY,
+        GUIDE
+    }
+
+    private fun showRecommendedSettingsDecisionDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        entryPoint: RecommendedSettingsEntryPoint
+    ) {
+        val recommendedSettings = buildRecommendedSettings(incident, guidance)
+        val introRes = when (entryPoint) {
+            RecommendedSettingsEntryPoint.APPLY -> R.string.incident_assistant_recommended_decision_apply_message
+            RecommendedSettingsEntryPoint.GUIDE -> R.string.incident_assistant_recommended_decision_guide_message
+        }
+        val message = buildString {
+            appendLine(getString(introRes))
+            appendLine()
+            appendLine(getString(R.string.incident_assistant_section_recommended))
+            recommendedSettings.forEachIndexed { index, line ->
+                appendLine("${index + 1}. $line")
+            }
+        }.trim()
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_assistant_recommended_decision_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.incident_assistant_recommended_decision_yes) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_recommended_selected",
+                    detail = JSONObject().put("entryPoint", entryPoint.name.lowercase(Locale.US))
+                )
+                when (entryPoint) {
+                    RecommendedSettingsEntryPoint.APPLY -> startAutoRecommendedSettingsFlow(incident, guidance)
+                    RecommendedSettingsEntryPoint.GUIDE -> showManualRecommendedSettingsGuideDialog(incident, guidance)
+                }
+            }
+            .setNegativeButton(R.string.incident_assistant_recommended_decision_no) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_recommended_skipped",
+                    detail = JSONObject().put("entryPoint", entryPoint.name.lowercase(Locale.US))
+                )
+                when (entryPoint) {
+                    RecommendedSettingsEntryPoint.APPLY -> showIncidentApplyConfirmationDialog(incident, guidance)
+                    RecommendedSettingsEntryPoint.GUIDE -> showIncidentGuidanceDialog(incident, guidance)
+                }
+            }
+            .setNeutralButton(R.string.scan_results_cancel, null)
+            .show()
+    }
+
+    private fun showManualRecommendedSettingsGuideDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ) {
+        val recommendedSettings = buildRecommendedSettings(incident, guidance)
+        val manualSettingsActions = guidance.actions
+            .filter { !it.destructive }
+            .take(2)
+        val message = buildString {
+            appendLine(getString(R.string.incident_assistant_recommended_manual_intro))
+            appendLine()
+            recommendedSettings.forEachIndexed { index, line ->
+                appendLine("${index + 1}. $line")
+            }
+            if (manualSettingsActions.isNotEmpty()) {
+                appendLine()
+                appendLine(getString(R.string.incident_assistant_actions_title))
+                manualSettingsActions.forEachIndexed { index, action ->
+                    appendLine("${index + 1}. ${action.manualInstruction}")
+                }
+            }
+            appendLine()
+            append(getString(R.string.incident_assistant_recommended_manual_continue))
+        }.trim()
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_assistant_recommended_manual_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.incident_assistant_guide_choice) { _, _ ->
+                showIncidentGuidanceDialog(incident, guidance)
+            }
+            .setNegativeButton(R.string.scan_results_cancel, null)
+            .show()
+    }
+
+    private fun startAutoRecommendedSettingsFlow(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ) {
+        val recommendedActions = guidance.actions.filter { it.automatable && !it.destructive }
+        if (recommendedActions.isEmpty()) {
+            Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_no_auto_actions),
+                Toast.LENGTH_SHORT
+            ).show()
+            showIncidentApplyConfirmationDialog(incident, guidance)
+            return
+        }
+
+        val requiredPermissions = requiredPermissionsForRecommendedSettings(incident, guidance)
+        if (requiredPermissions.isEmpty()) {
+            applyRecommendedSettingsThenContinue(
+                incident = incident,
+                guidance = guidance,
+                recommendedActions = recommendedActions
+            )
+            return
+        }
+
+        showRecommendedSettingsPermissionDialog(
+            incident = incident,
+            guidance = guidance,
+            recommendedActions = recommendedActions,
+            requiredPermissions = requiredPermissions
+        )
+    }
+
+    private fun requiredPermissionsForRecommendedSettings(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ): Array<String> {
+        val context = parseIncidentContext(incident)
+        val module = context.moduleLabel.lowercase(Locale.US)
+        val requiresWifiPermission = module.contains("wi-fi posture") ||
+            module.contains("wifi posture") ||
+            guidance.actions.any { it.actionId.startsWith("wifi_") }
+        if (!requiresWifiPermission) {
+            return emptyArray()
+        }
+        return WifiPermissionGate.requiredRuntimePermissions(this)
+            .toList()
+            .distinct()
+            .toTypedArray()
+    }
+
+    private fun showRecommendedSettingsPermissionDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        recommendedActions: List<IncidentAction>,
+        requiredPermissions: Array<String>
+    ) {
+        val permissionSummary = requiredPermissions
+            .map { it.substringAfterLast('.') }
+            .joinToString(", ")
+            .ifBlank { Manifest.permission.ACCESS_FINE_LOCATION.substringAfterLast('.') }
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_assistant_recommended_permission_title)
+            .setMessage(
+                getString(
+                    R.string.incident_assistant_recommended_permission_message,
+                    permissionSummary
+                )
+            )
+            .setPositiveButton(R.string.action_confirm) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_recommended_permission_requested",
+                    detail = JSONObject().put("requestedCount", requiredPermissions.size)
+                )
+                pendingRecommendedPermissionRequest = PendingRecommendedPermissionRequest(
+                    incident = incident,
+                    guidance = guidance,
+                    recommendedActions = recommendedActions
+                )
+                recommendedSettingsPermissionLauncher.launch(requiredPermissions)
+            }
+            .setNegativeButton(R.string.incident_assistant_guide_choice) { _, _ ->
+                logIncidentAssistantEvent(
+                    incident = incident,
+                    action = "incident_assistant_recommended_permission_request_skipped",
+                    detail = JSONObject().put("requestedCount", requiredPermissions.size)
+                )
+                showIncidentGuidanceDialog(incident, guidance)
+            }
+            .show()
+    }
+
+    private fun applyRecommendedSettingsThenContinue(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        recommendedActions: List<IncidentAction>
+    ) {
+        val result = executeIncidentActions(incident, recommendedActions)
+        when {
+            result.successCount > 0 && result.failedCount == 0 -> Toast.makeText(
+                this,
+                getString(
+                    R.string.incident_assistant_recommended_apply_success_template,
+                    result.successCount
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+            result.successCount > 0 -> Toast.makeText(
+                this,
+                getString(
+                    R.string.incident_assistant_recommended_apply_partial_template,
+                    result.successCount,
+                    result.failedCount
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+            else -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_recommended_apply_failed),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        continueWithContainmentOrGuidance(
+            incident = incident,
+            guidance = guidance
+        )
+    }
+
+    private fun continueWithContainmentOrGuidance(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ) {
+        val containmentActions = guidance.actions.filter { it.automatable && it.destructive }
+        if (containmentActions.isNotEmpty()) {
+            showIncidentApplyConfirmationDialog(
+                incident = incident,
+                guidance = guidance,
+                autoActionsOverride = containmentActions
+            )
+            return
+        }
+        showIncidentGuidanceDialog(incident, guidance)
+    }
+
     private fun showIncidentGuidanceDialog(
         incident: IncidentRecord,
         guidance: IncidentGuidance = buildIncidentGuidance(incident)
@@ -685,9 +973,10 @@ class ScanResultsActivity : AppCompatActivity() {
 
     private fun showIncidentApplyConfirmationDialog(
         incident: IncidentRecord,
-        guidance: IncidentGuidance
+        guidance: IncidentGuidance,
+        autoActionsOverride: List<IncidentAction>? = null
     ) {
-        val autoActions = guidance.actions.filter { it.automatable }
+        val autoActions = autoActionsOverride ?: guidance.actions.filter { it.automatable }
         if (autoActions.isEmpty()) {
             Toast.makeText(this, getString(R.string.incident_assistant_no_auto_actions), Toast.LENGTH_SHORT)
                 .show()
@@ -753,9 +1042,38 @@ class ScanResultsActivity : AppCompatActivity() {
         guidance: IncidentGuidance,
         autoActions: List<IncidentAction>
     ) {
+        val result = executeIncidentActions(incident, autoActions)
+        when {
+            result.successCount > 0 && result.failedCount == 0 -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_apply_success_template, result.successCount),
+                Toast.LENGTH_LONG
+            ).show()
+            result.successCount > 0 -> Toast.makeText(
+                this,
+                getString(
+                    R.string.incident_assistant_apply_partial_template,
+                    result.successCount,
+                    result.failedCount
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+            else -> Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_apply_failed),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        showIncidentGuidanceDialog(incident, guidance)
+    }
+
+    private fun executeIncidentActions(
+        incident: IncidentRecord,
+        actions: List<IncidentAction>
+    ): IncidentActionApplyResult {
         var successCount = 0
         var failedCount = 0
-        autoActions.forEach { action ->
+        actions.forEach { action ->
             logIncidentAssistantEvent(
                 incident = incident,
                 action = "incident_action_attempted",
@@ -779,24 +1097,10 @@ class ScanResultsActivity : AppCompatActivity() {
                     .put("destructive", action.destructive)
             )
         }
-        when {
-            successCount > 0 && failedCount == 0 -> Toast.makeText(
-                this,
-                getString(R.string.incident_assistant_apply_success_template, successCount),
-                Toast.LENGTH_LONG
-            ).show()
-            successCount > 0 -> Toast.makeText(
-                this,
-                getString(R.string.incident_assistant_apply_partial_template, successCount, failedCount),
-                Toast.LENGTH_LONG
-            ).show()
-            else -> Toast.makeText(
-                this,
-                getString(R.string.incident_assistant_apply_failed),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        showIncidentGuidanceDialog(incident, guidance)
+        return IncidentActionApplyResult(
+            successCount = successCount,
+            failedCount = failedCount
+        )
     }
 
     private fun executeIncidentAction(action: IncidentAction): Boolean {

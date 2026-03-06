@@ -57,6 +57,9 @@ Exit code:
 3. Manually verify scan-results UX split:
    - Open Scan results.
    - Tap `Start incident` and confirm Incident assistant opens as a separate screen.
+   - Confirm both `Apply fix for me` and `Guide me step-by-step` first ask whether to apply recommended best settings.
+   - Confirm Apply path can request required Android permission before recommended auto actions.
+   - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
    - Use `Back to scan results` and confirm return path is clean.
 4. Fix any failed checks and re-run until clean.
 5. Attach the latest markdown report to release evidence.
