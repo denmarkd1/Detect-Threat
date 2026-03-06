@@ -2032,33 +2032,38 @@ class MainActivity : AppCompatActivity() {
     private fun buildMaintenanceReportSection(audit: HygieneAuditResult): String {
         val health = audit.healthReport
         return buildString {
-            appendLine("Safe Hygiene Report")
-            appendLine("Generated: ${toIsoUtc(audit.generatedAtEpochMs)}")
+            appendLine("Maintenance summary")
             appendLine(
-                "Cleanup-safe reclaimable: ${
+                "Safe cleanup could free about ${
                     SafeHygieneToolkit.formatBytes(health.safeCleanupBytes)
-                } (cache + local stale artifacts)"
+                } right now."
             )
+            appendLine()
+            appendLine("What to do now")
+            appendLine("1. Run Safe Cleanup to clear app cache and stale local files.")
+            if (!health.usageAccessGranted) {
+                appendLine("2. Grant Usage Access if you want better unused-app suggestions.")
+            }
+            if (!health.mediaReadAccessGranted) {
+                val stepNumber = if (health.usageAccessGranted) 2 else 3
+                appendLine("$stepNumber. Grant media access if you want duplicate and installer checks.")
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("- Snapshot time: ${toIsoUtc(audit.generatedAtEpochMs)}")
+            appendLine("- Unused app candidates: ${health.inactiveAppCandidateCount}")
             appendLine(
-                "Inactive apps: ${health.inactiveAppCandidateCount} | usage access: ${
-                    if (health.usageAccessGranted) "granted" else "missing"
+                "- Duplicate media: ${health.duplicateMediaGroupCount} group(s), ${health.duplicateMediaFileCount} file(s), possible reclaim ${
+                    SafeHygieneToolkit.formatBytes(health.duplicateMediaReclaimableBytes)
                 }"
             )
             appendLine(
-                "Duplicate media: ${health.duplicateMediaGroupCount} group(s), ${health.duplicateMediaFileCount} file(s), potential ${
-                    SafeHygieneToolkit.formatBytes(health.duplicateMediaReclaimableBytes)
-                } reclaim"
-            )
-            appendLine(
-                "Installer remnants: ${health.installerRemnantCount} file(s), ${
+                "- Installer files left behind: ${health.installerRemnantCount} file(s), ${
                     SafeHygieneToolkit.formatBytes(health.installerRemnantBytes)
                 }"
             )
-            appendLine(
-                "Media read access: ${
-                    if (health.mediaReadAccessGranted) "granted" else "missing"
-                }"
-            )
+            appendLine("- Usage Access: ${if (health.usageAccessGranted) "granted" else "not granted"}")
+            appendLine("- Media access: ${if (health.mediaReadAccessGranted) "granted" else "not granted"}")
         }.trim()
     }
 
@@ -3892,44 +3897,63 @@ class MainActivity : AppCompatActivity() {
                         R.string.home_risk_setup_mode_live
                     }
                 )
-                getString(
-                    R.string.home_risk_setup_ready_template,
-                    setupStateLabel,
-                    result.connectorLabel.ifBlank { result.connectorId.ifBlank { "smart_home" } },
-                    result.ownerRole.ifBlank { "owner" },
-                    result.healthStatus.ifBlank { getString(R.string.home_risk_setup_health_unknown) },
-                    readOnlyLabel,
-                    result.scopeCount
-                ).let { base ->
+                val connectorLabel = result.connectorLabel.ifBlank { result.connectorId.ifBlank { "smart_home" } }
+                buildString {
+                    appendLine("Home Risk setup is ready.")
+                    appendLine()
+                    appendLine("What to do now")
+                    appendLine("1. Open Home Risk posture to review your current risk and findings.")
+                    appendLine("2. Keep connector access active so updates continue.")
                     if (shouldOfferSmartThingsInstallCta(result)) {
-                        "$base\n\n${getString(R.string.home_risk_setup_smartthings_missing_hint)}"
-                    } else {
-                        base
+                        appendLine("3. Install or open SmartThings to complete connector readiness.")
                     }
-                }
+                    appendLine()
+                    appendLine("Technical details (optional)")
+                    appendLine("Setup status: $setupStateLabel")
+                    appendLine("Connector: $connectorLabel")
+                    appendLine("Owner profile: ${result.ownerRole.ifBlank { "owner" }}")
+                    appendLine("Health: ${result.healthStatus.ifBlank { getString(R.string.home_risk_setup_health_unknown) }}")
+                    appendLine("Mode: $readOnlyLabel")
+                    append("Scopes granted: ${result.scopeCount}")
+                }.trim()
             }
 
-            HomeRiskSetupStatus.ROLLOUT_DISABLED -> getString(
-                R.string.home_risk_setup_rollout_disabled_template,
-                result.ownerRole.ifBlank { "owner" },
-                result.rolloutStage.ifBlank { getString(R.string.home_risk_setup_stage_unknown) },
-                result.rolloutPercent
-            )
+            HomeRiskSetupStatus.ROLLOUT_DISABLED -> buildString {
+                appendLine("Home Risk setup is not enabled yet for this profile.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Open Guardian Settings and check Home Risk rollout controls.")
+                appendLine("2. Keep core scan and incident workflows active while rollout is pending.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Owner profile: ${result.ownerRole.ifBlank { "owner" }}")
+                appendLine("Rollout stage: ${result.rolloutStage.ifBlank { getString(R.string.home_risk_setup_stage_unknown) }}")
+                append("Rollout percent: ${result.rolloutPercent}%")
+            }.trim()
 
-            HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE -> getString(
-                R.string.home_risk_setup_connector_missing_detail_template,
-                result.connectorId.ifBlank { "smart_home" }
-            )
+            HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE -> buildString {
+                appendLine("Home Risk connector is currently unavailable.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Open Guardian Settings and retry Home Risk setup.")
+                appendLine("2. If this continues, use Services support guidance.")
+                appendLine()
+                append("Technical details (optional)\nConnector ID: ${result.connectorId.ifBlank { "smart_home" }}")
+            }.trim()
 
             HomeRiskSetupStatus.CONSENT_FAILED -> buildString {
-                append(getString(R.string.home_risk_setup_consent_failed))
+                appendLine("Home Risk setup could not finish authorization.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Retry setup and confirm connector permission requests.")
+                appendLine("2. If retry fails, continue with regular scan and threat review for now.")
                 val detail = result.errorMessage.trim()
                 if (detail.isNotBlank()) {
                     appendLine()
-                    appendLine()
+                    appendLine("Technical details (optional)")
                     append(detail)
                 }
-            }
+            }.trim()
         }
     }
 
@@ -4011,36 +4035,47 @@ class MainActivity : AppCompatActivity() {
         if (result.posture != null) {
             val posture = result.posture
             return buildString {
-                appendLine(
-                    getString(
-                        R.string.home_risk_summary_template,
-                        posture.connectorId,
-                        posture.ownerRole,
-                        posture.deviceCount,
-                        posture.riskScore
-                    )
-                )
+                appendLine("Home Risk posture was updated.")
+                appendLine("Current score: ${posture.riskScore}/100")
                 appendLine()
+                appendLine("What to do now")
                 if (posture.findings.isEmpty()) {
-                    appendLine(getString(R.string.home_risk_findings_empty))
+                    appendLine("1. No active home-risk findings were reported.")
+                    appendLine("2. Keep scans active and review this screen regularly.")
                 } else {
-                    appendLine(getString(R.string.home_risk_findings_title))
-                    posture.findings.forEachIndexed { index, finding ->
+                    posture.findings.take(4).forEachIndexed { index, finding ->
                         appendLine("${index + 1}. $finding")
                     }
+                    val hiddenFindings = (posture.findings.size - 4).coerceAtLeast(0)
+                    if (hiddenFindings > 0) {
+                        appendLine("${posture.findings.take(4).size + 1}. Review $hiddenFindings more finding(s) in follow-up scans.")
+                    }
                 }
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Connector: ${posture.connectorId}")
+                appendLine("Owner profile: ${posture.ownerRole}")
+                append("Connected devices: ${posture.deviceCount}")
             }.trim()
         }
 
         return buildString {
-            if (result.errorRes != 0) {
-                appendLine(getString(result.errorRes))
-            } else {
-                appendLine(getString(R.string.home_risk_not_configured))
-            }
-            if (result.errorMessage.isNotBlank()) {
+            appendLine(
+                if (result.errorRes != 0) {
+                    getString(result.errorRes)
+                } else {
+                    getString(R.string.home_risk_not_configured)
+                }
+            )
+            appendLine()
+            appendLine("What to do now")
+            appendLine("1. Open Home Risk setup and complete connector authorization.")
+            appendLine("2. Keep Wi-Fi scan, threat triage, and credential queue checks active in the meantime.")
+            val detail = result.errorMessage.trim()
+            if (detail.isNotBlank()) {
                 appendLine()
-                appendLine(result.errorMessage)
+                appendLine("Technical details (optional)")
+                appendLine(detail)
             }
             appendLine()
             appendLine()
@@ -4053,13 +4088,12 @@ class MainActivity : AppCompatActivity() {
         val (high, medium, _) = PhishingIntakeStore.summarizeRecent(this, lookback = 12)
         val pendingQueue = CredentialActionStore.loadQueue(this)
             .count { !it.status.equals("completed", ignoreCase = true) }
-        return getString(
-            R.string.home_risk_fallback_summary_template,
-            wifiState,
-            high,
-            medium,
-            pendingQueue
-        )
+        return buildString {
+            appendLine("Fallback snapshot (until Home Risk setup is complete)")
+            appendLine("- Wi-Fi posture: $wifiState")
+            appendLine("- Threat alerts: high $high | medium $medium")
+            append("- Credential actions waiting: $pendingQueue")
+        }
     }
 
     private fun openVpnEntryPoint() {
@@ -4226,70 +4260,93 @@ class MainActivity : AppCompatActivity() {
     private fun buildVpnSetupDialogMessage(result: VpnSetupResult): String {
         return when (result.status) {
             VpnSetupStatus.READY -> buildString {
-                append(
-                    getString(
-                        R.string.vpn_setup_ready_template,
-                        result.providerLabel.ifBlank { result.providerId },
-                        vpnAssertionLabel(result.assertion),
-                        result.state.ifBlank { getString(R.string.vpn_status_state_unknown) },
-                        result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
-                        result.details.ifBlank { getString(R.string.vpn_status_details_none) },
-                        result.launchMode.ifBlank { getString(R.string.vpn_status_details_none) }
-                    )
-                )
+                appendLine("VPN setup is ready.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Open VPN status and confirm it shows connected or configured.")
+                appendLine("2. Run a quick scan after VPN changes to refresh protection status.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Provider: ${result.providerLabel.ifBlank { result.providerId }}")
+                appendLine("Assertion: ${vpnAssertionLabel(result.assertion)}")
+                appendLine("State: ${result.state.ifBlank { getString(R.string.vpn_status_state_unknown) }}")
+                appendLine("Checked: ${result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) }}")
+                appendLine("Details: ${result.details.ifBlank { getString(R.string.vpn_status_details_none) }}")
+                append("Launch mode: ${result.launchMode.ifBlank { getString(R.string.vpn_status_details_none) }}")
                 if (result.brokerNotice.isNotBlank()) {
                     appendLine()
                     appendLine()
-                    append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+                    append("Broker note: ${result.brokerNotice}")
                 }
                 if (result.providerDataNotice.isNotBlank()) {
                     appendLine()
-                    append(getString(R.string.vpn_status_disclosure_provider_template, result.providerDataNotice))
+                    append("Provider data note: ${result.providerDataNotice}")
                 }
             }.trim()
 
-            VpnSetupStatus.ROLLOUT_DISABLED -> getString(
-                R.string.vpn_setup_rollout_disabled_template,
-                result.ownerRole.ifBlank { "owner" },
-                result.rolloutStage.ifBlank { "unassigned" },
-                result.rolloutPercent
-            )
+            VpnSetupStatus.ROLLOUT_DISABLED -> buildString {
+                appendLine("VPN setup is not enabled yet for this profile.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Open Guardian Settings and check VPN rollout controls.")
+                appendLine("2. Continue with normal scan and threat workflows until rollout is enabled.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Owner profile: ${result.ownerRole.ifBlank { "owner" }}")
+                appendLine("Rollout stage: ${result.rolloutStage.ifBlank { "unassigned" }}")
+                append("Rollout percent: ${result.rolloutPercent}%")
+            }.trim()
 
-            VpnSetupStatus.CONNECTOR_UNAVAILABLE -> getString(
-                R.string.vpn_setup_connector_missing_template,
-                result.providerId.ifBlank { "vpn_provider" }
-            )
+            VpnSetupStatus.CONNECTOR_UNAVAILABLE -> buildString {
+                appendLine("VPN connector is currently unavailable.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Retry VPN setup from Services.")
+                appendLine("2. If this continues, use support guidance.")
+                appendLine()
+                append("Technical details (optional)\nConnector ID: ${result.providerId.ifBlank { "vpn_provider" }}")
+            }.trim()
 
             VpnSetupStatus.CONSENT_FAILED -> buildString {
-                append(getString(R.string.vpn_setup_consent_failed))
+                appendLine("VPN setup could not finish authorization.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Retry setup and confirm connector permission prompts.")
+                appendLine("2. If needed, re-open setup from Guardian Settings.")
                 if (result.errorMessage.isNotBlank()) {
                     appendLine()
                     appendLine()
-                    append(result.errorMessage)
+                    appendLine("Technical details (optional)")
+                    append(result.errorMessage.trim())
                 }
             }
 
             VpnSetupStatus.PAID_TIER_REQUIRED -> buildString {
-                append(
-                    getString(
-                        R.string.vpn_setup_paid_required_template,
-                        result.providerLabel.ifBlank { result.providerId },
-                        result.paidTierNotice.ifBlank { getString(R.string.vpn_status_paid_required_default) }
-                    )
-                )
+                appendLine("This VPN provider needs a paid plan.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Open plan options to upgrade if you want this provider.")
+                appendLine("2. Or switch to a provider available on your current tier.")
+                appendLine()
+                append("Technical details (optional)\n${result.paidTierNotice.ifBlank { getString(R.string.vpn_status_paid_required_default) }}")
                 if (result.brokerNotice.isNotBlank()) {
                     appendLine()
                     appendLine()
-                    append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+                    append("Broker note: ${result.brokerNotice}")
                 }
             }
 
             VpnSetupStatus.LAUNCH_FAILED -> buildString {
-                append(getString(R.string.vpn_setup_launch_failed))
+                appendLine("VPN provider app did not open successfully.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Try setup again.")
+                appendLine("2. If this keeps failing, open billing/settings and verify provider availability.")
                 if (result.errorMessage.isNotBlank()) {
                     appendLine()
                     appendLine()
-                    append(result.errorMessage)
+                    appendLine("Technical details (optional)")
+                    append(result.errorMessage.trim())
                 }
             }
         }
@@ -4357,28 +4414,42 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildVpnStatusDialogMessage(result: VpnStatusLookupResult): String {
         return buildString {
-            append(
-                getString(
-                    R.string.vpn_status_summary_template,
-                    result.providerLabel.ifBlank { result.providerId },
-                    vpnAssertionLabel(result.assertion),
-                    result.state,
-                    result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
-                    result.details
-                )
-            )
+            appendLine("VPN status snapshot")
+            appendLine("Current state: ${vpnAssertionLabel(result.assertion)}")
+            appendLine()
+            appendLine("What to do now")
+            when {
+                result.assertion == VpnAssertionState.CONNECTED -> {
+                    appendLine("1. VPN looks active. Keep it on during sensitive account actions.")
+                    appendLine("2. Recheck status after network changes.")
+                }
+                result.assertion == VpnAssertionState.CONFIGURED -> {
+                    appendLine("1. VPN is configured but not confirmed connected.")
+                    appendLine("2. Open VPN setup and finish connection checks.")
+                }
+                else -> {
+                    appendLine("1. Open VPN setup and complete provider authorization.")
+                    appendLine("2. Re-open status after setup to confirm readiness.")
+                }
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("Provider: ${result.providerLabel.ifBlank { result.providerId }}")
+            appendLine("State: ${result.state}")
+            appendLine("Checked: ${result.checkedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) }}")
+            append("Details: ${result.details}")
             if (result.brokerNotice.isNotBlank()) {
                 appendLine()
                 appendLine()
-                append(getString(R.string.vpn_status_disclosure_broker_template, result.brokerNotice))
+                append("Broker note: ${result.brokerNotice}")
             }
             if (result.providerDataNotice.isNotBlank()) {
                 appendLine()
-                append(getString(R.string.vpn_status_disclosure_provider_template, result.providerDataNotice))
+                append("Provider data note: ${result.providerDataNotice}")
             }
             if (result.paidRequired && result.paidTierNotice.isNotBlank()) {
                 appendLine()
-                append(getString(R.string.vpn_status_disclosure_paid_template, result.paidTierNotice))
+                append("Tier note: ${result.paidTierNotice}")
             }
         }.trim()
     }
@@ -4503,117 +4574,74 @@ class MainActivity : AppCompatActivity() {
         val walletPreview = report.walletCapabilities.take(2)
         val manufacturerPreview = report.manufacturerCapabilities.take(2)
         val findingsPreview = report.assessment.findings.take(4)
+        val quickAction = when {
+            !report.enabled -> "Open setup guidance to configure digital-key protection."
+            report.assessment.overallRiskLevel.equals("high", ignoreCase = true) ->
+                "Do not share keys or run remote commands until blocked prerequisites are fixed."
+            prerequisites.blockedReasonCodes.isNotEmpty() ->
+                "Fix blocked prerequisites first, then retry high-risk actions."
+            else -> "Review warnings and keep guardian confirmation enabled for sensitive actions."
+        }
 
         return buildString {
-            append(
-                getString(
-                    R.string.digital_key_status_summary_template,
-                    stateLabel,
-                    digitalKeyBooleanLabel(prerequisites.biometricReady),
-                    rootTierLabel(prerequisites.rootPosture.riskTier)
-                )
-            )
+            appendLine("Digital Key guardrails status")
+            appendLine("Current risk: ${digitalKeyRiskLevelLabel(report.assessment.overallRiskLevel)} (${report.assessment.totalRiskScore}/100)")
             appendLine()
+            appendLine("What to do now")
+            appendLine("1. $quickAction")
+            appendLine("2. Use Setup guidance to verify wallet and manufacturer app readiness.")
+            appendLine("3. Keep guardian approval on for key sharing and remote commands.")
             appendLine()
-            append(
-                getString(
-                    R.string.digital_key_status_risk_template,
-                    digitalKeyRiskLevelLabel(report.assessment.overallRiskLevel),
-                    report.assessment.totalRiskScore
-                )
-            )
-            appendLine()
-            append(getString(R.string.digital_key_prereq_lock_template, digitalKeyBooleanLabel(prerequisites.lockScreenSecure)))
-            appendLine()
-            append(getString(R.string.digital_key_prereq_biometric_template, digitalKeyBooleanLabel(prerequisites.biometricReady)))
-            appendLine()
-            append(
-                getString(
-                    R.string.digital_key_prereq_integrity_template,
-                    digitalKeyBooleanLabel(prerequisites.playDeviceIntegrityReady && prerequisites.playStrongIntegrityReady)
-                )
-            )
-            appendLine()
-            append(getString(R.string.digital_key_prereq_app_lock_template, digitalKeyBooleanLabel(prerequisites.appLockEnabled)))
+            appendLine("Technical details (optional)")
+            appendLine("Adapter status: $stateLabel")
+            appendLine("Biometric readiness: ${digitalKeyBooleanLabel(prerequisites.biometricReady)}")
+            appendLine("Root posture: ${rootTierLabel(prerequisites.rootPosture.riskTier)}")
+            appendLine("Lock screen prerequisite: ${digitalKeyBooleanLabel(prerequisites.lockScreenSecure)}")
+            appendLine("Integrity prerequisite: ${digitalKeyBooleanLabel(prerequisites.playDeviceIntegrityReady && prerequisites.playStrongIntegrityReady)}")
+            appendLine("App-lock policy: ${digitalKeyBooleanLabel(prerequisites.appLockEnabled)}")
 
             if (prerequisites.blockedReasonCodes.isNotEmpty()) {
                 appendLine()
-                appendLine()
-                append(getString(R.string.digital_key_prereq_blocked_title))
+                appendLine("Blocked prerequisites")
                 prerequisites.blockedReasonCodes.forEach { reasonCode ->
-                    appendLine()
-                    append("- ")
-                    append(digitalKeyPrerequisiteLabel(reasonCode))
+                    appendLine("- ${digitalKeyPrerequisiteLabel(reasonCode)}")
                 }
             }
             if (prerequisites.warningReasonCodes.isNotEmpty()) {
                 appendLine()
-                appendLine()
-                append(getString(R.string.digital_key_prereq_warning_title))
+                appendLine("Warnings")
                 prerequisites.warningReasonCodes.forEach { reasonCode ->
-                    appendLine()
-                    append("- ")
-                    append(digitalKeyPrerequisiteLabel(reasonCode))
+                    appendLine("- ${digitalKeyPrerequisiteLabel(reasonCode)}")
                 }
             }
 
             appendLine()
-            appendLine()
-            append(getString(R.string.digital_key_setup_wallet_title))
+            appendLine("Wallet setup readiness")
             if (walletPreview.isEmpty()) {
-                appendLine()
-                append("- ")
-                append(getString(R.string.digital_key_setup_none))
+                appendLine("- ${getString(R.string.digital_key_setup_none)}")
             } else {
                 walletPreview.forEach { capability ->
-                    appendLine()
-                    append(
-                        getString(
-                            R.string.digital_key_setup_bullet_template,
-                            capability.provider.label,
-                            digitalKeySetupCapabilityLabel(capability)
-                        )
-                    )
+                    appendLine("- ${capability.provider.label}: ${digitalKeySetupCapabilityLabel(capability)}")
                 }
             }
 
             appendLine()
-            appendLine()
-            append(getString(R.string.digital_key_setup_manufacturer_title))
+            appendLine("Manufacturer setup readiness")
             if (manufacturerPreview.isEmpty()) {
-                appendLine()
-                append("- ")
-                append(getString(R.string.digital_key_setup_none))
+                appendLine("- ${getString(R.string.digital_key_setup_none)}")
             } else {
                 manufacturerPreview.forEach { capability ->
-                    appendLine()
-                    append(
-                        getString(
-                            R.string.digital_key_setup_bullet_template,
-                            capability.provider.label,
-                            digitalKeySetupCapabilityLabel(capability)
-                        )
-                    )
+                    appendLine("- ${capability.provider.label}: ${digitalKeySetupCapabilityLabel(capability)}")
                 }
             }
 
             appendLine()
-            appendLine()
-            append(getString(R.string.digital_key_risk_checklist_title))
+            appendLine("Top findings")
             if (findingsPreview.isEmpty()) {
-                appendLine()
-                append("- ")
-                append(getString(R.string.digital_key_risk_checklist_none))
+                appendLine("- ${getString(R.string.digital_key_risk_checklist_none)}")
             } else {
                 findingsPreview.forEach { finding ->
-                    appendLine()
-                    append(
-                        getString(
-                            R.string.digital_key_risk_checklist_item_template,
-                            digitalKeyRiskLevelLabel(finding.severity),
-                            finding.message
-                        )
-                    )
+                    appendLine("- [${digitalKeyRiskLevelLabel(finding.severity)}] ${finding.message}")
                 }
             }
         }.trim()
@@ -4967,23 +4995,23 @@ class MainActivity : AppCompatActivity() {
         val medium = guardianEntries.count { it.severity == Severity.MEDIUM }
         val appBoardRows = appRiskBoard.take(4).mapIndexed { index, row ->
             val queueLink = if (row.linkedQueueActionId.isBlank()) {
-                "queue_link=none"
+                "No queue link"
             } else {
-                "queue_link=${row.linkedQueueActionId} (${row.linkedQueueOwner}/${row.linkedQueueCategory})"
+                "Linked queue item: ${row.linkedQueueOwner}/${row.linkedQueueCategory}"
             }
-            "${index + 1}. ${row.appRef} [${row.severity.name}/${row.score}] $queueLink"
+            "${index + 1}. ${row.appRef} (${row.severity.name.lowercase(Locale.US)} risk, score ${row.score}) - $queueLink"
         }
         val anomalyRows = anomalies.take(4).mapIndexed { index, row ->
             val owner = CredentialPolicy.canonicalOwnerId(row.ownerRole)
-            "${index + 1}. owner=$owner connector=${row.connectorId} event=${row.eventType} outcome=${row.outcome} risk=${row.severity.name}"
+            "${index + 1}. $owner: ${row.eventType} on ${row.connectorId} (${row.severity.name.lowercase(Locale.US)} risk)"
         }
         val accountabilityRows = accountability.map { row ->
-            "owner=${row.ownerRole} high=${row.anomalyHighCount} medium=${row.anomalyMediumCount} pending_queue=${row.pendingQueueCount}"
+            "${CredentialPolicy.canonicalOwnerId(row.ownerRole)} - high anomalies ${row.anomalyHighCount}, medium anomalies ${row.anomalyMediumCount}, pending queue ${row.pendingQueueCount}"
         }
         val message = buildString {
+            appendLine("Timeline summary")
             if (guardianEntries.isEmpty() && connectorEvents.isEmpty() && appRiskBoard.isEmpty()) {
                 appendLine(getString(R.string.timeline_report_empty))
-                appendLine()
             } else {
                 appendLine(
                     getString(
@@ -4994,8 +5022,25 @@ class MainActivity : AppCompatActivity() {
                         connectorEvents.size
                     )
                 )
-                appendLine()
             }
+            appendLine()
+            appendLine("What to do now")
+            when {
+                high > 0 -> {
+                    appendLine("1. Resolve high-risk guardian events first.")
+                    appendLine("2. Open remediation queue and process linked items.")
+                }
+                appRiskBoard.isNotEmpty() -> {
+                    appendLine("1. Review top app-risk items and linked queue actions.")
+                    appendLine("2. Confirm recent anomalies are expected.")
+                }
+                else -> {
+                    appendLine("1. No urgent timeline blockers were found.")
+                    appendLine("2. Keep periodic scans running.")
+                }
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
             appendLine(getString(R.string.phase5_app_risk_board_title))
             appendLine("Items: ${appRiskBoard.size}")
             if (appBoardRows.isEmpty()) {
@@ -5013,30 +5058,16 @@ class MainActivity : AppCompatActivity() {
             }
             appendLine()
             appendLine(getString(R.string.phase5_owner_accountability_title))
-            accountabilityRows.forEach { appendLine(it) }
+            if (accountabilityRows.isEmpty()) {
+                appendLine(getString(R.string.phase5_none))
+            } else {
+                accountabilityRows.forEach { appendLine(it) }
+            }
             appendLine()
             appendLine(getString(R.string.phase5_kpi_title))
-            appendLine(
-                getString(
-                    R.string.phase5_kpi_mttr_template,
-                    String.format(Locale.US, "%.1f", kpi.meanTimeToRemediateHours),
-                    kpi.sampleCompletedRemediations
-                )
-            )
-            appendLine(
-                getString(
-                    R.string.phase5_kpi_high_risk_success_template,
-                    Phase5ParityEngine.formatPercent(kpi.highRiskActionSuccessRate),
-                    kpi.sampleHighRiskActions
-                )
-            )
-            appendLine(
-                getString(
-                    R.string.phase5_kpi_connector_reliability_template,
-                    Phase5ParityEngine.formatPercent(kpi.connectorReliabilityRate),
-                    kpi.sampleConnectorEvents
-                )
-            )
+            appendLine("Mean time to remediate: ${String.format(Locale.US, "%.1f", kpi.meanTimeToRemediateHours)} hour(s) (samples ${kpi.sampleCompletedRemediations})")
+            appendLine("High-risk action success: ${Phase5ParityEngine.formatPercent(kpi.highRiskActionSuccessRate)} (samples ${kpi.sampleHighRiskActions})")
+            appendLine("Connector reliability: ${Phase5ParityEngine.formatPercent(kpi.connectorReliabilityRate)} (samples ${kpi.sampleConnectorEvents})")
         }.trim()
         val reportText = Phase5ParityEngine.buildUnifiedEvidenceReport(
             capturedAtEpochMs = System.currentTimeMillis(),
@@ -6410,27 +6441,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         val message = buildString {
-            appendLine(
-                getString(
-                    R.string.wifi_posture_summary_template,
-                    latest.scannedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
-                    latest.score,
-                    latest.tier,
-                    latest.ssid.ifBlank { "unknown" },
-                    latest.securityType.ifBlank { "unknown" }
-                )
-            )
+            appendLine("Wi-Fi safety summary")
+            appendLine("Current risk: ${latest.tier} (${latest.score}/100)")
+            appendLine("Network: ${latest.ssid.ifBlank { "unknown" }} (${latest.securityType.ifBlank { "unknown" }})")
             appendLine()
+            appendLine("What to do now")
+            if (latest.recommendations.isEmpty()) {
+                appendLine("1. No immediate Wi-Fi actions were generated.")
+                appendLine("2. Keep using trusted WPA2/WPA3 networks for sensitive actions.")
+            } else {
+                latest.recommendations.take(4).forEachIndexed { index, line ->
+                    appendLine("${index + 1}. $line")
+                }
+                val hiddenRecommendations = (latest.recommendations.size - 4).coerceAtLeast(0)
+                if (hiddenRecommendations > 0) {
+                    appendLine("${latest.recommendations.take(4).size + 1}. Review $hiddenRecommendations more recommendation(s) in future scans.")
+                }
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("Last scan: ${latest.scannedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) }}")
             if (latest.findings.isNotEmpty()) {
                 appendLine(getString(R.string.wifi_posture_findings_section_title))
                 latest.findings.forEachIndexed { index, line ->
                     appendLine("${index + 1}. $line")
                 }
-                appendLine()
-            }
-            appendLine(getString(R.string.wifi_posture_actions_title))
-            latest.recommendations.forEachIndexed { index, line ->
-                appendLine("${index + 1}. $line")
             }
         }.trim()
 
@@ -7098,30 +7133,38 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatPhishingTriageResult(result: PhishingTriageResult): String {
         return buildString {
-            appendLine(
-                getString(
-                    R.string.phishing_triage_result_template,
-                    result.riskScore,
-                    result.severity.name.lowercase(Locale.US),
-                    result.sourceRef,
-                    result.triagedAtIso
-                )
-            )
+            appendLine("Phishing scan summary")
+            appendLine("Risk: ${result.severity.name.lowercase(Locale.US)} (${result.riskScore}/100)")
+            appendLine("Scanned: ${result.triagedAtIso}")
+            appendLine()
+            appendLine("What to do now")
+            if (result.suggestedActions.isEmpty()) {
+                appendLine("1. No immediate remediation actions were generated.")
+                appendLine("2. Stay cautious and scan again if context changes.")
+            } else {
+                result.suggestedActions.take(4).forEachIndexed { index, line ->
+                    appendLine("${index + 1}. $line")
+                }
+                val hiddenActions = (result.suggestedActions.size - 4).coerceAtLeast(0)
+                if (hiddenActions > 0) {
+                    appendLine("${result.suggestedActions.take(4).size + 1}. Review $hiddenActions more action(s) in the full result.")
+                }
+            }
             if (result.extractedUrls.isNotEmpty()) {
                 appendLine()
+                appendLine("Technical details (optional)")
                 appendLine(getString(R.string.phishing_triage_result_urls_title))
                 result.extractedUrls.forEachIndexed { index, line ->
                     appendLine("${index + 1}. $line")
                 }
+            } else {
+                appendLine()
+                appendLine("Technical details (optional)")
             }
             appendLine()
+            appendLine("Source: ${result.sourceRef}")
             appendLine(getString(R.string.phishing_triage_result_reasons_title))
             result.reasons.forEachIndexed { index, line ->
-                appendLine("${index + 1}. $line")
-            }
-            appendLine()
-            appendLine(getString(R.string.phishing_triage_result_actions_title))
-            result.suggestedActions.forEachIndexed { index, line ->
                 appendLine("${index + 1}. $line")
             }
         }.trim()
@@ -7246,13 +7289,27 @@ class MainActivity : AppCompatActivity() {
         }
         val healthSummary = buildHygieneHealthSummary(audit)
         val message = buildString {
-            appendLine(getString(R.string.hygiene_health_report_title))
+            appendLine("Safe cleanup summary")
+            appendLine(
+                "You can safely reclaim about ${
+                    SafeHygieneToolkit.formatBytes(audit.healthReport.safeCleanupBytes)
+                }."
+            )
+            appendLine()
+            appendLine("What to do now")
+            appendLine("1. Keep the cleanup options you want checked below.")
+            appendLine("2. Continue only with cleanup items you recognize.")
+            if (!audit.healthReport.usageAccessGranted || !audit.healthReport.mediaReadAccessGranted) {
+                appendLine("3. Grant missing permissions later for more complete recommendations.")
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
             appendLine(healthSummary)
-            appendLine()
-            appendLine(getString(R.string.hygiene_cleanup_confirm_message_template))
-            appendLine()
-            appendLine(getString(R.string.hygiene_playbook_title))
-            append(playbook)
+            if (playbook.isNotBlank()) {
+                appendLine()
+                appendLine("Playbook snapshot")
+                append(playbook)
+            }
         }.trim()
 
         val dialog = LionAlertDialogBuilder(this)
@@ -7284,43 +7341,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildHygieneHealthSummary(audit: HygieneAuditResult): String {
-        val inactiveStatus = if (audit.healthReport.usageAccessGranted) {
-            getString(
-                R.string.hygiene_health_inactive_template,
-                audit.healthReport.inactiveAppCandidateCount
-            )
+        val health = audit.healthReport
+        val inactiveStatus = if (health.usageAccessGranted) {
+            "Unused app candidates: ${health.inactiveAppCandidateCount}"
         } else {
-            getString(R.string.hygiene_health_inactive_permission_missing)
+            "Unused app review is limited until Usage Access is granted."
         }
-        val duplicateStatus = if (audit.healthReport.mediaReadAccessGranted) {
-            getString(
-                R.string.hygiene_health_duplicate_template,
-                audit.healthReport.duplicateMediaGroupCount,
-                audit.healthReport.duplicateMediaFileCount,
-                SafeHygieneToolkit.formatBytes(audit.healthReport.duplicateMediaReclaimableBytes)
-            )
+        val duplicateStatus = if (health.mediaReadAccessGranted) {
+            "Duplicate media: ${health.duplicateMediaGroupCount} group(s), ${health.duplicateMediaFileCount} file(s), potential ${
+                SafeHygieneToolkit.formatBytes(health.duplicateMediaReclaimableBytes)
+            } reclaim"
         } else {
-            getString(R.string.hygiene_health_duplicate_permission_missing)
+            "Duplicate media review is limited until media access is granted."
         }
-        val installerStatus = if (audit.healthReport.mediaReadAccessGranted) {
-            getString(
-                R.string.hygiene_health_installer_template,
-                audit.healthReport.installerRemnantCount,
-                SafeHygieneToolkit.formatBytes(audit.healthReport.installerRemnantBytes)
-            )
+        val installerStatus = if (health.mediaReadAccessGranted) {
+            "Installer files left behind: ${health.installerRemnantCount} file(s), ${
+                SafeHygieneToolkit.formatBytes(health.installerRemnantBytes)
+            }"
         } else {
-            getString(R.string.hygiene_health_installer_permission_missing)
+            "Installer remnant review is limited until media access is granted."
         }
         return buildString {
-            appendLine(
-                getString(
-                    R.string.hygiene_health_safe_reclaim_template,
-                    SafeHygieneToolkit.formatBytes(audit.healthReport.safeCleanupBytes)
-                )
-            )
-            appendLine(inactiveStatus)
-            appendLine(duplicateStatus)
-            append(installerStatus)
+            appendLine("- Reclaimable now: ${SafeHygieneToolkit.formatBytes(health.safeCleanupBytes)}")
+            appendLine("- $inactiveStatus")
+            appendLine("- $duplicateStatus")
+            append("- $installerStatus")
         }.trim()
     }
 
@@ -7754,18 +7799,39 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val body = entries.joinToString("\n\n") { entry ->
-            val source = "${entry.sourceType.uppercase(Locale.US)} ${compactSingleLine(entry.sourceRef, 88)}".trim()
-            getString(
-                R.string.guardian_feed_entry_template,
-                entry.recordedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) },
-                entry.severity.name.lowercase(Locale.US),
-                entry.score,
-                compactSingleLine(entry.title, 74),
-                source,
-                compactSingleLine(entry.remediation, 100)
-            )
-        }
+        val highCount = entries.count { it.severity == Severity.HIGH }
+        val mediumCount = entries.count { it.severity == Severity.MEDIUM }
+        val lowInfoCount = entries.count { it.severity == Severity.LOW || it.severity == Severity.INFO }
+        val body = buildString {
+            appendLine("Guardian alerts summary")
+            appendLine("Recent alerts: ${entries.size} | high $highCount | medium $mediumCount | low/info $lowInfoCount")
+            appendLine()
+            appendLine("What to do now")
+            if (highCount > 0) {
+                appendLine("1. Review high-risk alerts first.")
+            } else if (mediumCount > 0) {
+                appendLine("1. Review medium-risk alerts next.")
+            } else {
+                appendLine("1. No urgent alerts right now. Keep monitoring.")
+            }
+            appendLine("2. Use the recommended fix for each alert before dismissing it.")
+            appendLine()
+            appendLine("Latest alerts")
+            entries.take(5).forEachIndexed { index, entry ->
+                appendLine("${index + 1}. [${entry.severity.name}] ${compactSingleLine(entry.title, 74)}")
+                appendLine("   ${compactSingleLine(entry.remediation, 104)}")
+            }
+            val hidden = (entries.size - 5).coerceAtLeast(0)
+            if (hidden > 0) {
+                appendLine("${entries.take(5).size + 1}. $hidden more alert(s) are available in the feed.")
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            entries.take(5).forEachIndexed { index, entry ->
+                val source = "${entry.sourceType.uppercase(Locale.US)} ${compactSingleLine(entry.sourceRef, 82)}".trim()
+                appendLine("${index + 1}. ${entry.recordedAtIso.ifBlank { getString(R.string.scam_shield_unknown_time) }} | score ${entry.score} | $source")
+            }
+        }.trim()
 
         LionAlertDialogBuilder(this)
             .setTitle(R.string.guardian_feed_title)
@@ -8899,10 +8965,11 @@ class MainActivity : AppCompatActivity() {
         onActionSelected: (SecurityHeroAction) -> Unit
     ): CharSequence {
         val message = SpannableStringBuilder().apply {
+            appendLine("Security status")
             appendLine(getString(R.string.security_score_template, riskCard.score))
             appendLine(state.tierLabel)
             appendLine()
-            appendLine(getString(R.string.security_urgent_actions_title))
+            appendLine("What to do now")
 
             if (state.actions.isEmpty()) {
                 appendLine(getString(R.string.security_urgent_actions_none))
@@ -8929,14 +8996,19 @@ class MainActivity : AppCompatActivity() {
                     )
                     appendLine()
                     securityActionGuidance(action.route)?.let { guidance ->
-                        appendLine("   $guidance")
+                        appendLine("   - $guidance")
                     }
                 }
             }
 
             appendLine()
-            state.details.forEachIndexed { index, line ->
-                appendLine("${index + 1}. $line")
+            appendLine("Technical details (optional)")
+            if (state.details.isEmpty()) {
+                appendLine("No extra technical details were included in this snapshot.")
+            } else {
+                state.details.forEachIndexed { index, line ->
+                    appendLine("${index + 1}. $line")
+                }
             }
         }
         while (message.isNotEmpty() && message.last() == '\n') {

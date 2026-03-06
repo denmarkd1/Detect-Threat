@@ -241,10 +241,14 @@ object IncidentStore {
         val primary = sortForDisplay(incidents)
             .take(3)
             .map { incident ->
-                val shortId = incident.incidentId.take(8)
-                val status = incident.status.raw
-                val severity = incident.severity.name.lowercase(Locale.US)
-                "[$shortId] $status/$severity ${incident.title}"
+                val statusLabel = when (incident.status) {
+                    IncidentStatus.OPEN -> "Open"
+                    IncidentStatus.IN_PROGRESS -> "In progress"
+                    IncidentStatus.RESOLVED -> "Resolved"
+                }
+                val severityLabel = incident.severity.name.lowercase(Locale.US)
+                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
+                "$statusLabel • $severityLabel: ${incident.title}"
             }
 
         val preview = if (primary.isEmpty()) {

@@ -229,26 +229,67 @@ object SecurityScanner {
     }
 
     fun formatReport(result: ScanResult): String {
-        val sb = StringBuilder()
-        sb.appendLine("DT Scanner (Detect Treat) Report")
-        sb.appendLine("Scanned: ${formatDisplayTime(result.snapshot.scannedAtEpochMs)}")
-        sb.appendLine("Apps scanned: ${result.snapshot.thirdPartyPackages.size}")
-        sb.appendLine("Accessibility services: ${result.snapshot.accessibilityServices.size}")
-        sb.appendLine("Device-admin apps: ${result.snapshot.deviceAdminPackages.size}")
-        sb.appendLine("Suspicious package names: ${result.snapshot.suspiciousPackageNames.size}")
-        sb.appendLine("Root defense tier: ${result.snapshot.rootPosture.riskTier.raw}")
-        sb.appendLine("Scam Shield: ${result.scamTriage.summaryLine()}")
+        val high = result.alerts.count { it.severity == Severity.HIGH }
+        val medium = result.alerts.count { it.severity == Severity.MEDIUM }
+        val low = result.alerts.count { it.severity == Severity.LOW }
+        val info = result.alerts.count { it.severity == Severity.INFO }
         val urgentActions = result.scamTriage.urgentActions()
+        val headline = when {
+            high > 0 -> "High-risk activity was detected. Start with these items now."
+            medium > 0 -> "No high-risk items were found, but medium-risk findings need review."
+            low > 0 || info > 0 -> "No urgent threats were found. Review lower-risk findings when convenient."
+            else -> "No suspicious activity was detected in this scan."
+        }
+        val nextSteps = mutableListOf<String>()
+        if (high > 0) {
+            nextSteps += "Open Incident Assistant and handle high-risk items first."
+        }
+        if (medium > 0) {
+            nextSteps += "Review medium-risk findings after high-risk items are handled."
+        }
+        urgentActions.take(2).forEach { action ->
+            val normalized = action
+                .replace('\n', ' ')
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            if (normalized.isNotBlank()) {
+                nextSteps += if (normalized.endsWith(".")) normalized else "$normalized."
+            }
+        }
+        if (nextSteps.isEmpty()) {
+            nextSteps += "Keep protection settings on and run periodic scans."
+        }
+
+        val sb = StringBuilder()
+        sb.appendLine("Guardian scan summary")
+        sb.appendLine("Checked: ${formatDisplayTime(result.snapshot.scannedAtEpochMs)}")
+        sb.appendLine()
+        sb.appendLine("What happened")
+        sb.appendLine("- $headline")
+        sb.appendLine("- Findings: high $high | medium $medium | low $low | info $info")
+        sb.appendLine("- Scam check: ${result.scamTriage.summaryLine()}")
+        sb.appendLine()
+        sb.appendLine("What to do now")
+        nextSteps.forEachIndexed { index, step ->
+            sb.appendLine("${index + 1}. $step")
+        }
+        sb.appendLine()
+        sb.appendLine("Technical details (optional)")
+        sb.appendLine("- Apps scanned: ${result.snapshot.thirdPartyPackages.size}")
+        sb.appendLine("- Accessibility services: ${result.snapshot.accessibilityServices.size}")
+        sb.appendLine("- Device-admin apps: ${result.snapshot.deviceAdminPackages.size}")
+        sb.appendLine("- Suspicious package names: ${result.snapshot.suspiciousPackageNames.size}")
+        sb.appendLine("- Root defense tier: ${result.snapshot.rootPosture.riskTier.raw}")
         if (urgentActions.isNotEmpty()) {
-            sb.appendLine("Scam Shield urgent actions:")
+            sb.appendLine("- Scam Shield urgent actions:")
             urgentActions.forEachIndexed { index, action ->
-                sb.appendLine("- ${index + 1}. $action")
+                sb.appendLine("  ${index + 1}. $action")
             }
         }
         sb.appendLine()
-
+        sb.appendLine("Detailed findings (optional)")
         if (result.alerts.isEmpty()) {
-            sb.appendLine("No suspicious baseline deviations detected.")
+            sb.appendLine("No suspicious changes were detected from the baseline checks.")
         } else {
             result.alerts.forEachIndexed { index, alert ->
                 sb.appendLine("${index + 1}. [${alert.severity}] ${alert.title}")

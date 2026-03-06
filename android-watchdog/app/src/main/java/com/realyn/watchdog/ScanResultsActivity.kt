@@ -242,57 +242,22 @@ class ScanResultsActivity : AppCompatActivity() {
         val lowRemaining = unresolved.count { it.severity == Severity.LOW }
         val guidance = buildIncidentGuidance(incident)
         val autoCount = guidance.actions.count { it.automatable }
-        val manualCount = guidance.actions.size - autoCount
+        val severityLabel = userSeverityLabel(incident.severity)
+        val whyLine = compactTechnicalLine(guidance.whyLine, maxLen = 180)
         val message = buildString {
-            appendLine(
-                getString(
-                    R.string.incident_guidance_queue_template,
-                    highRemaining,
-                    mediumRemaining,
-                    lowRemaining
-                )
-            )
+            appendLine("Remaining incidents: high $highRemaining, medium $mediumRemaining, low $lowRemaining")
             appendLine()
-            appendLine(
-                getString(
-                    R.string.incident_guidance_incident_header_template,
-                    incident.severity.name,
-                    incident.title
-                )
-            )
+            appendLine("Work on this now")
+            appendLine("$severityLabel risk: ${incident.title}")
             appendLine()
-            appendLine(
-                getString(
-                    R.string.incident_guidance_confidence_template,
-                    guidance.confidence
-                )
-            )
-            appendLine(
-                getString(
-                    R.string.incident_guidance_why_template,
-                    guidance.whyLine
-                )
-            )
+            appendLine("Why this needs attention")
+            appendLine(whyLine.ifBlank { "This incident matched known risk signals from the scan." })
             appendLine()
-            appendLine(getString(R.string.incident_assistant_action_prompt))
-            appendLine(
-                getString(
-                    R.string.incident_assistant_action_counts_template,
-                    guidance.actions.size,
-                    autoCount,
-                    manualCount
-                )
-            )
-            guidance.actions.take(3).forEachIndexed { index, action ->
-                val modeLabel = if (action.automatable) {
-                    getString(R.string.incident_assistant_action_mode_auto)
-                } else {
-                    getString(R.string.incident_assistant_action_mode_manual)
-                }
-                appendLine("${index + 1}. ${action.title} [$modeLabel]")
-            }
-            if (guidance.actions.size > 3) {
-                appendLine(getString(R.string.incident_assistant_more_actions_template, guidance.actions.size - 3))
+            appendLine("Choose one option below.")
+            if (autoCount > 0) {
+                appendLine("Tip: $autoCount quick action(s) can be opened by the app.")
+            } else {
+                appendLine("Tip: This incident needs manual steps.")
             }
         }.trim()
         val dialog = LionAlertDialogBuilder(this)
@@ -334,6 +299,7 @@ class ScanResultsActivity : AppCompatActivity() {
         val highRemaining = unresolved.count { it.severity == Severity.HIGH }
         val mediumRemaining = unresolved.count { it.severity == Severity.MEDIUM }
         val lowRemaining = unresolved.count { it.severity == Severity.LOW }
+        val severityLabel = userSeverityLabel(incident.severity)
         val detailsPreview = incident.details
             .trim()
             .replace("\r", "")
@@ -341,44 +307,52 @@ class ScanResultsActivity : AppCompatActivity() {
             .let { value ->
                 if (value.length <= 220) value else "${value.take(217)}..."
             }
+        val shownSteps = guidance.steps.take(5)
+        val hiddenSteps = (guidance.steps.size - shownSteps.size).coerceAtLeast(0)
+        val shownActions = guidance.actions.take(3)
         val message = buildString {
-            appendLine(
-                getString(
-                    R.string.incident_guidance_queue_template,
-                    highRemaining,
-                    mediumRemaining,
-                    lowRemaining
-                )
-            )
+            appendLine("Remaining incidents: high $highRemaining, medium $mediumRemaining, low $lowRemaining")
             appendLine()
-            appendLine(
-                getString(
-                    R.string.incident_guidance_incident_header_template,
-                    incident.severity.name,
-                    incident.title
-                )
-            )
-            appendLine(detailsPreview)
+            appendLine("Current issue")
+            appendLine("$severityLabel risk: ${incident.title}")
             appendLine()
-            appendLine(getString(R.string.incident_guidance_confidence_template, guidance.confidence))
-            appendLine(getString(R.string.incident_guidance_why_template, guidance.whyLine))
-            if (guidance.actions.isNotEmpty()) {
+            appendLine("What to do now")
+            shownSteps.forEachIndexed { index, step ->
+                appendLine("${index + 1}. $step")
+            }
+            if (hiddenSteps > 0) {
+                appendLine("${shownSteps.size + 1}. Continue for $hiddenSteps more step(s) after these.")
+            }
+            if (shownActions.isNotEmpty()) {
                 appendLine()
-                appendLine(getString(R.string.incident_assistant_actions_title))
-                guidance.actions.forEachIndexed { index, action ->
+                appendLine("Quick actions")
+                shownActions.forEachIndexed { index, action ->
                     val modeLabel = if (action.automatable) {
-                        getString(R.string.incident_assistant_action_mode_auto)
+                        "app can open"
                     } else {
-                        getString(R.string.incident_assistant_action_mode_manual)
+                        "manual"
                     }
                     appendLine("${index + 1}. ${action.title} [$modeLabel]")
-                    appendLine("   ${action.manualInstruction}")
+                }
+                val hiddenActions = (guidance.actions.size - shownActions.size).coerceAtLeast(0)
+                if (hiddenActions > 0) {
+                    appendLine("+ $hiddenActions more action(s) available.")
                 }
             }
             appendLine()
-            appendLine(getString(R.string.incident_guidance_steps_title))
-            guidance.steps.forEachIndexed { index, step ->
-                appendLine("${index + 1}. $step")
+            appendLine("Technical details (optional)")
+            appendLine(getString(R.string.incident_guidance_confidence_template, guidance.confidence))
+            appendLine(getString(R.string.incident_guidance_why_template, guidance.whyLine))
+            appendLine("Detection detail: ${compactTechnicalLine(detailsPreview, maxLen = 180)}")
+            if (guidance.stepSignalMap.isNotEmpty()) {
+                appendLine(getString(R.string.incident_guidance_signal_map_title))
+                guidance.stepSignalMap.take(3).forEach { line ->
+                    appendLine("- ${compactTechnicalLine(line, maxLen = 140)}")
+                }
+                val hiddenMapLines = (guidance.stepSignalMap.size - 3).coerceAtLeast(0)
+                if (hiddenMapLines > 0) {
+                    appendLine("- +$hiddenMapLines more mapping item(s).")
+                }
             }
         }.trim()
         val dialog = LionAlertDialogBuilder(this)
@@ -408,36 +382,27 @@ class ScanResultsActivity : AppCompatActivity() {
         }
         val manualCount = guidance.actions.count { !it.automatable }
         val message = buildString {
-            appendLine(getString(R.string.incident_assistant_confirm_intro))
+            appendLine("The app can try these actions now:")
             appendLine()
             autoActions.forEachIndexed { index, action ->
                 appendLine("${index + 1}. ${action.title}")
-                appendLine(getString(R.string.incident_assistant_confirm_impact_template, action.impact))
+                appendLine("What this does: ${action.impact}")
                 appendLine(
-                    getString(
-                        R.string.incident_assistant_confirm_reversible_template,
-                        if (action.reversible) {
-                            getString(R.string.feedback_recommend_yes)
-                        } else {
-                            getString(R.string.feedback_recommend_no)
-                        }
-                    )
+                    "Can you undo it: ${
+                        if (action.reversible) getString(R.string.feedback_recommend_yes)
+                        else getString(R.string.feedback_recommend_no)
+                    }"
                 )
                 if (action.destructive) {
-                    appendLine(getString(R.string.incident_assistant_confirm_destructive))
+                    appendLine("Warning: this can remove or uninstall app data.")
                 }
                 appendLine()
             }
             if (manualCount > 0) {
-                appendLine(
-                    getString(
-                        R.string.incident_assistant_confirm_manual_remaining_template,
-                        manualCount
-                    )
-                )
+                appendLine("$manualCount manual step(s) still need your review afterward.")
                 appendLine()
             }
-            append(getString(R.string.incident_assistant_confirm_prompt))
+            append("Continue now?")
         }.trim()
         val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.incident_assistant_confirm_title)
@@ -736,6 +701,30 @@ class ScanResultsActivity : AppCompatActivity() {
             recommendation = recommendation,
             signals = signals
         )
+    }
+
+    private fun userSeverityLabel(severity: Severity): String {
+        return when (severity) {
+            Severity.HIGH -> "High"
+            Severity.MEDIUM -> "Medium"
+            Severity.LOW -> "Low"
+            Severity.INFO -> "Info"
+        }
+    }
+
+    private fun compactTechnicalLine(value: String, maxLen: Int): String {
+        val normalized = value
+            .replace('\n', ' ')
+            .replace('\r', ' ')
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (normalized.length <= maxLen) {
+            return normalized
+        }
+        if (maxLen <= 3) {
+            return normalized.take(maxLen)
+        }
+        return normalized.take(maxLen - 3) + "..."
     }
 
     private fun extractPackageFromPath(path: String): String {
@@ -1354,21 +1343,31 @@ class ScanResultsActivity : AppCompatActivity() {
                 .put("fileCount", payload.duplicateMediaFileCount)
         )
         val message = buildString {
-            appendLine(getString(R.string.scan_results_hygiene_health_title))
-            appendLine(
-                getString(
-                    R.string.scan_results_hygiene_duplicates_template,
-                    payload.duplicateMediaGroupCount,
-                    payload.duplicateMediaFileCount,
-                    SafeHygieneToolkit.formatBytes(payload.duplicateMediaReclaimableBytes)
+            appendLine("Duplicate media summary")
+            if (payload.mediaReadAccessGranted) {
+                appendLine(
+                    "You could potentially free ${
+                        SafeHygieneToolkit.formatBytes(payload.duplicateMediaReclaimableBytes)
+                    } by removing duplicate files."
                 )
-            )
-            if (!payload.mediaReadAccessGranted) {
-                appendLine()
-                appendLine(getString(R.string.hygiene_health_duplicate_permission_missing))
+            } else {
+                appendLine("Duplicate scan is limited because media access is not granted.")
             }
             appendLine()
-            appendLine(getString(R.string.scan_results_hygiene_examples_title))
+            appendLine("What to do now")
+            appendLine("1. Open Storage settings and review duplicate groups.")
+            appendLine("2. Keep one known-good copy before deleting others.")
+            if (!payload.mediaReadAccessGranted) {
+                appendLine("3. Grant media access for a more complete duplicate scan.")
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("- Duplicate groups: ${payload.duplicateMediaGroupCount}")
+            appendLine("- Duplicate files: ${payload.duplicateMediaFileCount}")
+            appendLine("- Potential reclaim: ${SafeHygieneToolkit.formatBytes(payload.duplicateMediaReclaimableBytes)}")
+            appendLine("- Media access: ${if (payload.mediaReadAccessGranted) "granted" else "not granted"}")
+            appendLine()
+            appendLine("Examples")
             if (payload.duplicateMediaExamples.isEmpty()) {
                 append(getString(R.string.scan_results_hygiene_none))
             } else {
@@ -1397,19 +1396,22 @@ class ScanResultsActivity : AppCompatActivity() {
             detail = JSONObject().put("candidateCount", payload.inactiveAppCandidateCount)
         )
         val message = buildString {
-            appendLine(getString(R.string.scan_results_hygiene_health_title))
+            appendLine("Unused apps summary")
             if (payload.usageAccessGranted) {
-                appendLine(
-                    getString(
-                        R.string.scan_results_hygiene_unused_template,
-                        payload.inactiveAppCandidateCount
-                    )
-                )
+                appendLine("Found ${payload.inactiveAppCandidateCount} app(s) that may be unused.")
             } else {
-                appendLine(getString(R.string.scan_results_hygiene_unused_permission_missing))
+                appendLine("Unused-app review is limited because Usage Access is not granted.")
             }
             appendLine()
-            appendLine(getString(R.string.scan_results_hygiene_examples_title))
+            appendLine("What to do now")
+            appendLine("1. Open Usage Access and enable it for fuller inactivity checks.")
+            appendLine("2. Review listed apps and remove only apps you no longer need.")
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("- Candidate apps: ${payload.inactiveAppCandidateCount}")
+            appendLine("- Usage Access: ${if (payload.usageAccessGranted) "granted" else "not granted"}")
+            appendLine()
+            appendLine("Examples")
             if (payload.inactiveAppExamples.isEmpty()) {
                 append(getString(R.string.scan_results_hygiene_none))
             } else {
@@ -1443,20 +1445,30 @@ class ScanResultsActivity : AppCompatActivity() {
                 .put("bytes", payload.installerRemnantBytes)
         )
         val message = buildString {
-            appendLine(getString(R.string.scan_results_hygiene_health_title))
+            appendLine("Installer files summary")
             if (payload.mediaReadAccessGranted) {
                 appendLine(
-                    getString(
-                        R.string.scan_results_hygiene_installer_template,
-                        payload.installerRemnantCount,
+                    "Found ${payload.installerRemnantCount} installer file(s), using ${
                         SafeHygieneToolkit.formatBytes(payload.installerRemnantBytes)
-                    )
+                    }."
                 )
             } else {
-                appendLine(getString(R.string.scan_results_hygiene_installer_permission_missing))
+                appendLine("Installer file review is limited because media access is not granted.")
             }
             appendLine()
-            appendLine(getString(R.string.scan_results_hygiene_examples_title))
+            appendLine("What to do now")
+            appendLine("1. Open Downloads or Storage settings and remove old installer files.")
+            appendLine("2. Keep installers only if you still need them for re-install.")
+            if (!payload.mediaReadAccessGranted) {
+                appendLine("3. Grant media access for fuller installer detection.")
+            }
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("- Installer files: ${payload.installerRemnantCount}")
+            appendLine("- Estimated size: ${SafeHygieneToolkit.formatBytes(payload.installerRemnantBytes)}")
+            appendLine("- Media access: ${if (payload.mediaReadAccessGranted) "granted" else "not granted"}")
+            appendLine()
+            appendLine("Examples")
             if (payload.installerRemnantExamples.isEmpty()) {
                 append(getString(R.string.scan_results_hygiene_none))
             } else {
@@ -1496,22 +1508,21 @@ class ScanResultsActivity : AppCompatActivity() {
             checks[0] = true
         }
         val summary = buildString {
-            appendLine(getString(R.string.scan_results_hygiene_health_title))
+            appendLine("Safe cleanup summary")
             appendLine(
-                getString(
-                    R.string.hygiene_health_safe_reclaim_template,
+                "Estimated space you can safely reclaim now: ${
                     SafeHygieneToolkit.formatBytes(payload.safeCleanupBytes)
-                )
-            )
-            appendLine(
-                getString(
-                    R.string.scan_results_hygiene_installer_template,
-                    payload.installerRemnantCount,
-                    SafeHygieneToolkit.formatBytes(payload.installerRemnantBytes)
-                )
+                }."
             )
             appendLine()
-            append(getString(R.string.scan_results_cleanup_dialog_message_template))
+            appendLine("What to do now")
+            appendLine("1. Keep the cleanup options you want checked below.")
+            appendLine("2. Confirm cleanup to remove cache, stale local logs, and old queue records.")
+            appendLine()
+            appendLine("Technical details (optional)")
+            appendLine("- Safe reclaim estimate: ${SafeHygieneToolkit.formatBytes(payload.safeCleanupBytes)}")
+            appendLine("- Stale artifacts: ${payload.staleArtifactCount} file(s), ${SafeHygieneToolkit.formatBytes(payload.staleArtifactBytes)}")
+            appendLine("- Installer files left behind: ${payload.installerRemnantCount} file(s), ${SafeHygieneToolkit.formatBytes(payload.installerRemnantBytes)}")
         }.trim()
         val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.scan_results_cleanup_dialog_title)
