@@ -125,6 +125,8 @@
     <string name="incident_assistant_recommended_decision_title">¿Aplicar configuración recomendada?</string>
     <string name="incident_assistant_recommended_decision_apply_message">¿Quieres que la app aplique la configuración recomendada antes de las acciones de contención?</string>
     <string name="incident_assistant_recommended_decision_guide_message">¿Quieres aplicar ahora la configuración recomendada con guía manual?</string>
+    <string name="incident_assistant_recommended_decision_auto_capability">Las acciones compatibles se pueden ejecutar automáticamente en este dispositivo, pero Android puede pedir confirmación en cambios sensibles.</string>
+    <string name="incident_assistant_recommended_decision_manual_only_capability">Android bloquea cambios automáticos directos para esta configuración. La app puede abrir las pantallas correctas, pero debes tocar cada cambio manualmente.</string>
     <string name="incident_assistant_recommended_decision_yes">Sí, usar configuración recomendada</string>
     <string name="incident_assistant_recommended_decision_no">No, continuar sin eso</string>
     <string name="incident_assistant_recommended_permission_title">Permiso necesario para la configuración recomendada</string>
@@ -135,7 +137,25 @@
     <string name="incident_assistant_recommended_apply_failed">No se pudo autoaplicar la configuración recomendada en este dispositivo.</string>
     <string name="incident_assistant_recommended_manual_title">Configuración recomendada manual</string>
     <string name="incident_assistant_recommended_manual_intro">Aplica manualmente esta configuración recomendada:</string>
+    <string name="incident_assistant_recommended_tap_pack_template">Paquete de rutas: %1$s</string>
+    <string name="incident_assistant_recommended_tap_targets_title">Toques exactos que debes buscar en la siguiente pantalla</string>
+    <string name="incident_assistant_recommended_open_with_overlay">Abrir con guía flotante</string>
+    <string name="incident_assistant_recommended_open_settings_now">Abrir ajustes ahora</string>
+    <string name="incident_assistant_recommended_overlay_hint_ready">Consejo: usa Abrir con guía flotante para ver instrucciones paso a paso mientras estás en Ajustes de Android.</string>
+    <string name="incident_assistant_recommended_overlay_hint_permission">Consejo: usa Abrir con guía flotante para permitir \"mostrar sobre otras apps\" y mantener visibles las instrucciones en Ajustes.</string>
+    <string name="incident_assistant_recommended_overlay_permission_denied">No se concedió el permiso de guía flotante. Se abrirán los ajustes sin guía superpuesta.</string>
     <string name="incident_assistant_recommended_manual_continue">Después de esto, continúa con la guía completa paso a paso del incidente.</string>
+    <string name="incident_overlay_title">Guía flotante de incidente</string>
+    <string name="incident_overlay_step_template">Paso %1$d de %2$d</string>
+    <string name="incident_overlay_prev">Anterior</string>
+    <string name="incident_overlay_next">Siguiente</string>
+    <string name="incident_overlay_focus_label">Objetivo actual</string>
+    <string name="incident_overlay_complete_step">Paso completado</string>
+    <string name="incident_overlay_finish">Finalizar guia</string>
+    <string name="incident_overlay_done">Listo</string>
+    <string name="incident_overlay_permission_required">Permite \"mostrar sobre otras apps\" para usar la guía flotante de incidentes.</string>
+    <string name="incident_overlay_started">Se inició la guía flotante del incidente.</string>
+    <string name="incident_overlay_default_step">Sigue la guía de seguridad en pantalla y verifica cada cambio antes de marcar como resuelto.</string>
 
     <string name="scam_shield_title">Scam Shield + Triaje de Riesgo</string>
     <string name="scam_shield_loading">Cargando estado de Scam Shield...</string>

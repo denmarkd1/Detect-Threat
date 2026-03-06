@@ -78,6 +78,10 @@
             android:name=".CredentialOverlayService"
             android:exported="false" />
 
+        <service
+            android:name=".IncidentGuideOverlayService"
+            android:exported="false" />
+
         <receiver
             android:name=".BootCompletedReceiver"
             android:enabled="true"

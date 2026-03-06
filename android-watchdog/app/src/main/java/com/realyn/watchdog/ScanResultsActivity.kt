@@ -90,6 +90,43 @@ class ScanResultsActivity : AppCompatActivity() {
     private var maintenancePayload: MaintenancePayload? = null
     private var incidentAssistantOnlyMode: Boolean = false
     private var pendingRecommendedPermissionRequest: PendingRecommendedPermissionRequest? = null
+    private var pendingIncidentOverlayLaunch: PendingIncidentOverlayLaunch? = null
+
+    private val incidentOverlayPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val pending = pendingIncidentOverlayLaunch ?: return@registerForActivityResult
+            pendingIncidentOverlayLaunch = null
+            if (!Settings.canDrawOverlays(this)) {
+                logIncidentAssistantEvent(
+                    incident = pending.incident,
+                    action = "incident_assistant_overlay_permission_denied"
+                )
+                Toast.makeText(
+                    this,
+                    getString(R.string.incident_assistant_recommended_overlay_permission_denied),
+                    Toast.LENGTH_LONG
+                ).show()
+                launchRecommendedSettingsWithOverlayOption(
+                    incident = pending.incident,
+                    guidance = pending.guidance,
+                    launchActions = pending.launchActions,
+                    continueWithContainmentAfterLaunch = pending.continueWithContainmentAfterLaunch,
+                    useOverlayGuide = false
+                )
+                return@registerForActivityResult
+            }
+            logIncidentAssistantEvent(
+                incident = pending.incident,
+                action = "incident_assistant_overlay_permission_granted"
+            )
+            launchRecommendedSettingsWithOverlayOption(
+                incident = pending.incident,
+                guidance = pending.guidance,
+                launchActions = pending.launchActions,
+                continueWithContainmentAfterLaunch = pending.continueWithContainmentAfterLaunch,
+                useOverlayGuide = true
+            )
+        }
 
     private val recommendedSettingsPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -242,6 +279,7 @@ class ScanResultsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        stopIncidentGuideOverlay()
         applyScanResultsTheme()
     }
 
@@ -643,6 +681,13 @@ class ScanResultsActivity : AppCompatActivity() {
         val recommendedActions: List<IncidentAction>
     )
 
+    private data class PendingIncidentOverlayLaunch(
+        val incident: IncidentRecord,
+        val guidance: IncidentGuidance,
+        val launchActions: List<IncidentAction>,
+        val continueWithContainmentAfterLaunch: Boolean
+    )
+
     private data class IncidentContext(
         val moduleLabel: String,
         val score: Int?,
@@ -887,18 +932,36 @@ class ScanResultsActivity : AppCompatActivity() {
         GUIDE
     }
 
+    private enum class OemStepPack {
+        MIUI,
+        SAMSUNG,
+        PIXEL,
+        GENERIC
+    }
+
     private fun showRecommendedSettingsDecisionDialog(
         incident: IncidentRecord,
         guidance: IncidentGuidance,
         entryPoint: RecommendedSettingsEntryPoint
     ) {
         val recommendedSettings = buildRecommendedSettings(incident, guidance)
+        val supportsDirectAutoApply = hasDirectRecommendedAutoApply(guidance)
         val introRes = when (entryPoint) {
             RecommendedSettingsEntryPoint.APPLY -> R.string.incident_assistant_recommended_decision_apply_message
             RecommendedSettingsEntryPoint.GUIDE -> R.string.incident_assistant_recommended_decision_guide_message
         }
         val message = buildString {
             appendLine(getString(introRes))
+            appendLine()
+            appendLine(
+                getString(
+                    if (supportsDirectAutoApply) {
+                        R.string.incident_assistant_recommended_decision_auto_capability
+                    } else {
+                        R.string.incident_assistant_recommended_decision_manual_only_capability
+                    }
+                )
+            )
             appendLine()
             appendLine(getString(R.string.incident_assistant_section_recommended))
             recommendedSettings.forEachIndexed { index, line ->
@@ -937,14 +1000,25 @@ class ScanResultsActivity : AppCompatActivity() {
 
     private fun showManualRecommendedSettingsGuideDialog(
         incident: IncidentRecord,
-        guidance: IncidentGuidance
+        guidance: IncidentGuidance,
+        launchActions: List<IncidentAction> = emptyList(),
+        continueWithContainmentAfterLaunch: Boolean = false
     ) {
+        val canDrawOverlay = Settings.canDrawOverlays(this)
+        val oemPack = resolveOemStepPack()
         val recommendedSettings = buildRecommendedSettings(incident, guidance)
+        val tapTargets = buildRecommendedTapTargets(incident, guidance, oemPack)
         val manualSettingsActions = guidance.actions
             .filter { !it.destructive }
             .take(2)
         val message = buildString {
             appendLine(getString(R.string.incident_assistant_recommended_manual_intro))
+            appendLine(
+                getString(
+                    R.string.incident_assistant_recommended_tap_pack_template,
+                    oemStepPackLabel(oemPack)
+                )
+            )
             appendLine()
             recommendedSettings.forEachIndexed { index, line ->
                 appendLine("${index + 1}. $line")
@@ -956,17 +1030,156 @@ class ScanResultsActivity : AppCompatActivity() {
                     appendLine("${index + 1}. ${action.manualInstruction}")
                 }
             }
+            if (tapTargets.isNotEmpty()) {
+                appendLine()
+                appendLine(getString(R.string.incident_assistant_recommended_tap_targets_title))
+                tapTargets.forEachIndexed { index, target ->
+                    appendLine("${index + 1}. $target")
+                }
+            }
+            if (launchActions.isNotEmpty()) {
+                appendLine()
+                appendLine(
+                    getString(
+                        if (canDrawOverlay) {
+                            R.string.incident_assistant_recommended_overlay_hint_ready
+                        } else {
+                            R.string.incident_assistant_recommended_overlay_hint_permission
+                        }
+                    )
+                )
+            }
             appendLine()
             append(getString(R.string.incident_assistant_recommended_manual_continue))
         }.trim()
-        LionAlertDialogBuilder(this)
+        val dialogBuilder = LionAlertDialogBuilder(this)
             .setTitle(R.string.incident_assistant_recommended_manual_title)
             .setMessage(message)
-            .setPositiveButton(R.string.incident_assistant_guide_choice) { _, _ ->
-                showIncidentGuidanceDialog(incident, guidance)
+        if (launchActions.isNotEmpty()) {
+            dialogBuilder
+                .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
+                    startRecommendedSettingsWithOverlayFlow(
+                        incident = incident,
+                        guidance = guidance,
+                        launchActions = launchActions,
+                        continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch
+                    )
+                }
+                .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                    launchRecommendedSettingsWithOverlayOption(
+                        incident = incident,
+                        guidance = guidance,
+                        launchActions = launchActions,
+                        continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch,
+                        useOverlayGuide = false
+                    )
+                }
+                .setNegativeButton(R.string.scan_results_cancel, null)
+        } else {
+            dialogBuilder
+                .setPositiveButton(R.string.incident_assistant_guide_choice) { _, _ ->
+                    showIncidentGuidanceDialog(incident, guidance)
+                }
+                .setNegativeButton(R.string.scan_results_cancel, null)
+        }
+        dialogBuilder.show()
+    }
+
+    private fun startRecommendedSettingsWithOverlayFlow(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        launchActions: List<IncidentAction>,
+        continueWithContainmentAfterLaunch: Boolean
+    ) {
+        if (Settings.canDrawOverlays(this)) {
+            launchRecommendedSettingsWithOverlayOption(
+                incident = incident,
+                guidance = guidance,
+                launchActions = launchActions,
+                continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch,
+                useOverlayGuide = true
+            )
+            return
+        }
+        pendingIncidentOverlayLaunch = PendingIncidentOverlayLaunch(
+            incident = incident,
+            guidance = guidance,
+            launchActions = launchActions,
+            continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch
+        )
+        incidentOverlayPermissionLauncher.launch(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+        )
+    }
+
+    private fun launchRecommendedSettingsWithOverlayOption(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        launchActions: List<IncidentAction>,
+        continueWithContainmentAfterLaunch: Boolean,
+        useOverlayGuide: Boolean
+    ) {
+        if (useOverlayGuide) {
+            startIncidentGuideOverlay(incident, guidance)
+        } else {
+            stopIncidentGuideOverlay()
+        }
+        val result = executeIncidentActions(incident, launchActions)
+        showRecommendedSettingsApplyResultToast(result)
+        if (continueWithContainmentAfterLaunch) {
+            continueWithContainmentOrGuidance(
+                incident = incident,
+                guidance = guidance
+            )
+        } else {
+            showIncidentGuidanceDialog(incident, guidance)
+        }
+    }
+
+    private fun startIncidentGuideOverlay(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ) {
+        val steps = buildRecommendedTapTargets(
+            incident = incident,
+            guidance = guidance,
+            oemPack = resolveOemStepPack()
+        )
+            .ifEmpty { guidance.steps.take(5) }
+        startService(
+            Intent(this, IncidentGuideOverlayService::class.java).apply {
+                action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
+                putExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
+                    getString(R.string.incident_overlay_title)
+                )
+                putExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
+                    true
+                )
+                putStringArrayListExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
+                    ArrayList(steps)
+                )
             }
-            .setNegativeButton(R.string.scan_results_cancel, null)
-            .show()
+        )
+        logIncidentAssistantEvent(
+            incident = incident,
+            action = "incident_assistant_overlay_started",
+            detail = JSONObject().put("stepCount", steps.size)
+        )
+        Toast.makeText(this, R.string.incident_overlay_started, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopIncidentGuideOverlay() {
+        startService(
+            Intent(this, IncidentGuideOverlayService::class.java).apply {
+                action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
+            }
+        )
     }
 
     private fun startAutoRecommendedSettingsFlow(
@@ -981,6 +1194,21 @@ class ScanResultsActivity : AppCompatActivity() {
                 Toast.LENGTH_SHORT
             ).show()
             showIncidentApplyConfirmationDialog(incident, guidance)
+            return
+        }
+
+        if (!hasDirectRecommendedAutoApply(guidance)) {
+            logIncidentAssistantEvent(
+                incident = incident,
+                action = "incident_assistant_recommended_manual_only_fallback",
+                detail = JSONObject().put("recommendedActionCount", recommendedActions.size)
+            )
+            showManualRecommendedSettingsGuideDialog(
+                incident = incident,
+                guidance = guidance,
+                launchActions = recommendedActions,
+                continueWithContainmentAfterLaunch = true
+            )
             return
         }
 
@@ -1062,12 +1290,224 @@ class ScanResultsActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun hasDirectRecommendedAutoApply(guidance: IncidentGuidance): Boolean {
+        return guidance.actions
+            .any { action ->
+                action.automatable &&
+                    !action.destructive &&
+                    action.execution != IncidentActionExecution.OPEN_INTENTS
+            }
+    }
+
+    private fun resolveOemStepPack(): OemStepPack {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
+        return when {
+            manufacturer.contains("xiaomi") ||
+                manufacturer.contains("redmi") ||
+                manufacturer.contains("poco") ||
+                brand.contains("xiaomi") ||
+                brand.contains("redmi") ||
+                brand.contains("poco") -> OemStepPack.MIUI
+            manufacturer.contains("samsung") || brand.contains("samsung") -> OemStepPack.SAMSUNG
+            manufacturer.contains("google") || brand.contains("google") -> OemStepPack.PIXEL
+            else -> OemStepPack.GENERIC
+        }
+    }
+
+    private fun oemStepPackLabel(oemPack: OemStepPack): String {
+        return when (oemPack) {
+            OemStepPack.MIUI -> "MIUI (Xiaomi/Redmi/POCO)"
+            OemStepPack.SAMSUNG -> "Samsung One UI"
+            OemStepPack.PIXEL -> "Google Pixel"
+            OemStepPack.GENERIC -> "Generic Android"
+        }
+    }
+
+    private fun buildRecommendedTapTargets(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        oemPack: OemStepPack = resolveOemStepPack()
+    ): List<String> {
+        val context = parseIncidentContext(incident)
+        val module = context.moduleLabel.lowercase(Locale.US)
+        val packageRef = context.packageName.ifBlank { "the flagged app" }
+
+        val targets = when {
+            module.contains("startup persistence") -> startupTapTargets(oemPack, packageRef)
+            module.contains("storage") -> storageTapTargets(oemPack)
+            module.contains("embedded path probe") -> embeddedTapTargets(oemPack)
+            module.contains("wi-fi posture") || module.contains("wifi posture") -> wifiTapTargets(oemPack)
+            else -> coreTapTargets(oemPack, packageRef)
+        }.toMutableList()
+
+        if (targets.isEmpty()) {
+            guidance.actions
+                .take(2)
+                .forEach { action ->
+                    targets += "Open route: ${action.title}"
+                }
+        }
+        return targets
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(7)
+    }
+
+    private fun startupTapTargets(oemPack: OemStepPack, packageRef: String): List<String> {
+        return when (oemPack) {
+            OemStepPack.MIUI -> listOf(
+                "Tap \"Permissions\".",
+                "Tap \"Other permissions\" and set risky access to \"Deny\".",
+                "Tap \"Display pop-up windows while running in background\" and set to \"Deny\".",
+                "Tap \"Autostart\" and switch it Off for $packageRef.",
+                "Open Settings > Privacy protection > Special permissions > Device admin apps, then remove admin access for $packageRef.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.SAMSUNG -> listOf(
+                "Tap \"Permissions\".",
+                "Set risky permissions to \"Don't allow\" unless the app needs them.",
+                "Tap \"Appear on top\" and switch it Off.",
+                "Tap \"Install unknown apps\" and switch it Off.",
+                "Open Settings > Security and privacy > Other security settings > Device admin apps, then disable $packageRef.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.PIXEL -> listOf(
+                "Tap \"Permissions\".",
+                "Set risky permissions to \"Don't allow\" unless the app needs them.",
+                "Tap \"Display over other apps\" and set it to \"Not allowed\".",
+                "Tap \"Modify system settings\" and set it to \"Not allowed\".",
+                "Open Settings > Security and privacy > More security settings > Device admin apps, then disable $packageRef.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.GENERIC -> listOf(
+                "Tap \"Permissions\".",
+                "Tap \"App permissions\" and set risky access to \"Deny\".",
+                "Tap \"Display over other apps\" and set it to \"Not allowed\".",
+                "If shown, tap \"Device admin apps\" and remove admin access for $packageRef.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+        }
+    }
+
+    private fun storageTapTargets(oemPack: OemStepPack): List<String> {
+        return when (oemPack) {
+            OemStepPack.MIUI -> listOf(
+                "Tap \"Storage\".",
+                "Open \"File Manager\" > \"Downloads\".",
+                "Select suspicious installers/scripts and tap \"Delete\"."
+            )
+            OemStepPack.SAMSUNG -> listOf(
+                "Tap \"Storage\".",
+                "Open \"My Files\" > \"Downloads\".",
+                "Select suspicious installers/scripts and tap \"Delete\"."
+            )
+            OemStepPack.PIXEL -> listOf(
+                "Tap \"Storage & cache\".",
+                "Open the \"Files\" app > \"Downloads\".",
+                "Select suspicious installers/scripts and tap \"Delete\"."
+            )
+            OemStepPack.GENERIC -> listOf(
+                "Tap \"Storage\" or \"Files\".",
+                "Open the flagged location and select suspicious files.",
+                "Tap \"Delete\" for unknown installers/scripts."
+            )
+        }
+    }
+
+    private fun embeddedTapTargets(oemPack: OemStepPack): List<String> {
+        return when (oemPack) {
+            OemStepPack.MIUI -> listOf(
+                "Open Settings > Additional settings > Developer options.",
+                "Set \"USB debugging\" and \"Wireless debugging\" to Off.",
+                "Open Security settings and disable unknown install sources."
+            )
+            OemStepPack.SAMSUNG -> listOf(
+                "Open Settings > Developer options.",
+                "Set \"USB debugging\" and \"Wireless debugging\" to Off.",
+                "Open Security and privacy and disable unknown app installs."
+            )
+            OemStepPack.PIXEL -> listOf(
+                "Open Settings > System > Developer options.",
+                "Set \"USB debugging\" and \"Wireless debugging\" to Off.",
+                "Open Security and privacy and disable unknown app installs."
+            )
+            OemStepPack.GENERIC -> listOf(
+                "Tap \"Developer options\".",
+                "Tap \"USB debugging\" and \"Wireless debugging\" to disable when not needed.",
+                "Tap \"Security\" and disable unknown install sources."
+            )
+        }
+    }
+
+    private fun wifiTapTargets(oemPack: OemStepPack): List<String> {
+        return when (oemPack) {
+            OemStepPack.MIUI -> listOf(
+                "Open Settings > WLAN or Wi-Fi.",
+                "Tap the risky SSID.",
+                "Tap \"Forget network\" or \"Disconnect\"."
+            )
+            OemStepPack.SAMSUNG -> listOf(
+                "Open Settings > Connections > Wi-Fi.",
+                "Tap the risky SSID.",
+                "Tap \"Forget\" or \"Disconnect\"."
+            )
+            OemStepPack.PIXEL -> listOf(
+                "Open Settings > Network & internet > Internet.",
+                "Tap the risky SSID.",
+                "Tap \"Forget\" or \"Disconnect\"."
+            )
+            OemStepPack.GENERIC -> listOf(
+                "Tap \"Wi-Fi\".",
+                "Tap the risky SSID.",
+                "Tap \"Forget\" or \"Disconnect\"."
+            )
+        }
+    }
+
+    private fun coreTapTargets(oemPack: OemStepPack, packageRef: String): List<String> {
+        return when (oemPack) {
+            OemStepPack.MIUI -> listOf(
+                "Tap \"Permissions\".",
+                "Tap \"Other permissions\" and set risky access to \"Deny\".",
+                "If shown, tap \"Display pop-up windows\" and set to \"Deny\".",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.SAMSUNG -> listOf(
+                "Tap \"Permissions\".",
+                "Set risky permissions to \"Don't allow\" unless required.",
+                "Tap \"Appear on top\" and switch it Off when not required.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.PIXEL -> listOf(
+                "Tap \"Permissions\".",
+                "Set risky permissions to \"Don't allow\" unless required.",
+                "Tap \"Display over other apps\" and set to \"Not allowed\" when not required.",
+                "If $packageRef is untrusted, tap \"Uninstall\"."
+            )
+            OemStepPack.GENERIC -> listOf(
+                "Tap \"Permissions\".",
+                "Review high-risk permissions and set each one to \"Deny\" unless required.",
+                "If the app is untrusted, tap \"Uninstall\"."
+            )
+        }
+    }
+
     private fun applyRecommendedSettingsThenContinue(
         incident: IncidentRecord,
         guidance: IncidentGuidance,
         recommendedActions: List<IncidentAction>
     ) {
         val result = executeIncidentActions(incident, recommendedActions)
+        showRecommendedSettingsApplyResultToast(result)
+        continueWithContainmentOrGuidance(
+            incident = incident,
+            guidance = guidance
+        )
+    }
+
+    private fun showRecommendedSettingsApplyResultToast(result: IncidentActionApplyResult) {
         when {
             result.successCount > 0 && result.failedCount == 0 -> Toast.makeText(
                 this,
@@ -1092,10 +1532,6 @@ class ScanResultsActivity : AppCompatActivity() {
                 Toast.LENGTH_LONG
             ).show()
         }
-        continueWithContainmentOrGuidance(
-            incident = incident,
-            guidance = guidance
-        )
     }
 
     private fun continueWithContainmentOrGuidance(

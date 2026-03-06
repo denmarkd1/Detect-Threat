@@ -61,7 +61,13 @@ Exit code:
    - Confirm `Work on this now` renders app identity for high/medium/low incidents as:
      compact app icon + bold common app name (when package metadata is available).
    - Confirm both `Apply fix for me` and `Guide me step-by-step` first ask whether to apply recommended best settings.
+   - Confirm decision copy clearly states when Android blocks direct auto-change and manual taps are required.
    - Confirm Apply path can request required Android permission before recommended auto actions.
+   - On manual recommended settings, confirm dialog shows `Path pack:` and device-appropriate OEM wording
+     (MIUI/Samsung One UI/Google Pixel/Generic Android).
+   - Confirm `Open with overlay guide` is available and requests overlay permission when needed.
+   - Confirm compact overlay mode displays one current target at a time and supports:
+     `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
    - Use `Back to scan results` and confirm return path is clean.
 4. Fix any failed checks and re-run until clean.

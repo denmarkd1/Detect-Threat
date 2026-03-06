@@ -105,7 +105,16 @@ Tutorial guidance is now aligned to the latest remediation UX:
    - Confirm `Work on this now` shows app identity consistently for high/medium/low incidents:
      app icon + bold common app name when package metadata is available.
    - Confirm both actions (`Apply fix for me`, `Guide me step-by-step`) first show the `Apply recommended best settings?` decision.
+   - Confirm decision copy states manual-only behavior when Android blocks direct auto-changes.
    - Confirm Apply path requests Android permission when required before recommended auto actions.
+   - Confirm manual recommended-settings dialog shows `Path pack:` with the detected OEM profile
+     (MIUI, Samsung One UI, Google Pixel, or Generic Android).
+   - Confirm tap-target list wording matches OEM pack for the active device.
+   - Confirm `Open with overlay guide` appears in manual flow.
+   - If overlay permission is not granted, confirm app requests `display over other apps` and falls back safely if denied.
+   - Confirm compact overlay guide shows one current target at a time with:
+     `Previous`, `Done this step`, and `Finish guide`.
+   - Confirm compact overlay advances step-by-step and closes cleanly at completion.
    - Confirm uninstall remains available as a containment action in the automatic flow for high-risk findings.
    - Confirm Guide path can show manual recommended-settings guidance before full step-by-step flow.
    - Confirm `Skip for now` keeps user in assistant flow and loads next incident.
