@@ -22,6 +22,6 @@ Repository target: `https://github.com/denmarkd1/Detect-Threat`
 - `docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md`: rollout and rollback operations guide
 - `docs/integration/phase6_pricing_packaging_update_2026-03-04.md`: final pricing/packaging lock for launch
 - `docs/integration/phase6_lyra_qa_trainer_2026-03-04.md`: device-backed QA trainer runbook and outputs
-- `docs/integration/phase6_tutorial_overlay_2026-03-04.md`: embedded onboarding overlay details (guided + learn-by-doing)
+- `docs/integration/phase6_tutorial_overlay_2026-03-04.md`: embedded onboarding overlay details (guided + learn-by-doing), including the 2026-03-06 incident-assistant UX refresh (action order, skip-to-next, recommended settings, collapsible sections)
 - `docs/integration/phase6_play_store_first_submission_guide_2026-03-04.md`: first Play submission checklist for this app
 - `docs/integration/phase6_real_world_review_outlets_2026-03-04.md`: external outlets/creators and submission requirements

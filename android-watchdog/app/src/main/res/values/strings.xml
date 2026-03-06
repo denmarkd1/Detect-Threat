@@ -412,6 +412,17 @@
     <string name="incident_assistant_apply_partial_template">Applied %1$d action(s), %2$d failed. Continue with guided steps.</string>
     <string name="incident_assistant_apply_failed">Automatic remediation failed on this device. Continue with guided steps.</string>
     <string name="incident_assistant_action_request_uninstall">Request uninstall for %1$s</string>
+    <string name="incident_assistant_section_work_now">Work on this now</string>
+    <string name="incident_assistant_section_why">Why this needs attention</string>
+    <string name="incident_assistant_section_choose">Choose one option below</string>
+    <string name="incident_assistant_section_recommended">Recommended best settings</string>
+    <string name="incident_assistant_tip_auto_template">Tip: %1$d quick action(s) can be opened by the app.</string>
+    <string name="incident_assistant_tip_manual">Tip: This incident needs manual steps.</string>
+    <string name="incident_assistant_skip_no_other">No other incidents are waiting right now. This one stays in your queue.</string>
+    <string name="incident_assistant_recommended_fallback">Review app permissions and keep only required access enabled.</string>
+    <string name="incident_assistant_recommended_followup">Re-run deep scan after changes and mark fixed only when this issue no longer appears.</string>
+    <string name="expandable_section_state_collapsed">Show</string>
+    <string name="expandable_section_state_expanded">Hide</string>
 
     <string name="scam_shield_title">Anti-phishing triage</string>
     <string name="scam_shield_loading">Loading anti-phishing status...</string>
@@ -931,8 +942,11 @@
     <string name="home_tutorial_step_timeline_body">Page 2 Timeline opens guardian events, connector anomalies, accountability, and KPI summary report.</string>
     <string name="home_tutorial_step_timeline_hint">Use export when you need a shareable incident package without raw secrets.</string>
     <string name="home_tutorial_step_timeline_window_title">Timeline window actions</string>
-    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog.</string>
-    <string name="home_tutorial_step_timeline_window_hint">Use export for non-secret evidence sharing and queue button for immediate remediation.</string>
+    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog. In remediation queue, Incident assistant now prioritizes Apply fix for me, then Guide me step-by-step, and Skip for now advances to the next issue when available.</string>
+    <string name="home_tutorial_step_timeline_window_hint">Use export for non-secret evidence sharing. In remediation queue, expand only the sections you need (What happened, What to do now, Technical details, Recommended best settings) to reduce overload.</string>
+    <string name="home_tutorial_step_incident_assistant_title">Incident assistant screen</string>
+    <string name="home_tutorial_step_incident_assistant_body">Incident assistant now uses expandable sections so users can open only what they need: Work on this now, Why this needs attention, Choose one option below, and Recommended best settings. Action order is Apply fix for me, Guide me step-by-step, then Skip for now.</string>
+    <string name="home_tutorial_step_incident_assistant_hint">Skip for now no longer exits to scan results when more incidents exist. It keeps flow in-place and advances to the next unresolved issue.</string>
     <string name="home_tutorial_step_lion_nav_title">Lion quick navigation</string>
     <string name="home_tutorial_step_lion_nav_body">The center lion opens quick links to critical security surfaces and this tutorial.</string>
     <string name="home_tutorial_step_lion_nav_hint">Long-press remains a fast path for Home Risk posture.</string>

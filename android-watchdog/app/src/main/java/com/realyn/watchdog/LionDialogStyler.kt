@@ -134,7 +134,9 @@ object LionDialogStyler {
                 if (view !is Button) {
                     val textColor = when (view.id) {
                         android.R.id.message,
-                        R.id.planReadOnlyHintLabel -> palette.textSecondary
+                        R.id.planReadOnlyHintLabel,
+                        R.id.expandableSectionBody -> palette.textSecondary
+                        R.id.expandableSectionHeader -> palette.accent
                         else -> palette.textPrimary
                     }
                     view.setTextColor(textColor)

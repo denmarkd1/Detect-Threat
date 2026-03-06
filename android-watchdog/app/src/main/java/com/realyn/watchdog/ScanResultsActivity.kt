@@ -10,12 +10,15 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.realyn.watchdog.databinding.ActivityScanResultsBinding
 import com.realyn.watchdog.theme.LionIdentityAccentStyle
@@ -116,8 +119,9 @@ class ScanResultsActivity : AppCompatActivity() {
             lowCount = lowCount,
             infoCount = infoCount
         )
-        binding.scanResultsReportTextLabel.text = reportText
+        renderScanReportSections(reportText)
         renderMaintenanceActions(maintenancePayload)
+        applyScanResultsTheme()
 
         binding.scanResultsStartIncidentButton.setOnClickListener {
             startIncidentGuidanceFlow()
@@ -177,6 +181,141 @@ class ScanResultsActivity : AppCompatActivity() {
         return lines.joinToString(separator = "\n")
     }
 
+    private fun renderScanReportSections(reportText: String) {
+        val sections = parseScanReportSections(reportText)
+        binding.scanResultsReportSectionsContainer.removeAllViews()
+        if (sections.isEmpty()) {
+            binding.scanResultsReportSectionsContainer.visibility = View.GONE
+            binding.scanResultsReportTextLabel.visibility = View.VISIBLE
+            binding.scanResultsReportTextLabel.text = reportText
+            return
+        }
+
+        binding.scanResultsReportTextLabel.visibility = View.GONE
+        binding.scanResultsReportSectionsContainer.visibility = View.VISIBLE
+        renderCollapsibleSections(
+            container = binding.scanResultsReportSectionsContainer,
+            sections = sections
+        )
+    }
+
+    private fun parseScanReportSections(reportText: String): List<CollapsibleSection> {
+        val normalized = reportText
+            .replace("\r", "")
+            .trim()
+        if (normalized.isBlank()) {
+            return emptyList()
+        }
+
+        val knownHeaders = listOf(
+            "What happened",
+            "What to do now",
+            "Technical details (optional)",
+            "Detailed findings (optional)"
+        )
+        val sections = linkedMapOf<String, MutableList<String>>()
+        val summaryLines = mutableListOf<String>()
+        var activeHeader: String? = null
+
+        normalized.lines().forEach { rawLine ->
+            val line = rawLine.trimEnd()
+            val matchedHeader = knownHeaders.firstOrNull { it.equals(line.trim(), ignoreCase = true) }
+            if (matchedHeader != null) {
+                activeHeader = matchedHeader
+                sections.getOrPut(matchedHeader) { mutableListOf() }
+                return@forEach
+            }
+            if (activeHeader == null) {
+                summaryLines += line
+            } else {
+                sections.getOrPut(activeHeader.orEmpty()) { mutableListOf() } += line
+            }
+        }
+
+        val rendered = mutableListOf<CollapsibleSection>()
+        val summaryBody = summaryLines.joinToString("\n").trim()
+        if (summaryBody.isNotBlank()) {
+            val summaryTitleCandidate = summaryLines.firstOrNull().orEmpty().trim()
+            val summaryTitle = if (summaryTitleCandidate.isBlank()) {
+                getString(R.string.scan_results_report_title)
+            } else {
+                summaryTitleCandidate
+            }
+            val summaryDetailBody = summaryLines.drop(1).joinToString("\n").trim()
+            val body = if (summaryDetailBody.isBlank()) summaryBody else summaryDetailBody
+            rendered += CollapsibleSection(
+                title = summaryTitle,
+                body = body,
+                expandedByDefault = true
+            )
+        }
+
+        knownHeaders.forEach { header ->
+            val body = sections[header]
+                .orEmpty()
+                .joinToString("\n")
+                .trim()
+            if (body.isNotBlank()) {
+                rendered += CollapsibleSection(
+                    title = header,
+                    body = body
+                )
+            }
+        }
+        return rendered
+    }
+
+    private fun renderCollapsibleSections(
+        container: LinearLayout,
+        sections: List<CollapsibleSection>
+    ) {
+        sections.forEach { section ->
+            val sectionView = layoutInflater.inflate(
+                R.layout.view_expandable_link_section,
+                container,
+                false
+            )
+            val headerView = sectionView.findViewById<TextView>(R.id.expandableSectionHeader)
+            val bodyView = sectionView.findViewById<TextView>(R.id.expandableSectionBody)
+            bindExpandableSection(
+                headerView = headerView,
+                bodyView = bodyView,
+                title = section.title,
+                body = section.body,
+                expandedByDefault = section.expandedByDefault
+            )
+            container.addView(sectionView)
+        }
+    }
+
+    private fun bindExpandableSection(
+        headerView: TextView,
+        bodyView: TextView,
+        title: String,
+        body: String,
+        expandedByDefault: Boolean
+    ) {
+        var expanded = expandedByDefault
+        bodyView.text = body
+
+        fun refresh() {
+            val stateRes = if (expanded) {
+                R.string.expandable_section_state_expanded
+            } else {
+                R.string.expandable_section_state_collapsed
+            }
+            val indicator = if (expanded) "▾" else "▸"
+            headerView.text = "$indicator $title (${getString(stateRes)})"
+            bodyView.visibility = if (expanded) View.VISIBLE else View.GONE
+        }
+
+        headerView.setOnClickListener {
+            expanded = !expanded
+            refresh()
+        }
+        refresh()
+    }
+
     private fun formatDisplayTime(epochMs: Long): String {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(epochMs))
     }
@@ -220,6 +359,12 @@ class ScanResultsActivity : AppCompatActivity() {
         val signals: List<String>
     )
 
+    private data class CollapsibleSection(
+        val title: String,
+        val body: String,
+        val expandedByDefault: Boolean = false
+    )
+
     private fun startIncidentGuidanceFlow() {
         val next = IncidentStore.nextUnresolvedForWork(this)
         if (next == null) {
@@ -244,50 +389,184 @@ class ScanResultsActivity : AppCompatActivity() {
         val autoCount = guidance.actions.count { it.automatable }
         val severityLabel = userSeverityLabel(incident.severity)
         val whyLine = compactTechnicalLine(guidance.whyLine, maxLen = 180)
-        val message = buildString {
-            appendLine("Remaining incidents: high $highRemaining, medium $mediumRemaining, low $lowRemaining")
-            appendLine()
-            appendLine("Work on this now")
-            appendLine("$severityLabel risk: ${incident.title}")
-            appendLine()
-            appendLine("Why this needs attention")
-            appendLine(whyLine.ifBlank { "This incident matched known risk signals from the scan." })
-            appendLine()
-            appendLine("Choose one option below.")
-            if (autoCount > 0) {
-                appendLine("Tip: $autoCount quick action(s) can be opened by the app.")
-            } else {
-                appendLine("Tip: This incident needs manual steps.")
-            }
+        val recommendedSettings = buildRecommendedSettings(incident, guidance)
+        val optionSummary = buildString {
+            appendLine(
+                if (autoCount > 0) {
+                    getString(R.string.incident_assistant_tip_auto_template, autoCount)
+                } else {
+                    getString(R.string.incident_assistant_tip_manual)
+                }
+            )
+            appendLine("1. ${getString(R.string.incident_assistant_apply_choice)}")
+            appendLine("2. ${getString(R.string.incident_assistant_guide_choice)}")
+            append("3. ${getString(R.string.incident_assistant_skip_choice)}")
         }.trim()
+        val sectionModels = listOf(
+            CollapsibleSection(
+                title = getString(R.string.incident_assistant_section_work_now),
+                body = "$severityLabel risk: ${incident.title}",
+                expandedByDefault = true
+            ),
+            CollapsibleSection(
+                title = getString(R.string.incident_assistant_section_why),
+                body = whyLine.ifBlank { "This incident matched known risk signals from the scan." }
+            ),
+            CollapsibleSection(
+                title = getString(R.string.incident_assistant_section_choose),
+                body = optionSummary
+            ),
+            CollapsibleSection(
+                title = getString(R.string.incident_assistant_section_recommended),
+                body = recommendedSettings.joinToString("\n") { "- $it" }
+            )
+        )
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_incident_assistant, null)
+        dialogView.findViewById<TextView>(R.id.incidentAssistantQueueLabel).text = getString(
+            R.string.incident_guidance_queue_template,
+            highRemaining,
+            mediumRemaining,
+            lowRemaining
+        )
+        val sectionContainer = dialogView.findViewById<LinearLayout>(R.id.incidentAssistantSectionsContainer)
+        sectionContainer.removeAllViews()
+        renderCollapsibleSections(
+            container = sectionContainer,
+            sections = sectionModels
+        )
+
         val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.incident_guidance_dialog_title)
-            .setMessage(message)
-            .setPositiveButton(R.string.incident_assistant_apply_choice) { _, _ ->
-                logIncidentAssistantEvent(
-                    incident = incident,
-                    action = "incident_assistant_apply_requested",
-                    detail = JSONObject().put("actionCount", guidance.actions.size)
-                )
-                showIncidentApplyConfirmationDialog(incident, guidance)
-            }
-            .setNeutralButton(R.string.incident_assistant_guide_choice) { _, _ ->
-                logIncidentAssistantEvent(
-                    incident = incident,
-                    action = "incident_assistant_manual_requested",
-                    detail = JSONObject().put("actionCount", guidance.actions.size)
-                )
-                showIncidentGuidanceDialog(incident, guidance)
-            }
-            .setNegativeButton(R.string.incident_assistant_skip_choice) { _, _ ->
-                logIncidentAssistantEvent(
-                    incident = incident,
-                    action = "incident_assistant_skipped",
-                    detail = JSONObject().put("actionCount", guidance.actions.size)
-                )
-            }
+            .setView(dialogView)
             .create()
+
+        dialogView.findViewById<MaterialButton>(R.id.incidentAssistantApplyButton).setOnClickListener {
+            logIncidentAssistantEvent(
+                incident = incident,
+                action = "incident_assistant_apply_requested",
+                detail = JSONObject().put("actionCount", guidance.actions.size)
+            )
+            dialog.dismiss()
+            showIncidentApplyConfirmationDialog(incident, guidance)
+        }
+        dialogView.findViewById<MaterialButton>(R.id.incidentAssistantGuideButton).setOnClickListener {
+            logIncidentAssistantEvent(
+                incident = incident,
+                action = "incident_assistant_manual_requested",
+                detail = JSONObject().put("actionCount", guidance.actions.size)
+            )
+            dialog.dismiss()
+            showIncidentGuidanceDialog(incident, guidance)
+        }
+        dialogView.findViewById<MaterialButton>(R.id.incidentAssistantSkipButton).setOnClickListener {
+            skipIncidentAndContinue(incident, guidance, dialog)
+        }
+
         showStyledDialog(dialog)
+    }
+
+    private fun buildRecommendedSettings(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance
+    ): List<String> {
+        val context = parseIncidentContext(incident)
+        val module = context.moduleLabel.lowercase(Locale.US)
+        val recommendations = mutableListOf<String>()
+
+        when {
+            module.contains("startup persistence") -> {
+                recommendations += "Disable Accessibility, overlay, and device-admin access for untrusted apps."
+                recommendations += "Set risky permissions to Deny unless the app cannot function without them."
+            }
+            module.contains("storage") -> {
+                recommendations += "Keep Downloads and shared storage free of unknown installers/scripts."
+                recommendations += "Remove suspicious files before opening them."
+            }
+            module.contains("embedded path probe") -> {
+                recommendations += "Disable debugging and unknown install sources when not actively needed."
+                recommendations += "Keep Security settings locked to trusted install sources only."
+            }
+            module.contains("wi-fi posture") || module.contains("wifi posture") -> {
+                recommendations += "Use trusted WPA2/WPA3 networks for sensitive account actions."
+                recommendations += "Disable auto-join for open or unknown hotspots."
+            }
+            else -> {
+                recommendations += getString(R.string.incident_assistant_recommended_fallback)
+            }
+        }
+
+        guidance.actions
+            .take(2)
+            .forEach { action ->
+                recommendations += "Quick setting route: ${action.title}"
+            }
+        recommendations += getString(R.string.incident_assistant_recommended_followup)
+        return recommendations
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(6)
+    }
+
+    private fun skipIncidentAndContinue(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        dialog: AlertDialog
+    ) {
+        logIncidentAssistantEvent(
+            incident = incident,
+            action = "incident_assistant_skipped",
+            detail = JSONObject().put("actionCount", guidance.actions.size)
+        )
+        val next = nextUnresolvedIncidentExcluding(incident.incidentId)
+        if (next == null) {
+            Toast.makeText(
+                this,
+                getString(R.string.incident_assistant_skip_no_other),
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        val active = if (next.status == IncidentStatus.OPEN) {
+            IncidentStore.markInProgress(this, next.incidentId) ?: next
+        } else {
+            next
+        }
+        dialog.dismiss()
+        showIncidentDecisionDialog(active)
+    }
+
+    private fun nextUnresolvedIncidentExcluding(incidentId: String): IncidentRecord? {
+        return IncidentStore.loadIncidents(this)
+            .filter {
+                (it.status == IncidentStatus.OPEN || it.status == IncidentStatus.IN_PROGRESS) &&
+                    it.incidentId != incidentId
+            }
+            .sortedWith(
+                compareByDescending<IncidentRecord> { incidentSeverityRankForWork(it.severity) }
+                    .thenBy { incidentStatusWorkOrder(it.status) }
+                    .thenByDescending { it.lastSeenAtEpochMs }
+            )
+            .firstOrNull()
+    }
+
+    private fun incidentStatusWorkOrder(status: IncidentStatus): Int {
+        return when (status) {
+            IncidentStatus.IN_PROGRESS -> 0
+            IncidentStatus.OPEN -> 1
+            IncidentStatus.RESOLVED -> 2
+        }
+    }
+
+    private fun incidentSeverityRankForWork(severity: Severity): Int {
+        return when (severity) {
+            Severity.HIGH -> 4
+            Severity.MEDIUM -> 3
+            Severity.LOW -> 2
+            Severity.INFO -> 1
+        }
     }
 
     private fun showIncidentGuidanceDialog(
@@ -1738,6 +2017,7 @@ class ScanResultsActivity : AppCompatActivity() {
         binding.scanResultsMaintenanceActionsTitleLabel.setTextColor(palette.textPrimary)
         binding.scanResultsReportTitleLabel.setTextColor(palette.textPrimary)
         binding.scanResultsReportTextLabel.setTextColor(palette.textSecondary)
+        applyExpandableSectionPalette(binding.scanResultsReportSectionsContainer, palette)
 
         applyDepthCardPalette(
             card = binding.scanResultsSummaryCard,
@@ -1758,6 +2038,17 @@ class ScanResultsActivity : AppCompatActivity() {
             root = binding.root,
             accentStyle = accentStyle
         )
+    }
+
+    private fun applyExpandableSectionPalette(
+        container: LinearLayout,
+        palette: LionThemePalette
+    ) {
+        for (index in 0 until container.childCount) {
+            val sectionView = container.getChildAt(index)
+            sectionView.findViewById<TextView>(R.id.expandableSectionHeader)?.setTextColor(palette.accent)
+            sectionView.findViewById<TextView>(R.id.expandableSectionBody)?.setTextColor(palette.textSecondary)
+        }
     }
 
     private fun applyDepthCardPalette(

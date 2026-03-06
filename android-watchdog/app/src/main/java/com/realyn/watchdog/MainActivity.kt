@@ -3432,6 +3432,16 @@ class MainActivity : AppCompatActivity() {
                 requireTargetTapInLearnMode = false
             ),
             HomeTutorialStep(
+                stepId = "incident_assistant_window",
+                titleRes = R.string.home_tutorial_step_incident_assistant_title,
+                bodyRes = R.string.home_tutorial_step_incident_assistant_body,
+                hintRes = R.string.home_tutorial_step_incident_assistant_hint,
+                targetViewProvider = { binding.widgetServicesCard },
+                widgetPageIndex = 1,
+                navPageIndex = 1,
+                requireTargetTapInLearnMode = false
+            ),
+            HomeTutorialStep(
                 stepId = "lion_nav",
                 titleRes = R.string.home_tutorial_step_lion_nav_title,
                 bodyRes = R.string.home_tutorial_step_lion_nav_body,
