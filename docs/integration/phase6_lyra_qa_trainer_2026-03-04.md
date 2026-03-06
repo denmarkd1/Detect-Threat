@@ -9,6 +9,10 @@ Date: 2026-03-04
 It validates:
 
 - local Python and watchdog CLI readiness,
+- local D_T memory sweep integrity for phase/fix entities,
+- roadmap and audit coverage for phases 0 to 6,
+- phase hardening artifact presence (MASVS, policy/play, rollout, pricing, tutorial, trainer docs),
+- memory-derived regression markers for key fixes (false-positive tuning, scan routing, incident assistant flow, vault hardening, startup hydration ordering),
 - precommit guardrails,
 - Android lint/unit/build checks,
 - ADB device connection,

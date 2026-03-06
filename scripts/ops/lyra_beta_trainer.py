@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -22,6 +23,104 @@ LOG_DIR = ROOT_DIR / "logs" / "lyra_qa"
 DEFAULT_MONKEY_EVENTS = 150
 DEFAULT_MONKEY_SEED = 424242
 OUTPUT_EXCERPT_LIMIT = 2200
+MEMORY_STORE_PATH = ROOT_DIR / "systems" / "D_T_System" / "data" / "mcp_memory.jsonl"
+ZEN_COUNCIL_EVENTS_PATH = ROOT_DIR / "systems" / "D_T_System" / "logs" / "zen_council_events.jsonl"
+MEMORY_RELOCATION_DIR = ROOT_DIR / "logs" / "memory"
+ROADMAP_PATH = ROOT_DIR / "docs" / "integration" / "top5_competitor_smart_integration_roadmap_2026-03-03.md"
+PHASE1_5_AUDIT_PATH = ROOT_DIR / "docs" / "integration" / "phase1_5_retail_readiness_audit_2026-03-04.md"
+PHASE6_ARTIFACT_PATHS = (
+    ROOT_DIR / "scripts" / "ops" / "phase6_masvs_sweep.sh",
+    ROOT_DIR / "docs" / "integration" / "phase6_masvs_verification_sweep_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_policy_play_disclosure_review_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_staged_rollout_rollback_playbook_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_pricing_packaging_update_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_play_store_first_submission_guide_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay_2026-03-04.md",
+    ROOT_DIR / "docs" / "integration" / "phase6_lyra_qa_trainer_2026-03-04.md",
+)
+REQUIRED_PHASE6_MEMORY_ENTITIES = (
+    "security_phase6_launch_readiness_2026_03_04",
+    "security_phase6_masvs_report_20260304T102443Z",
+    "security_phase6_lyra_report_20260304T102544Z",
+    "security_phase6_play_submission_guide_20260304",
+    "security_phase6_tutorial_overlay_20260304",
+)
+REQUIRED_ROADMAP_PHASE_HEADERS = (
+    "## Phase 0 - Product and legal framing (1 week)",
+    "## Phase 1 - Architecture and data model (1 to 2 weeks)",
+    "## Phase 2 - Smart-home connector MVP (2 to 3 weeks)",
+    "## Phase 3 - VPN broker and service linking (1 to 2 weeks)",
+    "## Phase 4 - Digital key risk guardrails (2 weeks)",
+    "## Phase 5 - Competitive parity+ enhancements (2 weeks)",
+    "## Phase 6 - Hardening and launch readiness (1 to 2 weeks)",
+)
+REQUIRED_PHASE1_5_PASS_ROWS = (
+    "| Phase 1 - Architecture and data model |",
+    "| Phase 2 - Smart-home connector MVP |",
+    "| Phase 3 - VPN broker and service linking |",
+    "| Phase 4 - Digital key risk guardrails |",
+    "| Phase 5 - Competitive parity+ |",
+)
+
+
+def _safe_read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _extract_workspace_paths(text: str) -> List[Path]:
+    candidates: List[Path] = []
+    absolute_matches = re.findall(r"/home/[A-Za-z0-9._/\-]+", text)
+    relative_matches = re.findall(
+        r"(?:docs|scripts|android-watchdog|watchdog|config|logs|src)/[A-Za-z0-9._/\-]+",
+        text,
+    )
+
+    for raw in absolute_matches:
+        cleaned = raw.rstrip(".,;:)'\"`")
+        if cleaned:
+            candidates.append(Path(cleaned))
+
+    for raw in relative_matches:
+        cleaned = raw.rstrip(".,;:)'\"`")
+        if cleaned:
+            candidates.append(ROOT_DIR / cleaned)
+
+    unique: List[Path] = []
+    seen = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def _load_json_stream(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    text = _safe_read_text(path)
+    decoder = json.JSONDecoder()
+    position = 0
+    objects: List[dict] = []
+
+    while position < len(text):
+        while position < len(text) and text[position].isspace():
+            position += 1
+        if position >= len(text):
+            break
+        try:
+            parsed, end = decoder.raw_decode(text, position)
+        except json.JSONDecodeError:
+            next_newline = text.find("\n", position)
+            if next_newline == -1:
+                break
+            position = next_newline + 1
+            continue
+        position = end
+        if isinstance(parsed, dict):
+            objects.append(parsed)
+    return objects
 
 
 @dataclass
@@ -145,6 +244,285 @@ class QaRunner:
         )
         print(f"[{status}] {name} (0.0s)")
 
+    def _extract_issue_summaries(self) -> List[str]:
+        summaries: List[str] = []
+        if not ZEN_COUNCIL_EVENTS_PATH.exists():
+            return summaries
+        for line in _safe_read_text(ZEN_COUNCIL_EVENTS_PATH).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            prompt = str(payload.get("prompt", ""))
+            match = re.search(r"Issue summary:\s*(.+?)(?:\n|$)", prompt, re.IGNORECASE | re.DOTALL)
+            if match:
+                summaries.append(match.group(1).strip())
+        return summaries
+
+    def _apply_marker_rules(
+        self,
+        label: str,
+        rules: List[Dict[str, object]],
+        errors: List[str],
+        notes: List[str],
+    ) -> None:
+        for rule in rules:
+            path = rule["path"]
+            if not isinstance(path, Path):
+                errors.append(f"{label}: invalid path rule ({path})")
+                continue
+            if not path.exists():
+                errors.append(f"{label}: missing file {path}")
+                continue
+
+            payload = _safe_read_text(path)
+            required = rule.get("must_contain", [])
+            forbidden = rule.get("must_not_contain", [])
+
+            if not isinstance(required, list):
+                required = []
+            if not isinstance(forbidden, list):
+                forbidden = []
+
+            for token in required:
+                if isinstance(token, str) and token not in payload:
+                    errors.append(f"{label}: `{token}` not found in {path}")
+            for token in forbidden:
+                if isinstance(token, str) and token in payload:
+                    errors.append(f"{label}: `{token}` unexpectedly present in {path}")
+
+        notes.append(f"{label}: validated {len(rules)} file marker rule(s).")
+
+    def _run_memory_phase_fix_coverage(self) -> None:
+        check_name = "memory_phase_fix_coverage"
+        notes: List[str] = []
+        errors: List[str] = []
+
+        if not MEMORY_STORE_PATH.exists():
+            errors.append(f"Missing local memory store: {MEMORY_STORE_PATH}")
+            self._record_supplemental_result(
+                name=check_name,
+                command="memory sweep + phase/fix artifact validation",
+                status="FAIL",
+                return_code=4,
+                output_excerpt="\n".join(errors),
+            )
+            return
+
+        memory_objects = _load_json_stream(MEMORY_STORE_PATH)
+        memory_entities = [item for item in memory_objects if item.get("type") == "entity"]
+        memory_by_name = {
+            str(item.get("name", "")): item
+            for item in memory_entities
+            if isinstance(item, dict) and item.get("name")
+        }
+        notes.append(f"Loaded {len(memory_entities)} memory entities from {MEMORY_STORE_PATH}.")
+
+        missing_entities = [name for name in REQUIRED_PHASE6_MEMORY_ENTITIES if name not in memory_by_name]
+        if missing_entities:
+            errors.append(f"Missing required Phase 6 memory entities: {', '.join(missing_entities)}")
+        else:
+            notes.append("Phase 6 memory entities present in local D_T store.")
+
+        for entity_name in REQUIRED_PHASE6_MEMORY_ENTITIES:
+            entry = memory_by_name.get(entity_name)
+            if not entry:
+                continue
+            observations = entry.get("observations", [])
+            if not isinstance(observations, list):
+                observations = []
+            for observation in observations:
+                for candidate in _extract_workspace_paths(str(observation)):
+                    if not candidate.exists():
+                        errors.append(f"Memory path missing for {entity_name}: {candidate}")
+
+        if not ROADMAP_PATH.exists():
+            errors.append(f"Missing roadmap file: {ROADMAP_PATH}")
+        else:
+            roadmap_payload = _safe_read_text(ROADMAP_PATH)
+            for heading in REQUIRED_ROADMAP_PHASE_HEADERS:
+                if heading not in roadmap_payload:
+                    errors.append(f"Roadmap phase heading missing: {heading}")
+            notes.append("Roadmap phase headers (Phase 0-6) verified.")
+
+        if not PHASE1_5_AUDIT_PATH.exists():
+            errors.append(f"Missing Phase 1-5 audit file: {PHASE1_5_AUDIT_PATH}")
+        else:
+            audit_payload = _safe_read_text(PHASE1_5_AUDIT_PATH)
+            for marker in REQUIRED_PHASE1_5_PASS_ROWS:
+                matching_lines = [line for line in audit_payload.splitlines() if marker in line]
+                if not matching_lines:
+                    errors.append(f"Phase 1-5 audit row missing: {marker}")
+                    continue
+                if not any("| PASS |" in line for line in matching_lines):
+                    errors.append(f"Phase 1-5 audit row is not PASS: {marker}")
+            notes.append("Phase 1-5 audit markers verified.")
+
+        for required_path in PHASE6_ARTIFACT_PATHS:
+            if not required_path.exists():
+                errors.append(f"Missing Phase 6 artifact: {required_path}")
+        notes.append(f"Phase 6 artifact bundle validated ({len(PHASE6_ARTIFACT_PATHS)} paths).")
+
+        relocation_reports = sorted(MEMORY_RELOCATION_DIR.glob("mcp_relocation_plan_*.json"))
+        if not relocation_reports:
+            errors.append(f"No relocation report found under {MEMORY_RELOCATION_DIR}")
+        else:
+            notes.append(f"Relocation report present: {relocation_reports[-1]}")
+
+        issue_summaries = self._extract_issue_summaries()
+        lowered_summaries = [entry.lower() for entry in issue_summaries]
+        for phase_number in (2, 3, 4, 5, 6):
+            token = f"phase {phase_number}"
+            if not any(token in entry for entry in lowered_summaries):
+                errors.append(f"No memory issue summary found for {token}.")
+        notes.append(f"Loaded {len(issue_summaries)} issue summaries from Zen council memory log.")
+
+        fix_marker_rules: Dict[str, List[Dict[str, object]]] = {
+            "fix_false_positive_tuning": [
+                {
+                    "path": ROOT_DIR / "watchdog" / "watchdog.py",
+                    "must_contain": [
+                        "sensitive_permissions",
+                        "Critical permissions newly observed",
+                        "Sensitive permissions newly observed",
+                    ],
+                },
+                {
+                    "path": ROOT_DIR / "config" / "workspace_settings.json",
+                    "must_contain": [
+                        "\"trusted_packages\"",
+                        "com.azure.authenticator",
+                        "com.microsoft.office.outlook",
+                        "ph.com.globe.globeonesuperapp",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "assets" / "workspace_settings.json",
+                    "must_contain": [
+                        "\"trusted_packages\"",
+                        "com.azure.authenticator",
+                        "com.microsoft.office.outlook",
+                        "ph.com.globe.globeonesuperapp",
+                    ],
+                },
+            ],
+            "fix_home_scan_routing": [
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "MainActivity.kt",
+                    "must_contain": [
+                        "private fun runOneTimeScan()",
+                        "runQuickGuardianSweep()",
+                        "private fun shouldShowSweepNavAction()",
+                    ],
+                    "must_not_contain": ["showScanModeDialog("],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml",
+                    "must_contain": [
+                        "home_tutorial_step_nav_scan_body",
+                        "home_tutorial_step_nav_page2_hint",
+                    ],
+                    "must_not_contain": [
+                        "scan_mode_dialog_title",
+                        "scan_mode_dialog_message",
+                    ],
+                },
+            ],
+            "fix_incident_assistant_flow": [
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "IncidentStore.kt",
+                    "must_contain": [
+                        "syncFromDeepScan",
+                        "syncFromWifiPosture",
+                        "nextUnresolvedForWork",
+                        "markInProgress",
+                        "markResolved",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "ScanResultsActivity.kt",
+                    "must_contain": [
+                        "skipIncidentAndContinue",
+                        "incident_guidance_why_template",
+                        "incident_guidance_signal_map_title",
+                        "incident_assistant_section_recommended",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml",
+                    "must_contain": [
+                        "incident_assistant_skip_choice",
+                        "incident_assistant_section_recommended",
+                        "home_tutorial_step_incident_assistant_body",
+                    ],
+                },
+            ],
+            "fix_vault_hardening": [
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "MediaVaultSecureViewActivity.kt",
+                    "must_contain": [
+                        "class MediaVaultSecureViewActivity",
+                        "FLAG_SECURE",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "PinFallbackStore.kt",
+                    "must_contain": [
+                        "KEY_PIN_LOCKOUT_UNTIL",
+                        "lockoutSecondsForLevel",
+                        "currentLockoutState",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "AppAccessGate.kt",
+                    "must_contain": [
+                        "PinFallbackStore.currentLockoutState",
+                        "verifyPinWithPolicy",
+                    ],
+                },
+            ],
+            "fix_startup_intro_regression": [
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "MainActivity.kt",
+                    "must_contain": [
+                        "HOME_SURFACE_CACHE_PAYLOAD_KEY",
+                        "markStartupTrace(\"home_surface_cache_applied\")",
+                        "markStartupTrace(\"home_surface_hydration_ready\")",
+                        "Keep previously rendered snapshot when hydration fails.",
+                    ],
+                },
+            ],
+        }
+        for fix_name, rules in fix_marker_rules.items():
+            self._apply_marker_rules(fix_name, rules, errors, notes)
+
+        if not any("false positives" in entry for entry in lowered_summaries):
+            errors.append("Memory summaries did not include the false-positive tuning issue.")
+        if not any("home scan ux split" in entry for entry in lowered_summaries):
+            errors.append("Memory summaries did not include the home scan UX split issue.")
+        if not any("incident assistant ux fixes" in entry for entry in lowered_summaries):
+            errors.append("Memory summaries did not include the incident assistant UX fix issue.")
+        if not any("startup ux regression" in entry for entry in lowered_summaries):
+            errors.append("Memory summaries did not include the startup UX regression issue.")
+
+        summary_lines = notes
+        if errors:
+            summary_lines += ["", "Validation errors:"] + [f"- {line}" for line in errors]
+        output = "\n".join(summary_lines).strip()
+        if len(output) > OUTPUT_EXCERPT_LIMIT:
+            output = output[:OUTPUT_EXCERPT_LIMIT] + "\n...[truncated]"
+
+        self._record_supplemental_result(
+            name=check_name,
+            command="memory sweep + phase/fix artifact validation",
+            status="PASS" if not errors else "FAIL",
+            return_code=0 if not errors else 4,
+            output_excerpt=output or "No output.",
+        )
+
     def run(self) -> QaReport:
         if not self.args.skip_python_bootstrap:
             self._run(
@@ -156,6 +534,7 @@ class QaRunner:
 
         self._run("credential_defense_help", ["credential-defense", "--help"], cwd=ROOT_DIR)
         self._run("watchdog_help", ["python3", "watchdog/watchdog.py", "--help"], cwd=ROOT_DIR)
+        self._run_memory_phase_fix_coverage()
         self._run("precommit_guard", ["bash", "scripts/ops/precommit_guard.sh", "--include-unstaged"], cwd=ROOT_DIR)
         self._run("gradle_lint_unit", ["./gradlew", "lintDebug", "testDebugUnitTest"], cwd=ANDROID_DIR, timeout=1800)
         self._run("gradle_assemble_debug", ["./gradlew", "assembleDebug"], cwd=ANDROID_DIR, timeout=1800)

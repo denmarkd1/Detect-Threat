@@ -1,0 +1,1 @@
+python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>
