@@ -35,9 +35,103 @@ is_truthy() {
   esac
 }
 
+canonical_dir() {
+  local candidate="$1"
+  if [[ -z "${candidate}" || ! -d "${candidate}" ]]; then
+    return 1
+  fi
+  (cd "${candidate}" && pwd)
+}
+
 is_git_repo() {
   local repo_root="$1"
   git -C "${repo_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+resolve_git_toplevel() {
+  local candidate="$1"
+  local base_path=""
+  if [[ -z "${candidate}" ]]; then
+    return 1
+  fi
+  if [[ -d "${candidate}" ]]; then
+    base_path="$(canonical_dir "${candidate}" || true)"
+  elif [[ -e "${candidate}" ]]; then
+    base_path="$(canonical_dir "$(dirname "${candidate}")" || true)"
+  fi
+  if [[ -z "${base_path}" ]]; then
+    return 1
+  fi
+  git -C "${base_path}" rev-parse --show-toplevel 2>/dev/null
+}
+
+is_cloud_remote_repo() {
+  local repo_root="$1"
+  local cloud_pattern="${DT_HUB_AUTOCOMMIT_CLOUD_REMOTE_PATTERN:-(github\\.com|gitlab\\.com|bitbucket\\.org|dev\\.azure\\.com|visualstudio\\.com|sourcehut\\.org)}"
+  git -C "${repo_root}" remote -v 2>/dev/null | rg -qi "${cloud_pattern}"
+}
+
+local_preference_rank() {
+  local repo_root="$1"
+  local preferred_roots="${DT_HUB_LOCAL_PREFERRED_ROOTS:-${HOME}:/mnt:/media:/srv}"
+  local rank=0
+  local entry=""
+  IFS=':' read -r -a ROOTS <<< "${preferred_roots}"
+  for entry in "${ROOTS[@]}"; do
+    [[ -z "${entry}" ]] && continue
+    local canonical=""
+    canonical="$(canonical_dir "${entry}" || true)"
+    [[ -z "${canonical}" ]] && continue
+    if [[ "${repo_root}" == "${canonical}"* ]]; then
+      echo "${rank}"
+      return 0
+    fi
+    rank=$((rank + 1))
+  done
+  echo 999
+}
+
+build_ordered_repo_list() {
+  local candidate=""
+  local repo_root=""
+  local local_rank=""
+  local cloud_rank=0
+  local path_len=0
+  local score_line=""
+
+  declare -a scored_lines=()
+  for candidate in "${TARGET_PATHS[@]}"; do
+    repo_root="$(resolve_git_toplevel "${candidate}" || true)"
+    [[ -z "${repo_root}" ]] && continue
+    repo_root="$(canonical_dir "${repo_root}" || true)"
+    [[ -z "${repo_root}" ]] && continue
+    if [[ -n "${REPO_SEEN[${repo_root}]:-}" ]]; then
+      continue
+    fi
+    REPO_SEEN["${repo_root}"]=1
+    UNIQUE_REPOS+=("${repo_root}")
+    if is_git_repo "${repo_root}" && repo_is_clean "${repo_root}"; then
+      PRE_CLEAN["${repo_root}"]=1
+    else
+      PRE_CLEAN["${repo_root}"]=0
+    fi
+    local_rank="$(local_preference_rank "${repo_root}")"
+    cloud_rank=0
+    if is_cloud_remote_repo "${repo_root}"; then
+      cloud_rank=1
+    fi
+    path_len=${#repo_root}
+    score_line="$(printf "%04d|%d|%05d|%s" "${local_rank}" "${cloud_rank}" "${path_len}" "${repo_root}")"
+    scored_lines+=("${score_line}")
+  done
+
+  if [[ "${#scored_lines[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  mapfile -t ORDERED_REPOS < <(
+    printf '%s\n' "${scored_lines[@]}" | sort | cut -d'|' -f4-
+  )
 }
 
 repo_is_clean() {
@@ -105,46 +199,41 @@ EOF_BODY
 }
 
 AUTOCOMMIT_ENABLED="${DT_HUB_AUTOCOMMIT_ENABLED:-1}"
-AUTOCOMMIT_SCOPE="${DT_HUB_AUTOCOMMIT_SCOPE:-hub_only}"
+AUTOCOMMIT_SCOPE="${DT_HUB_AUTOCOMMIT_SCOPE:-dynamic_local_first}"
 HUB_ROOT="${DT_HUB_ROOT:-${D_T_HUB_ROOT:-${WORKSPACE_ROOT}}}"
 COMMAND_LABEL="$(basename "$1")"
+AUTOCOMMIT_DYNAMIC_CONTINUE="${DT_HUB_AUTOCOMMIT_DYNAMIC_CONTINUE:-0}"
 
-declare -a TARGET_REPOS=()
+declare -a TARGET_PATHS=()
 case "${AUTOCOMMIT_SCOPE}" in
   hub_only)
-    TARGET_REPOS+=("${HUB_ROOT}")
+    TARGET_PATHS+=("${HUB_ROOT}")
     ;;
   workspace_only)
-    TARGET_REPOS+=("${WORKSPACE_ROOT}")
+    TARGET_PATHS+=("${WORKSPACE_ROOT}")
     ;;
   hub_and_workspace)
-    TARGET_REPOS+=("${HUB_ROOT}" "${WORKSPACE_ROOT}")
+    TARGET_PATHS+=("${HUB_ROOT}" "${WORKSPACE_ROOT}")
+    ;;
+  dynamic_local_first|dynamic_all)
+    TARGET_PATHS+=("${HUB_ROOT}" "${WORKSPACE_ROOT}" "${PWD}")
+    for arg in "$@"; do
+      if [[ -e "${arg}" ]]; then
+        TARGET_PATHS+=("${arg}")
+      fi
+    done
     ;;
   *)
-    echo "[dt-hub] Unknown DT_HUB_AUTOCOMMIT_SCOPE='${AUTOCOMMIT_SCOPE}', defaulting to hub_only." >&2
-    TARGET_REPOS+=("${HUB_ROOT}")
+    echo "[dt-hub] Unknown DT_HUB_AUTOCOMMIT_SCOPE='${AUTOCOMMIT_SCOPE}', defaulting to dynamic_local_first." >&2
+    TARGET_PATHS+=("${HUB_ROOT}" "${WORKSPACE_ROOT}" "${PWD}")
     ;;
 esac
 
 declare -a UNIQUE_REPOS=()
+declare -a ORDERED_REPOS=()
 declare -A REPO_SEEN=()
 declare -A PRE_CLEAN=()
-for candidate in "${TARGET_REPOS[@]}"; do
-  if [[ -z "${candidate}" || ! -d "${candidate}" ]]; then
-    continue
-  fi
-  canonical="$(cd "${candidate}" && pwd)"
-  if [[ -n "${REPO_SEEN[${canonical}]:-}" ]]; then
-    continue
-  fi
-  REPO_SEEN["${canonical}"]=1
-  UNIQUE_REPOS+=("${canonical}")
-  if is_git_repo "${canonical}" && repo_is_clean "${canonical}"; then
-    PRE_CLEAN["${canonical}"]=1
-  else
-    PRE_CLEAN["${canonical}"]=0
-  fi
-done
+build_ordered_repo_list
 
 set +e
 "$@"
@@ -152,9 +241,25 @@ COMMAND_EXIT=$?
 set -e
 
 if is_truthy "${AUTOCOMMIT_ENABLED}" && [[ "${COMMAND_EXIT}" -eq 0 ]]; then
-  for repo_root in "${UNIQUE_REPOS[@]}"; do
-    maybe_auto_commit_repo "${repo_root}" "${PRE_CLEAN[${repo_root}]:-0}" "${COMMAND_LABEL}"
-  done
+  if [[ "${AUTOCOMMIT_SCOPE}" == "dynamic_local_first" ]]; then
+    require_clean="${DT_HUB_AUTOCOMMIT_REQUIRE_CLEAN_BASE:-1}"
+    for repo_root in "${ORDERED_REPOS[@]}"; do
+      if is_truthy "${require_clean}" && [[ "${PRE_CLEAN[${repo_root}]:-0}" != "1" ]]; then
+        continue
+      fi
+      if repo_is_clean "${repo_root}"; then
+        continue
+      fi
+      maybe_auto_commit_repo "${repo_root}" "${PRE_CLEAN[${repo_root}]:-0}" "${COMMAND_LABEL}"
+      if ! is_truthy "${AUTOCOMMIT_DYNAMIC_CONTINUE}"; then
+        break
+      fi
+    done
+  else
+    for repo_root in "${ORDERED_REPOS[@]}"; do
+      maybe_auto_commit_repo "${repo_root}" "${PRE_CLEAN[${repo_root}]:-0}" "${COMMAND_LABEL}"
+    done
+  fi
 fi
 
 exit "${COMMAND_EXIT}"

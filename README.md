@@ -262,6 +262,24 @@ Refresh the single D_T hub runtime source used by all MCP launcher wrappers:
 bash scripts/ops/dt_hub_runtime_sync.sh
 ```
 
+DT hub wrapper auto-commit now runs in dynamic local-first mode by default (`scripts/ops/dt_hub_mcp_exec.sh`):
+- Chooses candidate git repos from hub/workspace/current command context.
+- Prefers local paths and non-cloud remotes first.
+- Commits locally only (no push).
+
+Common overrides:
+
+```bash
+# Scope: dynamic_local_first | dynamic_all | hub_only | workspace_only | hub_and_workspace
+export DT_HUB_AUTOCOMMIT_SCOPE=dynamic_local_first
+
+# Preferred local roots (colon-delimited)
+export DT_HUB_LOCAL_PREFERRED_ROOTS="/home/danicous:/mnt:/media"
+
+# Continue across multiple candidate repos in dynamic_local_first mode
+export DT_HUB_AUTOCOMMIT_DYNAMIC_CONTINUE=0
+```
+
 If testing feedback API from a USB-connected physical Android device, map device port 8787 to local hub:
 
 ```bash
