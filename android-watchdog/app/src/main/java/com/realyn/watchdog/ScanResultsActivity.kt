@@ -10,7 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -18,7 +20,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -114,8 +118,10 @@ class ScanResultsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityScanResultsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        configureResponsiveLayout()
         applyScanResultsTheme()
         incidentAssistantOnlyMode = intent.getStringExtra(EXTRA_SCREEN_MODE)
             .orEmpty()
@@ -228,6 +234,138 @@ class ScanResultsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         applyScanResultsTheme()
+    }
+
+    private fun configureResponsiveLayout() {
+        applySystemBarInsets()
+        binding.scanResultsScrollView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateResponsiveLayoutForWidth()
+        }
+        binding.scanResultsScrollView.post {
+            updateResponsiveLayoutForWidth()
+        }
+    }
+
+    private fun applySystemBarInsets() {
+        val baseRootStart = binding.root.paddingStart
+        val baseRootTop = binding.root.paddingTop
+        val baseRootEnd = binding.root.paddingEnd
+        val baseRootBottom = binding.root.paddingBottom
+
+        val baseScrollStart = binding.scanResultsScrollView.paddingStart
+        val baseScrollTop = binding.scanResultsScrollView.paddingTop
+        val baseScrollEnd = binding.scanResultsScrollView.paddingEnd
+        val baseScrollBottom = binding.scanResultsScrollView.paddingBottom
+        val extraBottomSpacing = resources.getDimensionPixelSize(
+            R.dimen.scan_results_bottom_inset_extra_padding
+        )
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            binding.root.setPaddingRelative(
+                baseRootStart + systemBars.left,
+                baseRootTop + systemBars.top,
+                baseRootEnd + systemBars.right,
+                baseRootBottom
+            )
+            binding.scanResultsScrollView.setPaddingRelative(
+                baseScrollStart,
+                baseScrollTop,
+                baseScrollEnd,
+                baseScrollBottom + systemBars.bottom + extraBottomSpacing
+            )
+            updateResponsiveLayoutForWidth()
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun updateResponsiveLayoutForWidth() {
+        val availableWidth = binding.scanResultsScrollView.width -
+            binding.scanResultsScrollView.paddingLeft -
+            binding.scanResultsScrollView.paddingRight
+        if (availableWidth <= 0) {
+            return
+        }
+        val maxContentWidth = resources.getDimensionPixelSize(R.dimen.scan_results_content_max_width)
+        val targetContentWidth = minOf(availableWidth, maxContentWidth)
+        val contentLayoutParams = binding.scanResultsContentContainer.layoutParams as FrameLayout.LayoutParams
+        val layoutChanged = contentLayoutParams.width != targetContentWidth ||
+            contentLayoutParams.gravity != Gravity.CENTER_HORIZONTAL
+        if (layoutChanged) {
+            contentLayoutParams.width = targetContentWidth
+            contentLayoutParams.gravity = Gravity.CENTER_HORIZONTAL
+            binding.scanResultsContentContainer.layoutParams = contentLayoutParams
+        }
+        updateButtonRowsForWidth(targetContentWidth)
+    }
+
+    private fun updateButtonRowsForWidth(contentWidthPx: Int) {
+        val stackThreshold = resources.getDimensionPixelSize(R.dimen.scan_results_button_stack_threshold)
+        val shouldStackRows = contentWidthPx < stackThreshold
+        updateButtonPairRow(
+            row = binding.scanResultsPrimaryActionsRow,
+            firstButton = binding.scanResultsStartIncidentButton,
+            secondButton = binding.scanResultsOpenCredentialButton,
+            spacer = binding.scanResultsPrimaryActionsSpacer,
+            stacked = shouldStackRows
+        )
+        updateButtonPairRow(
+            row = binding.scanResultsMaintenanceRowOne,
+            firstButton = binding.scanResultsReviewDuplicatesButton,
+            secondButton = binding.scanResultsReviewUnusedAppsButton,
+            spacer = binding.scanResultsMaintenanceRowOneSpacer,
+            stacked = shouldStackRows
+        )
+        updateButtonPairRow(
+            row = binding.scanResultsMaintenanceRowTwo,
+            firstButton = binding.scanResultsCleanSafeClutterButton,
+            secondButton = binding.scanResultsReviewInstallerRemnantsButton,
+            spacer = binding.scanResultsMaintenanceRowTwoSpacer,
+            stacked = shouldStackRows
+        )
+    }
+
+    private fun updateButtonPairRow(
+        row: LinearLayout,
+        firstButton: MaterialButton,
+        secondButton: MaterialButton,
+        spacer: View,
+        stacked: Boolean
+    ) {
+        row.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        spacer.visibility = if (stacked) View.GONE else View.VISIBLE
+        val stackedSpacing = resources.getDimensionPixelSize(R.dimen.scan_results_button_stack_spacing)
+        updateButtonPairLayout(
+            button = firstButton,
+            stacked = stacked,
+            topMarginPx = 0
+        )
+        updateButtonPairLayout(
+            button = secondButton,
+            stacked = stacked,
+            topMarginPx = if (stacked) stackedSpacing else 0
+        )
+    }
+
+    private fun updateButtonPairLayout(
+        button: MaterialButton,
+        stacked: Boolean,
+        topMarginPx: Int
+    ) {
+        val layoutParams = button.layoutParams as LinearLayout.LayoutParams
+        if (stacked) {
+            layoutParams.width = LinearLayout.LayoutParams.MATCH_PARENT
+            layoutParams.weight = 0f
+            layoutParams.topMargin = topMarginPx
+        } else {
+            layoutParams.width = 0
+            layoutParams.weight = 1f
+            layoutParams.topMargin = 0
+        }
+        button.layoutParams = layoutParams
     }
 
     private fun buildRecommendations(

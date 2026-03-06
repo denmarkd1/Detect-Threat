@@ -6,16 +6,18 @@
     android:background="@drawable/bg_console_gradient">
 
     <ScrollView
+        android:id="@+id/scanResultsScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
         android:clipToPadding="false"
-        android:paddingStart="16dp"
-        android:paddingTop="12dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:paddingStart="@dimen/scan_results_screen_horizontal_padding"
+        android:paddingTop="@dimen/scan_results_screen_top_padding"
+        android:paddingEnd="@dimen/scan_results_screen_horizontal_padding"
+        android:paddingBottom="@dimen/scan_results_screen_bottom_padding">
 
         <LinearLayout
+            android:id="@+id/scanResultsContentContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
@@ -122,6 +124,7 @@
                     android:textAlignment="center" />
 
                 <Space
+                    android:id="@+id/scanResultsPrimaryActionsSpacer"
                     android:layout_width="8dp"
                     android:layout_height="1dp" />
 
@@ -173,6 +176,7 @@
                     android:textAlignment="center" />
 
                 <Space
+                    android:id="@+id/scanResultsMaintenanceRowOneSpacer"
                     android:layout_width="8dp"
                     android:layout_height="1dp" />
 
@@ -204,6 +208,7 @@
                     android:textAlignment="center" />
 
                 <Space
+                    android:id="@+id/scanResultsMaintenanceRowTwoSpacer"
                     android:layout_width="8dp"
                     android:layout_height="1dp" />
 

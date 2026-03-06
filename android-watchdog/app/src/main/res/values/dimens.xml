@@ -6,4 +6,11 @@
     <dimen name="credential_center_hero_corner_radius">14dp</dimen>
     <dimen name="intro_lion_hero_size">320dp</dimen>
     <dimen name="home_intro_welcome_bottom_margin">172dp</dimen>
+    <dimen name="scan_results_screen_horizontal_padding">16dp</dimen>
+    <dimen name="scan_results_screen_top_padding">12dp</dimen>
+    <dimen name="scan_results_screen_bottom_padding">16dp</dimen>
+    <dimen name="scan_results_bottom_inset_extra_padding">12dp</dimen>
+    <dimen name="scan_results_content_max_width">680dp</dimen>
+    <dimen name="scan_results_button_stack_threshold">520dp</dimen>
+    <dimen name="scan_results_button_stack_spacing">8dp</dimen>
 </resources>
