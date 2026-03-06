@@ -1134,11 +1134,12 @@ class ScanResultsActivity : AppCompatActivity() {
         val shownSteps = guidance.steps.take(5)
         val hiddenSteps = (guidance.steps.size - shownSteps.size).coerceAtLeast(0)
         val shownActions = guidance.actions.take(3)
-        val message = buildString {
+        val issueLineToken = "{{CURRENT_ISSUE_LINE}}"
+        val messageTemplate = buildString {
             appendLine("Remaining incidents: high $highRemaining, medium $mediumRemaining, low $lowRemaining")
             appendLine()
             appendLine("Current issue")
-            appendLine("$severityLabel risk: ${incident.title}")
+            appendLine(issueLineToken)
             appendLine()
             appendLine("What to do now")
             shownSteps.forEachIndexed { index, step ->
@@ -1179,6 +1180,27 @@ class ScanResultsActivity : AppCompatActivity() {
                 }
             }
         }.trim()
+        val message = SpannableStringBuilder(messageTemplate).apply {
+            val tokenStart = messageTemplate.indexOf(issueLineToken)
+            if (tokenStart >= 0) {
+                replace(
+                    tokenStart,
+                    tokenStart + issueLineToken.length,
+                    buildWorkNowSectionBody(
+                        incident = incident,
+                        severityLabel = severityLabel
+                    )
+                )
+            } else {
+                appendLine()
+                append(
+                    buildWorkNowSectionBody(
+                        incident = incident,
+                        severityLabel = severityLabel
+                    )
+                )
+            }
+        }
         val dialog = LionAlertDialogBuilder(this)
             .setTitle(R.string.incident_guidance_dialog_title)
             .setMessage(message)
