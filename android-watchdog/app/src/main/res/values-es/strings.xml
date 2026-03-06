@@ -99,6 +99,8 @@
     <string name="incident_no_open">No hay incidentes abiertos para iniciar.</string>
     <string name="incident_no_active">No hay incidentes abiertos o en progreso para resolver.</string>
     <string name="incident_no_resolved">No hay incidentes resueltos para reabrir.</string>
+    <string name="incident_assistant_screen_subtitle">Trabaja un incidente a la vez en una pantalla dedicada.</string>
+    <string name="incident_assistant_back_to_scan_results">Volver a resultados del escaneo</string>
     <string name="incident_assistant_action_prompt">¿Qué acción deseas tomar?</string>
     <string name="incident_assistant_action_counts_template">Acciones disponibles: %1$d | la app puede aplicar: %2$d | manuales: %3$d</string>
     <string name="incident_assistant_action_mode_auto">la app puede aplicar</string>

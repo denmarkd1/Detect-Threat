@@ -13,6 +13,7 @@ It validates:
 - roadmap and audit coverage for phases 0 to 6,
 - phase hardening artifact presence (MASVS, policy/play, rollout, pricing, tutorial, trainer docs),
 - memory-derived regression markers for key fixes (false-positive tuning, scan routing, incident assistant flow, vault hardening, startup hydration ordering),
+- incident-assistant dedicated-screen split from scan-results surface,
 - precommit guardrails,
 - Android lint/unit/build checks,
 - ADB device connection,
@@ -53,8 +54,12 @@ Exit code:
 
 1. Connect the target Android test device (USB debugging authorized).
 2. Run the trainer command.
-3. Fix any failed checks and re-run until clean.
-4. Attach the latest markdown report to release evidence.
+3. Manually verify scan-results UX split:
+   - Open Scan results.
+   - Tap `Start incident` and confirm Incident assistant opens as a separate screen.
+   - Use `Back to scan results` and confirm return path is clean.
+4. Fix any failed checks and re-run until clean.
+5. Attach the latest markdown report to release evidence.
 
 ## Latest passing run (this workspace)
 

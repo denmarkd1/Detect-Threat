@@ -58,23 +58,28 @@ Coverage includes these destination windows:
 
 Tutorial guidance is now aligned to the latest remediation UX:
 
-1. Incident assistant action order
+1. Dedicated page split between scan results and incident assistant
+   - `Start incident` from scan results now opens Incident assistant on its own screen.
+   - Scan summary/details and Incident assistant no longer share one visual scroll surface.
+
+2. Incident assistant action order
    - Primary action is `Apply fix for me`.
    - Secondary action is `Guide me step-by-step`.
-   - `Skip for now` is de-emphasized and positioned lower-left.
+   - `Skip for now` remains the tertiary action.
+   - All three actions now render with the same full-width button treatment.
 
-2. Skip behavior clarification
+3. Skip behavior clarification
    - `Skip for now` now advances to the next unresolved incident in-place.
    - It no longer drops users back to the main scan-results page when additional incidents remain.
 
-3. Progressive-disclosure sections in incident assistant
+4. Progressive-disclosure sections in incident assistant
    - `Work on this now`
    - `Why this needs attention`
    - `Choose one option below`
    - `Recommended best settings` (new)
    - Each section expands/collapses on demand so users can focus only on what they need.
 
-4. Progressive-disclosure in scan summary/details card
+5. Progressive-disclosure in scan summary/details card
    - Long report text is now broken into expandable sections:
      - `What happened`
      - `What to do now`
@@ -82,8 +87,10 @@ Tutorial guidance is now aligned to the latest remediation UX:
      - `Detailed findings (optional)`
    - This reduces cognitive load and supports ADHD-friendly flow control.
 
-5. Validation notes for QA/tutorial checks
+6. Validation notes for QA/tutorial checks
    - Start incident flow from scan results.
+   - Confirm `Start incident` opens a separate Incident assistant page (not layered over scan results).
    - Confirm `Skip for now` keeps user in assistant flow and loads next incident.
+   - Confirm `Back to scan results` returns to scan results page cleanly.
    - Confirm section toggles open/close correctly in both incident assistant and report card.
    - Confirm the dedicated `Incident assistant screen` tutorial step appears in sequence.

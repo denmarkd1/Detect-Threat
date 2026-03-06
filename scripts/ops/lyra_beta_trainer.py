@@ -446,9 +446,18 @@ class QaRunner:
                     "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "ScanResultsActivity.kt",
                     "must_contain": [
                         "skipIncidentAndContinue",
+                        "EXTRA_SCREEN_MODE",
+                        "SCREEN_MODE_INCIDENT_ASSISTANT",
+                        "configureIncidentAssistantOnlyScreen",
                         "incident_guidance_why_template",
                         "incident_guidance_signal_map_title",
                         "incident_assistant_section_recommended",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "res" / "layout" / "activity_scan_results.xml",
+                    "must_contain": [
+                        "scanResultsPrimaryActionsRow",
                     ],
                 },
                 {
@@ -456,6 +465,8 @@ class QaRunner:
                     "must_contain": [
                         "incident_assistant_skip_choice",
                         "incident_assistant_section_recommended",
+                        "incident_assistant_screen_subtitle",
+                        "incident_assistant_back_to_scan_results",
                         "home_tutorial_step_incident_assistant_body",
                     ],
                 },

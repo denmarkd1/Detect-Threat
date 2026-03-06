@@ -1,1 +1,10 @@
+# Lyra beta tester quick run (device-backed)
+
 python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>
+
+Manual verification focus for this adjustment:
+1. Open Scan results.
+2. Tap `Start incident`.
+3. Confirm Incident assistant opens as a separate page (not layered over scan-results content).
+4. Confirm `Back to scan results` returns cleanly.
+5. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.

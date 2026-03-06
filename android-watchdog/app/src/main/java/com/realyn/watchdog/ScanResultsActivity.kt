@@ -67,16 +67,26 @@ class ScanResultsActivity : AppCompatActivity() {
         const val EXTRA_LOW_COUNT = "scan_results.extra.LOW_COUNT"
         const val EXTRA_INFO_COUNT = "scan_results.extra.INFO_COUNT"
         const val EXTRA_MAINTENANCE_PAYLOAD_JSON = "scan_results.extra.MAINTENANCE_PAYLOAD_JSON"
+        const val EXTRA_SCREEN_MODE = "scan_results.extra.SCREEN_MODE"
+        const val SCREEN_MODE_INCIDENT_ASSISTANT = "incident_assistant"
     }
 
     private lateinit var binding: ActivityScanResultsBinding
     private var maintenancePayload: MaintenancePayload? = null
+    private var incidentAssistantOnlyMode: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityScanResultsBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyScanResultsTheme()
+        incidentAssistantOnlyMode = intent.getStringExtra(EXTRA_SCREEN_MODE)
+            .orEmpty()
+            .equals(SCREEN_MODE_INCIDENT_ASSISTANT, ignoreCase = true)
+        if (incidentAssistantOnlyMode) {
+            configureIncidentAssistantOnlyScreen()
+            return
+        }
 
         val modeLabel = intent.getStringExtra(EXTRA_MODE_LABEL)
             .orEmpty()
@@ -124,7 +134,11 @@ class ScanResultsActivity : AppCompatActivity() {
         applyScanResultsTheme()
 
         binding.scanResultsStartIncidentButton.setOnClickListener {
-            startIncidentGuidanceFlow()
+            startActivity(
+                Intent(this, ScanResultsActivity::class.java).apply {
+                    putExtra(EXTRA_SCREEN_MODE, SCREEN_MODE_INCIDENT_ASSISTANT)
+                }
+            )
         }
         binding.scanResultsOpenCredentialButton.setOnClickListener {
             startActivity(Intent(this, CredentialDefenseActivity::class.java))
@@ -151,6 +165,26 @@ class ScanResultsActivity : AppCompatActivity() {
         }
         binding.scanResultsOpenStorageSettingsButton.setOnClickListener {
             openStorageSettings()
+        }
+    }
+
+    private fun configureIncidentAssistantOnlyScreen() {
+        binding.scanResultsTitleLabel.text = getString(R.string.incident_guidance_dialog_title)
+        binding.scanResultsSubtitleLabel.text = getString(R.string.incident_assistant_screen_subtitle)
+        binding.scanResultsSummaryCard.visibility = View.GONE
+        binding.scanResultsPrimaryActionsRow.visibility = View.GONE
+        binding.scanResultsMaintenanceActionsTitleLabel.visibility = View.GONE
+        binding.scanResultsMaintenanceRowOne.visibility = View.GONE
+        binding.scanResultsMaintenanceRowTwo.visibility = View.GONE
+        binding.scanResultsOpenStorageSettingsButton.visibility = View.GONE
+        binding.scanResultsReportCard.visibility = View.GONE
+        binding.scanResultsBackHomeButton.text = getString(R.string.incident_assistant_back_to_scan_results)
+        binding.scanResultsBackHomeButton.setOnClickListener {
+            finish()
+        }
+        applyScanResultsTheme()
+        if (!startIncidentGuidanceFlow()) {
+            finish()
         }
     }
 
@@ -365,11 +399,11 @@ class ScanResultsActivity : AppCompatActivity() {
         val expandedByDefault: Boolean = false
     )
 
-    private fun startIncidentGuidanceFlow() {
+    private fun startIncidentGuidanceFlow(): Boolean {
         val next = IncidentStore.nextUnresolvedForWork(this)
         if (next == null) {
             Toast.makeText(this, getString(R.string.incident_no_open), Toast.LENGTH_SHORT).show()
-            return
+            return false
         }
         val active = if (next.status == IncidentStatus.OPEN) {
             IncidentStore.markInProgress(this, next.incidentId) ?: next
@@ -377,6 +411,7 @@ class ScanResultsActivity : AppCompatActivity() {
             next
         }
         showIncidentDecisionDialog(active)
+        return true
     }
 
     private fun showIncidentDecisionDialog(incident: IncidentRecord) {
@@ -804,6 +839,9 @@ class ScanResultsActivity : AppCompatActivity() {
                 getString(R.string.incident_guidance_queue_complete),
                 Toast.LENGTH_LONG
             ).show()
+            if (incidentAssistantOnlyMode) {
+                finish()
+            }
             return
         }
         val candidate = if (remaining.status == IncidentStatus.OPEN) {

@@ -90,6 +90,8 @@
     <string name="scan_results_reco_low_info">3. Low/info findings detected. Keep monitoring and apply hardening recommendations.</string>
     <string name="scan_results_reco_clear">1. No immediate risky findings. Keep periodic scans and keep protections enabled.</string>
     <string name="scan_results_action_start_incident">Start incident</string>
+    <string name="incident_assistant_screen_subtitle">Work one incident at a time on a dedicated screen.</string>
+    <string name="incident_assistant_back_to_scan_results">Back to scan results</string>
     <string name="scan_results_action_open_credential_center">Open credentials</string>
     <string name="scan_results_action_back_home">Back to home</string>
     <string name="scan_results_maintenance_actions_title">Maintenance actions</string>
@@ -942,11 +944,11 @@
     <string name="home_tutorial_step_timeline_body">Page 2 Timeline opens guardian events, connector anomalies, accountability, and KPI summary report.</string>
     <string name="home_tutorial_step_timeline_hint">Use export when you need a shareable incident package without raw secrets.</string>
     <string name="home_tutorial_step_timeline_window_title">Timeline window actions</string>
-    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog. In remediation queue, Incident assistant now prioritizes Apply fix for me, then Guide me step-by-step, and Skip for now advances to the next issue when available.</string>
+    <string name="home_tutorial_step_timeline_window_body">Timeline actions include Open remediation queue, Export unified report, and Guardian feed from one report dialog. From scan results, Start incident now opens Incident assistant on a dedicated screen, with action order Apply fix for me, Guide me step-by-step, then Skip for now.</string>
     <string name="home_tutorial_step_timeline_window_hint">Use export for non-secret evidence sharing. In remediation queue, expand only the sections you need (What happened, What to do now, Technical details, Recommended best settings) to reduce overload.</string>
     <string name="home_tutorial_step_incident_assistant_title">Incident assistant screen</string>
-    <string name="home_tutorial_step_incident_assistant_body">Incident assistant now uses expandable sections so users can open only what they need: Work on this now, Why this needs attention, Choose one option below, and Recommended best settings. Action order is Apply fix for me, Guide me step-by-step, then Skip for now.</string>
-    <string name="home_tutorial_step_incident_assistant_hint">Skip for now no longer exits to scan results when more incidents exist. It keeps flow in-place and advances to the next unresolved issue.</string>
+    <string name="home_tutorial_step_incident_assistant_body">Incident assistant now opens as its own page and uses expandable sections so users can open only what they need: Work on this now, Why this needs attention, Choose one option below, and Recommended best settings. Action order is Apply fix for me, Guide me step-by-step, then Skip for now.</string>
+    <string name="home_tutorial_step_incident_assistant_hint">Skip for now keeps flow in-place when more incidents exist. Use Back to scan results to return to the scan summary page.</string>
     <string name="home_tutorial_step_lion_nav_title">Lion quick navigation</string>
     <string name="home_tutorial_step_lion_nav_body">The center lion opens quick links to critical security surfaces and this tutorial.</string>
     <string name="home_tutorial_step_lion_nav_hint">Long-press remains a fast path for Home Risk posture.</string>
