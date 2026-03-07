@@ -424,8 +424,7 @@
         ],
         "max_rollout_percent": 100,
         "supported_connector_ids": [
-          "smartthings",
-          "google_home"
+          "smartthings"
         ],
         "required_scopes": [
           "home:read",
@@ -438,8 +437,7 @@
         "rollout_stage": "internal_test",
         "owner_allowlist": [
           "parent",
-          "child",
-          "son"
+          "child"
         ],
         "max_rollout_percent": 100,
         "supported_connector_ids": [
@@ -458,8 +456,7 @@
         "rollout_stage": "internal_test",
         "owner_allowlist": [
           "parent",
-          "child",
-          "son"
+          "child"
         ],
         "max_rollout_percent": 100,
         "supported_connector_ids": [
@@ -621,7 +618,7 @@
             "package_names": [
               "com.google.android.apps.walletnfcrel"
             ],
-            "setup_uri": "https://support.google.com/wallet/answer/13314575",
+            "setup_uri": "https://support.google.com/wallet/answer/12060041?hl=en",
             "fallback_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel"
           },
           {

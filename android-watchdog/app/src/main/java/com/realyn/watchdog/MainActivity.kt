@@ -3909,13 +3909,13 @@ class MainActivity : AppCompatActivity() {
                 )
                 val connectorLabel = result.connectorLabel.ifBlank { result.connectorId.ifBlank { "smart_home" } }
                 buildString {
-                    appendLine("Home Risk setup is ready.")
+                    appendLine("Home Risk setup is ready for local SmartThings-first assessment.")
                     appendLine()
                     appendLine("What to do now")
-                    appendLine("1. Open Home Risk posture to review your current risk and findings.")
-                    appendLine("2. Keep connector access active so updates continue.")
+                    appendLine("1. Open Home Risk posture to review the current local snapshot and findings.")
+                    appendLine("2. Keep SmartThings installed if you want app-readiness checks to stay current.")
                     if (shouldOfferSmartThingsInstallCta(result)) {
-                        appendLine("3. Install or open SmartThings to complete connector readiness.")
+                        appendLine("3. Install or open SmartThings to improve connector readiness.")
                     }
                     appendLine()
                     appendLine("Technical details (optional)")
@@ -3952,10 +3952,10 @@ class MainActivity : AppCompatActivity() {
             }.trim()
 
             HomeRiskSetupStatus.CONSENT_FAILED -> buildString {
-                appendLine("Home Risk setup could not finish authorization.")
+                appendLine("Home Risk setup could not finish local connector setup.")
                 appendLine()
                 appendLine("What to do now")
-                appendLine("1. Retry setup and confirm connector permission requests.")
+                appendLine("1. Retry setup and confirm the local connector prompts.")
                 appendLine("2. If retry fails, continue with regular scan and threat review for now.")
                 val detail = result.errorMessage.trim()
                 if (detail.isNotBlank()) {
@@ -4045,7 +4045,7 @@ class MainActivity : AppCompatActivity() {
         if (result.posture != null) {
             val posture = result.posture
             return buildString {
-                appendLine("Home Risk posture was updated.")
+                appendLine("Home Risk posture was updated from the current local snapshot.")
                 appendLine("Current score: ${posture.riskScore}/100")
                 appendLine()
                 appendLine("What to do now")
@@ -4065,7 +4065,7 @@ class MainActivity : AppCompatActivity() {
                 appendLine("Technical details (optional)")
                 appendLine("Connector: ${posture.connectorId}")
                 appendLine("Owner profile: ${posture.ownerRole}")
-                append("Connected devices: ${posture.deviceCount}")
+                append("Readiness sample: ${posture.deviceCount}")
             }.trim()
         }
 
@@ -4079,7 +4079,7 @@ class MainActivity : AppCompatActivity() {
             )
             appendLine()
             appendLine("What to do now")
-            appendLine("1. Open Home Risk setup and complete connector authorization.")
+            appendLine("1. Open Home Risk setup and finish SmartThings-first local readiness.")
             appendLine("2. Keep Wi-Fi scan, threat triage, and credential queue checks active in the meantime.")
             val detail = result.errorMessage.trim()
             if (detail.isNotBlank()) {

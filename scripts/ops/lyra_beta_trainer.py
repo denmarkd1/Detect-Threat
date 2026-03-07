@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -54,13 +55,42 @@ REQUIRED_ROADMAP_PHASE_HEADERS = (
     "## Phase 5 - Competitive parity+ enhancements (2 weeks)",
     "## Phase 6 - Hardening and launch readiness (1 to 2 weeks)",
 )
-REQUIRED_PHASE1_5_PASS_ROWS = (
-    "| Phase 1 - Architecture and data model |",
-    "| Phase 2 - Smart-home connector MVP |",
-    "| Phase 3 - VPN broker and service linking |",
-    "| Phase 4 - Digital key risk guardrails |",
-    "| Phase 5 - Competitive parity+ |",
+REQUIRED_ROADMAP_REVALIDATION_MARKERS = (
+    "## 2A) 2026-03-07 competitor and implementation revalidation",
+    "| Phase 2 | PARTIAL |",
+    "| Phase 5 | PARTIAL |",
+    "| Phase 6 | BLOCKED |",
+    "SmartThings-first local readiness",
 )
+REQUIRED_PHASE1_5_AUDIT_ROWS = {
+    "| Phase 1 - Architecture and data model |": "PASS",
+    "| Phase 2 - Smart-home connector MVP |": "PARTIAL",
+    "| Phase 3 - VPN broker and service linking |": "PASS",
+    "| Phase 4 - Digital key risk guardrails |": "PASS",
+    "| Phase 5 - Competitive parity+ |": "PARTIAL",
+}
+SMART_HOME_CONFIG_PATHS = (
+    ROOT_DIR / "config" / "workspace_settings.json",
+    ANDROID_DIR / "app" / "src" / "main" / "assets" / "workspace_settings.json",
+)
+AGENTS_PATH = ROOT_DIR / "AGENTS.md"
+SATELLITE_CONFIG_PATH = ROOT_DIR / "D_T_System" / "satellite_config.json"
+COMPETITOR_GAP_DOC_PATH = ROOT_DIR / "docs" / "integration" / "competitor_gap_analysis_2026-02-21.md"
+PYTHON_DEFAULT_CONFIG_PATH = ROOT_DIR / "src" / "credential_defense" / "config.py"
+INTEGRATION_MESH_CONFIG_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "IntegrationMeshConfig.kt"
+SMARTTHINGS_CONNECTOR_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "SmartThingsConnector.kt"
+MAIN_ACTIVITY_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "MainActivity.kt"
+STRINGS_PATH = ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml"
+TUTORIAL_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay_2026-03-04.md"
+LYRA_TRAINER_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_lyra_qa_trainer_2026-03-04.md"
+POLICY_DISCLOSURE_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_policy_play_disclosure_review_2026-03-04.md"
+PRICING_PACKAGING_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_pricing_packaging_update_2026-03-04.md"
+EXPECTED_WALLET_SETUP_URI = "https://support.google.com/wallet/answer/12060041?hl=en"
+HUB_WORKSPACE_ROOT = ROOT_DIR.parent / "Danicous_Troubleshooter"
+DARK_CODER_ROOT = ROOT_DIR.parent / "Dark_Coder"
+DARK_CODER_BACKEND_ROOT = DARK_CODER_ROOT / "local-ai-coding-assistant" / "backend"
+SECURITY_SATELLITE_ROUTER_PATH = ROOT_DIR / "D_T_System" / "dt_satellite_router.py"
+DARK_CODER_SATELLITE_ROUTER_PATH = DARK_CODER_ROOT / "D_T_System" / "dt_satellite_router.py"
 
 
 def _safe_read_text(path: Path) -> str:
@@ -244,6 +274,15 @@ class QaRunner:
         )
         print(f"[{status}] {name} (0.0s)")
 
+    def _run_python_probe(
+        self,
+        name: str,
+        cwd: Path,
+        code: str,
+        timeout: int = 300,
+    ) -> CheckResult:
+        return self._run(name, ["python3", "-c", code], cwd=cwd, timeout=timeout)
+
     def _extract_issue_summaries(self) -> List[str]:
         summaries: List[str] = []
         if not ZEN_COUNCIL_EVENTS_PATH.exists():
@@ -346,19 +385,25 @@ class QaRunner:
             for heading in REQUIRED_ROADMAP_PHASE_HEADERS:
                 if heading not in roadmap_payload:
                     errors.append(f"Roadmap phase heading missing: {heading}")
+            for marker in REQUIRED_ROADMAP_REVALIDATION_MARKERS:
+                if marker not in roadmap_payload:
+                    errors.append(f"Roadmap revalidation marker missing: {marker}")
             notes.append("Roadmap phase headers (Phase 0-6) verified.")
 
         if not PHASE1_5_AUDIT_PATH.exists():
             errors.append(f"Missing Phase 1-5 audit file: {PHASE1_5_AUDIT_PATH}")
         else:
             audit_payload = _safe_read_text(PHASE1_5_AUDIT_PATH)
-            for marker in REQUIRED_PHASE1_5_PASS_ROWS:
+            for marker, expected_status in REQUIRED_PHASE1_5_AUDIT_ROWS.items():
                 matching_lines = [line for line in audit_payload.splitlines() if marker in line]
                 if not matching_lines:
                     errors.append(f"Phase 1-5 audit row missing: {marker}")
                     continue
-                if not any("| PASS |" in line for line in matching_lines):
-                    errors.append(f"Phase 1-5 audit row is not PASS: {marker}")
+                expected_token = f"| {expected_status} |"
+                if not any(expected_token in line for line in matching_lines):
+                    errors.append(
+                        f"Phase 1-5 audit row has unexpected status (expected {expected_status}): {marker}"
+                    )
             notes.append("Phase 1-5 audit markers verified.")
 
         for required_path in PHASE6_ARTIFACT_PATHS:
@@ -584,6 +629,513 @@ class QaRunner:
             output_excerpt=output or "No output.",
         )
 
+    def _run_integration_mesh_retail_readiness(self) -> None:
+        check_name = "integration_mesh_retail_readiness"
+        notes: List[str] = []
+        errors: List[str] = []
+
+        for path in SMART_HOME_CONFIG_PATHS:
+            if not path.exists():
+                errors.append(f"Missing smart-home config path: {path}")
+                continue
+            payload = _safe_read_text(path)
+            if '"google_home"' in payload:
+                errors.append(f"Active smart-home rollout still advertises google_home in {path}")
+            if EXPECTED_WALLET_SETUP_URI not in payload:
+                errors.append(f"Current Google Wallet digital key setup URI missing in {path}")
+        notes.append(f"Validated {len(SMART_HOME_CONFIG_PATHS)} smart-home rollout config path(s).")
+
+        if not INTEGRATION_MESH_CONFIG_PATH.exists():
+            errors.append(f"Missing integration mesh config source: {INTEGRATION_MESH_CONFIG_PATH}")
+        else:
+            integration_mesh_payload = _safe_read_text(INTEGRATION_MESH_CONFIG_PATH)
+            if EXPECTED_WALLET_SETUP_URI not in integration_mesh_payload:
+                errors.append(
+                    "IntegrationMeshConfig.kt is not using the current Google Wallet digital key setup URI."
+                )
+
+        if not PYTHON_DEFAULT_CONFIG_PATH.exists():
+            errors.append(f"Missing Python default config source: {PYTHON_DEFAULT_CONFIG_PATH}")
+        else:
+            python_default_payload = _safe_read_text(PYTHON_DEFAULT_CONFIG_PATH)
+            if '"google_home"' in python_default_payload:
+                errors.append(
+                    "credential_defense.config still advertises google_home in the default smart-home connector list."
+                )
+            if EXPECTED_WALLET_SETUP_URI not in python_default_payload:
+                errors.append(
+                    "credential_defense.config is not using the current Google Wallet digital key setup URI."
+                )
+
+        if not SMARTTHINGS_CONNECTOR_PATH.exists():
+            errors.append(f"Missing SmartThings connector source: {SMARTTHINGS_CONNECTOR_PATH}")
+        else:
+            smartthings_payload = _safe_read_text(SMARTTHINGS_CONNECTOR_PATH)
+            simulation_markers = (
+                'proofHash = createHash("$connectorId|$ownerId|smart_home|$now|smartthings")',
+                'val status = if (isClientInstalled) "connected" else "unknown"',
+                "val deviceCount = estimateConnectedDevices(",
+            )
+            if all(marker in smartthings_payload for marker in simulation_markers):
+                errors.append(
+                    "SmartThingsConnector remains simulation-backed: local consent artifact, installed-app health, "
+                    "and synthetic device counts are still present."
+                )
+            else:
+                notes.append("SmartThingsConnector simulation markers are no longer fully present.")
+
+        wording_rules = {
+            STRINGS_PATH: [
+                "SmartThings-first local readiness snapshot",
+                "read-only local snapshot",
+            ],
+            MAIN_ACTIVITY_PATH: [
+                "local SmartThings-first assessment",
+                "current local snapshot",
+            ],
+            TUTORIAL_DOC_PATH: [
+                "SmartThings-first local readiness only",
+            ],
+            POLICY_DISCLOSURE_DOC_PATH: [
+                "Home Risk is limited to SmartThings-first local readiness",
+                "| Smart-home connectors |",
+                "| PARTIAL |",
+            ],
+            PRICING_PACKAGING_DOC_PATH: [
+                "SmartThings-first Home Risk readiness layer with local audit timeline.",
+            ],
+        }
+        for path, required_tokens in wording_rules.items():
+            if not path.exists():
+                errors.append(f"Missing wording validation file: {path}")
+                continue
+            payload = _safe_read_text(path)
+            for token in required_tokens:
+                if token not in payload:
+                    errors.append(f"Required wording token missing from {path}: {token}")
+        notes.append(f"Validated wording alignment across {len(wording_rules)} file(s).")
+
+        output_lines = notes
+        if errors:
+            output_lines += ["", "Validation errors:"] + [f"- {line}" for line in errors]
+        output = "\n".join(output_lines).strip()
+        if len(output) > OUTPUT_EXCERPT_LIMIT:
+            output = output[:OUTPUT_EXCERPT_LIMIT] + "\n...[truncated]"
+
+        self._record_supplemental_result(
+            name=check_name,
+            command="integration mesh retail readiness validation",
+            status="PASS" if not errors else "FAIL",
+            return_code=0 if not errors else 5,
+            output_excerpt=output or "No output.",
+        )
+
+    def _run_family_role_canonicalization(self) -> None:
+        check_name = "family_role_canonicalization"
+        notes: List[str] = []
+        errors: List[str] = []
+
+        for path in SMART_HOME_CONFIG_PATHS:
+            if not path.exists():
+                errors.append(f"Missing family-role config path: {path}")
+                continue
+            try:
+                payload = json.loads(_safe_read_text(path))
+            except json.JSONDecodeError as exc:
+                errors.append(f"Unable to parse {path}: {exc}")
+                continue
+
+            owners = payload.get("owners", [])
+            if not isinstance(owners, list):
+                owners = []
+            owner_by_id = {
+                str(item.get("id", "")).strip().lower(): item
+                for item in owners
+                if isinstance(item, dict)
+            }
+            for required_owner in ("parent", "child"):
+                if required_owner not in owner_by_id:
+                    errors.append(f"{path}: missing canonical owner `{required_owner}`")
+
+            child_owner = owner_by_id.get("child", {})
+            aliases = child_owner.get("legacy_aliases", []) if isinstance(child_owner, dict) else []
+            if not isinstance(aliases, list) or "son" not in {
+                str(alias).strip().lower() for alias in aliases
+            }:
+                errors.append(f"{path}: child owner must retain `son` as a legacy alias")
+
+            integration_mesh = payload.get("integration_mesh", {})
+            if not isinstance(integration_mesh, dict):
+                integration_mesh = {}
+            feature_flags = integration_mesh.get("feature_flags", {})
+            if not isinstance(feature_flags, dict):
+                feature_flags = {}
+            for flag_name in ("smart_home_connector", "vpn_provider_connector", "digital_key_risk_adapter"):
+                flag = feature_flags.get(flag_name, {})
+                allowlist = flag.get("owner_allowlist", []) if isinstance(flag, dict) else []
+                normalized_allowlist = {
+                    str(role).strip().lower() for role in allowlist if str(role).strip()
+                }
+                if "son" in normalized_allowlist:
+                    errors.append(f"{path}: `{flag_name}` still treats `son` as a first-class owner_allowlist value")
+
+            rollout = integration_mesh.get("rollout", {})
+            stages = rollout.get("stages", []) if isinstance(rollout, dict) else []
+            if not isinstance(stages, list):
+                stages = []
+            for stage in stages:
+                if not isinstance(stage, dict):
+                    continue
+                owner_roles = stage.get("owner_roles", [])
+                normalized_roles = {
+                    str(role).strip().lower() for role in owner_roles if str(role).strip()
+                }
+                if "son" in normalized_roles:
+                    errors.append(
+                        f"{path}: rollout stage `{stage.get('name', 'unknown')}` still treats `son` as canonical"
+                    )
+        notes.append(f"Validated canonical owner config across {len(SMART_HOME_CONFIG_PATHS)} runtime config path(s).")
+
+        source_rules = {
+            AGENTS_PATH: {
+                "must_contain": [
+                    "`parent` and `child`",
+                    "`son` only as a legacy alias",
+                ],
+                "must_not_contain": ["`parent` and `son`"],
+            },
+            SATELLITE_CONFIG_PATH: {
+                "must_contain": ['"child"'],
+                "must_not_contain": ['"son"'],
+            },
+            COMPETITOR_GAP_DOC_PATH: {
+                "must_contain": [
+                    "(`parent`, `child`)",
+                    "Legacy `son` aliases remain accepted",
+                ],
+                "must_not_contain": ["(`parent`, `son`)"],
+            },
+            TUTORIAL_DOC_PATH: {
+                "must_contain": [
+                    "Canonical family-role language",
+                    "`parent/child`",
+                    "legacy alias `son`",
+                ],
+            },
+            LYRA_TRAINER_DOC_PATH: {
+                "must_contain": [
+                    "family-role canonicalization",
+                    "`parent`/`child`",
+                    "`son` preserved only as a legacy alias",
+                ],
+            },
+        }
+        for path, rules in source_rules.items():
+            if not path.exists():
+                errors.append(f"Missing family-role documentation path: {path}")
+                continue
+            payload = _safe_read_text(path)
+            for token in rules.get("must_contain", []):
+                if token not in payload:
+                    errors.append(f"Required family-role token missing from {path}: {token}")
+            for token in rules.get("must_not_contain", []):
+                if token in payload:
+                    errors.append(f"Deprecated family-role token still present in {path}: {token}")
+
+        if not PYTHON_DEFAULT_CONFIG_PATH.exists():
+            errors.append(f"Missing Python default config source: {PYTHON_DEFAULT_CONFIG_PATH}")
+        else:
+            python_payload = _safe_read_text(PYTHON_DEFAULT_CONFIG_PATH)
+            if '"legacy_aliases": ["son"]' not in python_payload:
+                errors.append("credential_defense.config must preserve `son` as a legacy alias in default owners.")
+            if '"owner_allowlist": ["parent", "child", "son"]' in python_payload:
+                errors.append("credential_defense.config still treats `son` as a first-class owner_allowlist value.")
+
+        if not INTEGRATION_MESH_CONFIG_PATH.exists():
+            errors.append(f"Missing integration mesh config source: {INTEGRATION_MESH_CONFIG_PATH}")
+        else:
+            integration_payload = _safe_read_text(INTEGRATION_MESH_CONFIG_PATH)
+            for token in (
+                'ownerAllowlist = listOf("parent", "child")',
+                'ownerRoles = listOf("parent", "child")',
+                "CredentialPolicy.canonicalOwnerId(ownerRole)",
+            ):
+                if token not in integration_payload:
+                    errors.append(f"IntegrationMeshConfig.kt missing canonical family-role token: {token}")
+            for token in (
+                'ownerAllowlist = listOf("parent", "child", "son")',
+                'ownerRoles = listOf("parent", "child", "son")',
+            ):
+                if token in integration_payload:
+                    errors.append(f"IntegrationMeshConfig.kt still contains deprecated family-role token: {token}")
+
+        output_lines = notes
+        if errors:
+            output_lines += ["", "Validation errors:"] + [f"- {line}" for line in errors]
+        output = "\n".join(output_lines).strip()
+        if len(output) > OUTPUT_EXCERPT_LIMIT:
+            output = output[:OUTPUT_EXCERPT_LIMIT] + "\n...[truncated]"
+
+        self._record_supplemental_result(
+            name=check_name,
+            command="family role canonicalization validation",
+            status="PASS" if not errors else "FAIL",
+            return_code=0 if not errors else 6,
+            output_excerpt=output or "No output.",
+        )
+
+    def _run_dt_scope_confidence_ladder(self) -> None:
+        scoped_review_query = (
+            "Perform read-only review of modules (systems, D_T_System, scripts, analysis, tests, gui) "
+            "and report findings; constraints: no code changes."
+        )
+        family_normalization_query = (
+            "Normalize family role handling to parent/child across docs, config, Android/Python defaults, "
+            "and Lyra trainer guidance while preserving legacy aliases for compatibility."
+        )
+        cross_system_alignment_query = (
+            "Normalize and align the D_T hub, security satellite, Dark_Coder backend, "
+            "bootstrap_router.py, dt_satellite_router.py, and the Lyra trainer ladder "
+            "from basic through expert coverage."
+        )
+
+        clarification_payload_json = json.dumps(
+            {
+                "resolution": {
+                    "completion_status": {
+                        "status": "clarification_needed",
+                        "clarifying_questions": ["What scope should D_T operate on?"],
+                    },
+                    "certainty_assessment": {
+                        "level": "low",
+                        "confidence_percentage": 45.0,
+                        "assessment_reasoning": "Initial low-confidence routing result.",
+                    },
+                    "code_review_handoff": "# Existing handoff",
+                }
+            }
+        )
+        local_core_route_payload_json = json.dumps(
+            {
+                "completion_status": {
+                    "status": "clarification_needed",
+                    "clarifying_questions": ["What scope should D_T operate on?"],
+                },
+                "certainty_level": "low",
+                "confidence_percentage": 45.0,
+                "code_review_handoff": "# Existing handoff",
+            }
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_basic_clarification",
+            cwd=DARK_CODER_BACKEND_ROOT,
+            code=textwrap.dedent(
+                """
+                import json
+                from src.dt_integration.backend_dt_system_core import build_clarification_policy
+
+                policy = build_clarification_policy("Help with this issue.")
+                assert policy["mode"] == "strict_clarification_first", policy
+                assert policy["scope_signal_count"] == 0, policy
+                print(json.dumps(policy, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_hub_scoped_review",
+            cwd=HUB_WORKSPACE_ROOT,
+            code=textwrap.dedent(
+                f"""
+                import json
+                import sys
+                import tempfile
+                from pathlib import Path
+
+                sys.path.insert(0, str(Path.cwd()))
+                from D_T_System.src.dt_system_core import DTSystemCore
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    core = DTSystemCore(Path(tmp_dir))
+                    resolution = core.process_issue({scoped_review_query!r}, auto_execute=False)
+
+                payload = {{
+                    "status": resolution.completion_status.get("status"),
+                    "confidence": resolution.certainty_assessment.confidence_percentage,
+                }}
+                assert payload["status"] == "ready_for_execution", payload
+                assert payload["confidence"] >= 60.0, payload
+                print(json.dumps(payload, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_hub_normalization_alignment",
+            cwd=HUB_WORKSPACE_ROOT,
+            code=textwrap.dedent(
+                f"""
+                import json
+                import sys
+                import tempfile
+                from pathlib import Path
+
+                sys.path.insert(0, str(Path.cwd()))
+                from D_T_System.src.dt_system_core import DTSystemCore
+
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    core = DTSystemCore(Path(tmp_dir))
+                    resolution = core.process_issue({family_normalization_query!r}, auto_execute=False)
+
+                payload = {{
+                    "status": resolution.completion_status.get("status"),
+                    "confidence": resolution.certainty_assessment.confidence_percentage,
+                }}
+                assert payload["status"] == "ready_for_execution", payload
+                assert payload["confidence"] >= 60.0, payload
+                print(json.dumps(payload, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_security_local_core_upgrade",
+            cwd=ROOT_DIR,
+            code=textwrap.dedent(
+                f"""
+                import importlib
+                import json
+                import sys
+                from pathlib import Path
+
+                sys.path.insert(0, str(Path.cwd()))
+                core = importlib.import_module("systems.D_T_System.src.dt_system_core")
+                payload = json.loads({local_core_route_payload_json!r})
+                resolution = core._resolution_from_route_payload(
+                    {cross_system_alignment_query!r},
+                    None,
+                    payload,
+                    automation_requested=False,
+                    workspace_root=Path.cwd(),
+                )
+
+                result = {{
+                    "status": resolution.completion_status.get("status"),
+                    "assumption_mode": resolution.completion_status.get("assumption_mode"),
+                    "todo_list": resolution.todo_list,
+                }}
+                assert result["status"] == "ready_for_execution_assumptions", result
+                assert result["assumption_mode"] is True, result
+                assert result["todo_list"], result
+                print(json.dumps(result, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_security_satellite_upgrade",
+            cwd=ROOT_DIR,
+            code=textwrap.dedent(
+                f"""
+                import importlib.util
+                import json
+                from pathlib import Path
+
+                module_path = Path({str(SECURITY_SATELLITE_ROUTER_PATH)!r})
+                spec = importlib.util.spec_from_file_location("security_dt_satellite_router_probe", module_path)
+                assert spec and spec.loader, module_path
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                payload = json.loads({clarification_payload_json!r})
+                upgraded = module.upgrade_actionable_clarification_payload(
+                    payload,
+                    {cross_system_alignment_query!r},
+                )
+                completion = upgraded["resolution"]["completion_status"]
+                certainty = upgraded["resolution"]["certainty_assessment"]
+                handoff = upgraded["resolution"]["code_review_handoff"]
+                result = {{
+                    "status": completion.get("status"),
+                    "assumption_mode": completion.get("assumption_mode"),
+                    "confidence": certainty.get("confidence_percentage"),
+                    "questions": completion.get("clarifying_questions"),
+                }}
+                assert result["status"] == "ready_for_execution_assumptions", result
+                assert result["assumption_mode"] is True, result
+                assert float(result["confidence"]) >= 68.0, result
+                assert "Assumption Mode" in handoff, handoff
+                print(json.dumps(result, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_dark_coder_backend_alignment",
+            cwd=DARK_CODER_BACKEND_ROOT,
+            code=textwrap.dedent(
+                f"""
+                import json
+                from src.dt_integration.backend_dt_system_core import build_backend_codereview_handoff
+
+                handoff = build_backend_codereview_handoff(
+                    query_text={cross_system_alignment_query!r},
+                    session_id="lyra-scope-ladder",
+                    dt_available=True,
+                    workspace_root={str(DARK_CODER_ROOT)!r},
+                )
+                policy = handoff["clarification_policy"]
+                result = {{
+                    "mode": policy.get("mode"),
+                    "actionable_signal_count": policy.get("actionable_signal_count"),
+                    "scope_signal_count": policy.get("scope_signal_count"),
+                }}
+                assert result["mode"] == "actionable_assumption_first", result
+                assert int(result["actionable_signal_count"]) > 0, result
+                assert int(result["scope_signal_count"]) > 0, result
+                print(json.dumps(result, indent=2))
+                """
+            ).strip(),
+        )
+
+        self._run_python_probe(
+            "dt_scope_ladder_dark_coder_satellite_upgrade",
+            cwd=DARK_CODER_ROOT,
+            code=textwrap.dedent(
+                f"""
+                import importlib.util
+                import json
+                from pathlib import Path
+
+                module_path = Path({str(DARK_CODER_SATELLITE_ROUTER_PATH)!r})
+                spec = importlib.util.spec_from_file_location("dark_coder_dt_satellite_router_probe", module_path)
+                assert spec and spec.loader, module_path
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+
+                payload = json.loads({clarification_payload_json!r})
+                upgraded = module.upgrade_actionable_clarification_payload(
+                    payload,
+                    {cross_system_alignment_query!r},
+                )
+                completion = upgraded["resolution"]["completion_status"]
+                certainty = upgraded["resolution"]["certainty_assessment"]
+                result = {{
+                    "status": completion.get("status"),
+                    "assumption_mode": completion.get("assumption_mode"),
+                    "confidence": certainty.get("confidence_percentage"),
+                    "source_mode": completion.get("source_mode"),
+                }}
+                assert result["status"] == "ready_for_execution_assumptions", result
+                assert result["assumption_mode"] is True, result
+                assert float(result["confidence"]) >= 68.0, result
+                assert result["source_mode"] == "satellite_actionable_scope_upgrade", result
+                print(json.dumps(result, indent=2))
+                """
+            ).strip(),
+        )
+
     def run(self) -> QaReport:
         if not self.args.skip_python_bootstrap:
             self._run(
@@ -596,6 +1148,9 @@ class QaRunner:
         self._run("credential_defense_help", ["credential-defense", "--help"], cwd=ROOT_DIR)
         self._run("watchdog_help", ["python3", "watchdog/watchdog.py", "--help"], cwd=ROOT_DIR)
         self._run_memory_phase_fix_coverage()
+        self._run_integration_mesh_retail_readiness()
+        self._run_family_role_canonicalization()
+        self._run_dt_scope_confidence_ladder()
         self._run("precommit_guard", ["bash", "scripts/ops/precommit_guard.sh", "--include-unstaged"], cwd=ROOT_DIR)
         self._run("gradle_lint_unit", ["./gradlew", "lintDebug", "testDebugUnitTest"], cwd=ANDROID_DIR, timeout=1800)
         self._run("gradle_assemble_debug", ["./gradlew", "assembleDebug"], cwd=ANDROID_DIR, timeout=1800)

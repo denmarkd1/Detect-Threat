@@ -39,7 +39,10 @@ def create_orchestrator(
     """
 
     resolved_profile_root = profile_root or Path(__file__).resolve().parents[1]
-    effective_config = config or WideResearchConfig.from_profile(resolved_profile_root)
+    effective_config = config or WideResearchConfig.from_profile(
+        resolved_profile_root,
+        workspace_root=workspace_root,
+    )
     return WideResearchOrchestrator(
         workspace_root=workspace_root,
         profile_root=resolved_profile_root,

@@ -12,7 +12,13 @@ from typing import Any, Dict, List, Optional
 import json
 import uuid
 
-from D_T_System.src.puter_zen_mcp_bridge import create_puter_bridge
+try:
+    from D_T_System.src.puter_zen_mcp_bridge import create_puter_bridge
+except ModuleNotFoundError:  # pragma: no cover - exercised in test environments without hub paths
+    def create_puter_bridge(*_args, **_kwargs):
+        raise RuntimeError(
+            "puter_zen_mcp_bridge is unavailable; bootstrap the workspace or inject a test double."
+        )
 
 
 @dataclass(slots=True)
@@ -99,7 +105,8 @@ class SwarmManager:
     async def _run_swarm(self, plan: HiveExecutionPlan) -> SwarmExecutionSummary:
         """Execute the plan via the Puter bridge."""
 
-        job_dir = self.profile_root / "runtime" / plan.job_id
+        self.config.storage_root.mkdir(parents=True, exist_ok=True)
+        job_dir = self.config.storage_root / plan.job_id
         job_dir.mkdir(parents=True, exist_ok=True)
 
         start_event = {

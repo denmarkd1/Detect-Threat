@@ -1,7 +1,7 @@
 # Phase 6 - Embedded Tutorial Overlay
 
-Date: 2026-03-05  
-Last updated: 2026-03-06  
+Date: 2026-03-05
+Last updated: 2026-03-07
 APK surface: `android-watchdog` home dashboard (`MainActivity`) + scan-results remediation flow (`ScanResultsActivity`)
 
 ## Goal
@@ -129,3 +129,27 @@ Tutorial guidance is now aligned to the latest remediation UX:
    - Confirm `Back to scan results` returns to scan results page cleanly.
    - Confirm section toggles open/close correctly in both incident assistant and report card.
    - Confirm the dedicated `Incident assistant screen` tutorial step appears in sequence.
+
+## 2026-03-07 update: Home Risk wording revalidation
+
+Tutorial guidance now reflects the current Home Risk implementation scope:
+
+1. SmartThings-first local readiness only
+   - Home Risk should be described as a read-only local readiness/snapshot layer in this build.
+   - It should not be described as live SmartThings cloud telemetry or active Google Home support.
+
+2. Setup wording expectations
+   - Setup flow should describe local connector readiness rather than completed partner OAuth authorization.
+   - SmartThings install/open CTA should be framed as improving readiness on-device.
+
+3. QA checks for this wording
+   - Confirm Home Risk tutorial copy says `SmartThings-first local readiness` or equivalent local/read-only wording.
+   - Confirm Home Risk dialogs refer to `local snapshot`, `readiness`, or `read-only` behavior.
+   - Confirm no tutorial surface claims Google Home is currently supported in-app.
+
+## 2026-03-07 update: Canonical family-role language
+
+Tutorial and onboarding copy should use `parent/child` as the canonical family-role pair.
+
+- Keep legacy alias `son` only for backward-compatible handling of older imports, historical records, or existing local state.
+- Do not require or advertise `son` as a primary owner role in new tutorial copy, QA instructions, or onboarding flows.

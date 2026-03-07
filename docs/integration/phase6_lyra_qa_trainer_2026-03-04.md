@@ -1,7 +1,7 @@
 # Phase 6 - Lyra QA Trainer (Device-Backed)
 
 Date: 2026-03-04
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 ## Purpose
 
@@ -11,7 +11,10 @@ It validates:
 
 - local Python and watchdog CLI readiness,
 - local D_T memory sweep integrity for phase/fix entities,
+- D_T scope-confidence ladder coverage across the hub, security workspace runtime, security satellite, and the embedded Dark_Coder backend/satellite path,
 - roadmap and audit coverage for phases 0 to 6,
+- smart-home retail-readiness honesty checks (simulation-backed connector detection, rollout/config drift, current Wallet setup guidance),
+- family-role canonicalization (`parent`/`child`) with `son` preserved only as a legacy alias for compatibility,
 - phase hardening artifact presence (MASVS, policy/play, rollout, pricing, tutorial, trainer docs),
 - memory-derived regression markers for key fixes (false-positive tuning, scan routing, incident assistant flow, vault hardening, startup hydration ordering),
 - incident-assistant dedicated-screen split from scan-results surface,
@@ -78,8 +81,39 @@ Exit code:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
    - Use `Back to scan results` and confirm return path is clean.
-4. Fix any failed checks and re-run until clean.
-5. Attach the latest markdown report to release evidence.
+4. Manually verify Home Risk wording honesty:
+   - Open Home Risk setup and Home Risk posture from the dashboard.
+   - Confirm the UI describes SmartThings-first local readiness, local snapshot, or read-only behavior.
+   - Confirm no screen claims live SmartThings cloud telemetry or active Google Home support.
+5. Fix any failed checks and re-run until clean.
+6. Attach the latest markdown report to release evidence.
+
+## 2026-03-07 revalidation rule
+
+Lyra now treats retail smart-home readiness as a release gate:
+
+- If `SmartThingsConnector.kt` is still simulation-backed (local consent artifact, installed-app health check, synthetic device count), Lyra will fail the retail-readiness check.
+- If `google_home` appears in the active smart-home rollout config without a real connector implementation, Lyra will fail.
+- If Google Wallet setup guidance points to a stale/non-car-key support page, Lyra will fail.
+- If roadmap/audit docs overstate Phase 2 or Phase 5 as retail-pass, Lyra will fail.
+
+This is intentional. The release package should not pass while the connected-home phase is still below retail scope.
+
+Lyra also treats family-role terminology as a compatibility gate:
+
+- Runtime config and docs must use `parent`/`child` as the canonical family-role pair.
+- Legacy `son` values may remain only as compatibility aliases for older imports or historical records.
+- Active owner allowlists, rollout roles, and new UX copy should not require or advertise `son` as a primary role.
+
+Lyra now treats D_T routing drift as a staged confidence ladder:
+
+- `dt_scope_ladder_basic_clarification`: vague backend asks must stay in strict clarification mode.
+- `dt_scope_ladder_hub_scoped_review`: the hub must accept scoped read-only review requests without forcing clarification.
+- `dt_scope_ladder_hub_normalization_alignment`: the hub must accept normalization/alignment work when the scope is explicit.
+- `dt_scope_ladder_security_local_core_upgrade`: the security workspace fallback core must upgrade actionable clarification payloads into assumption-ready execution.
+- `dt_scope_ladder_security_satellite_upgrade`: the security satellite router must convert actionable scoped clarification payloads into assumption mode with bounded questions.
+- `dt_scope_ladder_dark_coder_backend_alignment`: the embedded Dark_Coder backend codereview contract must classify cross-system alignment work as actionable assumption-first.
+- `dt_scope_ladder_dark_coder_satellite_upgrade`: the embedded Dark_Coder satellite router must perform the same assumption-mode upgrade for scoped actionable requests.
 
 ## Latest passing run (this workspace)
 

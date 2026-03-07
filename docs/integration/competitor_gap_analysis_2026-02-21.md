@@ -63,7 +63,8 @@ Scope: top comparable password-locker apps on Android+iOS, what they do well, an
 
 ## DT Guardian current differentiators
 - Local-first remediation flow (no required cloud vault backend).
-- Family-owner aware triage model (`parent`, `son`) tied to account priority order.
+- Family-owner aware triage model (`parent`, `child`) tied to account priority order.
+- Legacy `son` aliases remain accepted for older imports and historical records.
 - Security operations framing: queue + incident + watchdog context in one app.
 - Overlay-assisted execution path for in-app password-change actions.
 

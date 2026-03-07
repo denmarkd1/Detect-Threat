@@ -23,7 +23,8 @@
   5. other
 
 ## Family coverage
-- Support at least two owners: `parent` and `son`.
+- Support at least two owners: `parent` and `child`.
+- Treat `son` only as a legacy alias for backward compatibility; do not require it in new config or UX.
 - Owner detection should use configurable email patterns in `config/workspace_settings.json`.
 
 ## D_T integration

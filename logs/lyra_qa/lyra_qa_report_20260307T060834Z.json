@@ -1,0 +1,216 @@
+{
+  "generated_at_utc": "2026-03-07T06:08:34+00:00",
+  "workspace": "/home/danicous/security",
+  "package_name": "com.realyn.watchdog",
+  "device_serial": "GINVINZLY59HAEFM",
+  "checks": [
+    {
+      "name": "credential_defense_help",
+      "command": "credential-defense --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.21,
+      "output_excerpt": "usage: credential-defense [-h]\n                          {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n                          ...\n\nCredential Defense - local-first breach response workflow\n\npositional arguments:\n  {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n    init                Initialize config files and encrypted vault\n    detect-browsers     Detect installed browser profile directories\n    watchdog-status     Write and print runtime OS/watchdog status\n    watchdog-daemon     Run watchdog heartbeat loop for Linux/Windows runtime\n                        detection\n    import-exports      Import browser CSV exports into encrypted vault\n    list-records        List vault records (without printing passwords)\n    session             Run guided top-to-bottom triage session\n    run-actions         Run queued rotate/delete actions with confirmations\n    support-server      Run local support hub (AI chat hotline +\n                        feature/problem ticket queue)\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "watchdog_help",
+      "command": "python3 watchdog/watchdog.py --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.08,
+      "output_excerpt": "usage: watchdog.py [-h]\n                   {baseline,scan,watch,umbrella-link,umbrella-status,umbrella-scan}\n                   ...\n\nRealyn Android watchdog\n\npositional arguments:\n  {baseline,scan,watch,umbrella-link,umbrella-status,umbrella-scan}\n    baseline            collect and save baseline snapshot\n    scan                scan and compare to baseline\n    watch               run scan in a loop\n    umbrella-link       link one or more connected devices into a shared\n                        protection umbrella\n    umbrella-status     show linked umbrella devices and their current\n                        connection status\n    umbrella-scan       scan all linked umbrella devices in one run\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "memory_phase_fix_coverage",
+      "command": "memory sweep + phase/fix artifact validation",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Loaded 63 memory entities from /home/danicous/security/systems/D_T_System/data/mcp_memory.jsonl.\nPhase 6 memory entities present in local D_T store.\nRoadmap phase headers (Phase 0-6) verified.\nPhase 1-5 audit markers verified.\nPhase 6 artifact bundle validated (8 paths).\nRelocation report present: /home/danicous/security/logs/memory/mcp_relocation_plan_20260304T231659Z.json\nLoaded 19 issue summaries from Zen council memory log.\nfix_false_positive_tuning: validated 3 file marker rule(s).\nfix_home_scan_routing: validated 2 file marker rule(s).\nfix_incident_assistant_flow: validated 7 file marker rule(s).\nfix_vault_hardening: validated 3 file marker rule(s).\nfix_startup_intro_regression: validated 1 file marker rule(s)."
+    },
+    {
+      "name": "integration_mesh_retail_readiness",
+      "command": "integration mesh retail readiness validation",
+      "status": "FAIL",
+      "return_code": 5,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Validated 2 smart-home rollout config path(s).\nValidated wording alignment across 5 file(s).\n\nValidation errors:\n- SmartThingsConnector remains simulation-backed: local consent artifact, installed-app health, and synthetic device counts are still present."
+    },
+    {
+      "name": "family_role_canonicalization",
+      "command": "family role canonicalization validation",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Validated canonical owner config across 2 runtime config path(s)."
+    },
+    {
+      "name": "dt_scope_ladder_basic_clarification",
+      "command": "python3 -c import json\nfrom src.dt_integration.backend_dt_system_core import build_clarification_policy\n\npolicy = build_clarification_policy(\"Help with this issue.\")\nassert policy[\"mode\"] == \"strict_clarification_first\", policy\nassert policy[\"scope_signal_count\"] == 0, policy\nprint(json.dumps(policy, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.04,
+      "output_excerpt": "{\n  \"id\": \"dt_actionable_assumption_policy_v1\",\n  \"mode\": \"strict_clarification_first\",\n  \"actionable_signal_count\": 0,\n  \"scope_signal_count\": 0,\n  \"constraints_signal_count\": 0,\n  \"confidence_floor_for_actionable_execution\": 60,\n  \"clarifying_question_limit\": 3,\n  \"require_scope_for_assumption_mode\": true,\n  \"hub_upgrade_id\": \"dt_hub_scope_confidence_upgrade_2026_03_05\"\n}"
+    },
+    {
+      "name": "dt_scope_ladder_hub_scoped_review",
+      "command": "python3 -c import json\nimport sys\nimport tempfile\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path.cwd()))\nfrom D_T_System.src.dt_system_core import DTSystemCore\n\nwith tempfile.TemporaryDirectory() as tmp_dir:\n    core = DTSystemCore(Path(tmp_dir))\n    resolution = core.process_issue('Perform read-only review of modules (systems, D_T_System, scripts, analysis, tests, gui) and report findings; constraints: no code changes.', auto_execute=False)\n\npayload = {\n    \"status\": resolution.completion_status.get(\"status\"),\n    \"confidence\": resolution.certainty_assessment.confidence_percentage,\n}\nassert payload[\"status\"] == \"ready_for_execution\", payload\nassert payload[\"confidence\"] >= 60.0, payload\nprint(json.dumps(payload, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 1.37,
+      "output_excerpt": "{\n  \"status\": \"ready_for_execution\",\n  \"confidence\": 88.0\n}\n2026-03-07 14:08:13,756 - DTSystemCore - INFO - \ud83d\udd27 Initializing D_T components\n2026-03-07 14:08:14,966 - DTSystemCore - INFO - \u2705 MCP memory backend active\n2026-03-07 14:08:14,966 - DTSystemCore - INFO - D_T Task Manager initialized\n2026-03-07 14:08:14,966 - DTSystemCore - INFO - D_T Testing Coordinator initialized\n2026-03-07 14:08:14,967 - DTSystemCore - INFO - D_T Phase Tracker initialized\n2026-03-07 14:08:14,967 - DTSystemCore - INFO - D_T System Core initialized successfully\n2026-03-07 14:08:14,967 - DTSystemCore - INFO - \ud83d\ude80 Starting D_T System issue processing\n2026-03-07 14:08:14,967 - DTSystemCore - INFO - \ud83d\udd0d Lyra engine analyzing issue context...\n2026-03-07 14:08:14,981 - DTSystemCore - INFO - \u2705 Issue analysis complete: general affecting 6 components\n2026-03-07 14:08:14,981 - DTSystemCore - INFO - Assessing certainty for issue resolution...\n2026-03-07 14:08:14,984 - DTSystemCore - INFO - \ud83d\udd0d Checking memory for existing problem solutions...\n2026-03-07 14:08:15,022 - DTSystemCore - INFO - \ud83d\udccb Planning resources for issue resolution...\n2026-03-07 14:08:15,024 - DTSystemCore - INFO - \ud83d\udcdd Generating todo list...\n2026-03-07 14:08:15,024 - DTSystemCore - INFO - \ud83d\udd27 Creating tasks...\n2026-03-07 14:08:15,028 - DTSystemCore - INFO - \ud83e\uddea Planning testing requirements..."
+    },
+    {
+      "name": "dt_scope_ladder_hub_normalization_alignment",
+      "command": "python3 -c import json\nimport sys\nimport tempfile\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path.cwd()))\nfrom D_T_System.src.dt_system_core import DTSystemCore\n\nwith tempfile.TemporaryDirectory() as tmp_dir:\n    core = DTSystemCore(Path(tmp_dir))\n    resolution = core.process_issue('Normalize family role handling to parent/child across docs, config, Android/Python defaults, and Lyra trainer guidance while preserving legacy aliases for compatibility.', auto_execute=False)\n\npayload = {\n    \"status\": resolution.completion_status.get(\"status\"),\n    \"confidence\": resolution.certainty_assessment.confidence_percentage,\n}\nassert payload[\"status\"] == \"ready_for_execution\", payload\nassert payload[\"confidence\"] >= 60.0, payload\nprint(json.dumps(payload, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 1.5,
+      "output_excerpt": "{\n  \"status\": \"ready_for_execution\",\n  \"confidence\": 75.0\n}\n2026-03-07 14:08:15,125 - DTSystemCore - INFO - \ud83d\udd27 Initializing D_T components\n2026-03-07 14:08:16,462 - DTSystemCore - INFO - \u2705 MCP memory backend active\n2026-03-07 14:08:16,463 - DTSystemCore - INFO - D_T Task Manager initialized\n2026-03-07 14:08:16,463 - DTSystemCore - INFO - D_T Testing Coordinator initialized\n2026-03-07 14:08:16,464 - DTSystemCore - INFO - D_T Phase Tracker initialized\n2026-03-07 14:08:16,464 - DTSystemCore - INFO - D_T System Core initialized successfully\n2026-03-07 14:08:16,464 - DTSystemCore - INFO - \ud83d\ude80 Starting D_T System issue processing\n2026-03-07 14:08:16,464 - DTSystemCore - INFO - \ud83d\udd0d Lyra engine analyzing issue context...\n2026-03-07 14:08:16,478 - DTSystemCore - INFO - \u2705 Issue analysis complete: configuration affecting 1 components\n2026-03-07 14:08:16,478 - DTSystemCore - INFO - Assessing certainty for issue resolution...\n2026-03-07 14:08:16,481 - DTSystemCore - INFO - \ud83d\udd0d Checking memory for existing problem solutions...\n2026-03-07 14:08:16,492 - DTSystemCore - INFO - \ud83d\udccb Planning resources for issue resolution...\n2026-03-07 14:08:16,493 - DTSystemCore - INFO - \ud83d\udcdd Generating todo list...\n2026-03-07 14:08:16,493 - DTSystemCore - INFO - \ud83d\udd27 Creating tasks...\n2026-03-07 14:08:16,495 - DTSystemCore - INFO - \ud83e\uddea Planning testing requirements..."
+    },
+    {
+      "name": "dt_scope_ladder_security_local_core_upgrade",
+      "command": "python3 -c import importlib\nimport json\nimport sys\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path.cwd()))\ncore = importlib.import_module(\"systems.D_T_System.src.dt_system_core\")\npayload = json.loads('{\"resolution\": {\"completion_status\": {\"status\": \"clarification_needed\", \"clarifying_questions\": [\"What scope should D_T operate on?\"]}, \"certainty_assessment\": {\"level\": \"low\", \"confidence_percentage\": 45.0, \"assessment_reasoning\": \"Initial low-confidence routing result.\"}, \"code_review_handoff\": \"# Existing handoff\"}}')\nresolution = core._resolution_from_route_payload(\n    'Normalize and align the D_T hub, security satellite, Dark_Coder backend, bootstrap_router.py, dt_satellite_router.py, and the Lyra trainer ladder from basic through expert coverage.',\n    None,\n    payload,\n    automation_requested=False,\n    workspace_root=Path.cwd(),\n)\n\nresult = {\n    \"status\": resolution.completion_status.get(\"status\"),\n    \"assumption_mode\": resolution.completion_status.get(\"assumption_mode\"),\n    \"todo_list\": resolution.todo_list,\n}\nassert result[\"status\"] == \"ready_for_execution_assumptions\", result\nassert result[\"assumption_mode\"] is True, result\nassert result[\"todo_list\"], result\nprint(json.dumps(result, indent=2))",
+      "status": "FAIL",
+      "return_code": 1,
+      "duration_seconds": 0.12,
+      "output_excerpt": "Traceback (most recent call last):\n  File \"<string>\", line 22, in <module>\nAssertionError: {'status': 'routed', 'assumption_mode': None, 'todo_list': []}"
+    },
+    {
+      "name": "dt_scope_ladder_security_satellite_upgrade",
+      "command": "python3 -c import importlib.util\nimport json\nfrom pathlib import Path\n\nmodule_path = Path('/home/danicous/security/D_T_System/dt_satellite_router.py')\nspec = importlib.util.spec_from_file_location(\"security_dt_satellite_router_probe\", module_path)\nassert spec and spec.loader, module_path\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n\npayload = json.loads('{\"resolution\": {\"completion_status\": {\"status\": \"clarification_needed\", \"clarifying_questions\": [\"What scope should D_T operate on?\"]}, \"certainty_assessment\": {\"level\": \"low\", \"confidence_percentage\": 45.0, \"assessment_reasoning\": \"Initial low-confidence routing result.\"}, \"code_review_handoff\": \"# Existing handoff\"}}')\nupgraded = module.upgrade_actionable_clarification_payload(\n    payload,\n    'Normalize and align the D_T hub, security satellite, Dark_Coder backend, bootstrap_router.py, dt_satellite_router.py, and the Lyra trainer ladder from basic through expert coverage.',\n)\ncompletion = upgraded[\"resolution\"][\"completion_status\"]\ncertainty = upgraded[\"resolution\"][\"certainty_assessment\"]\nhandoff = upgraded[\"resolution\"][\"code_review_handoff\"]\nresult = {\n    \"status\": completion.get(\"status\"),\n    \"assumption_mode\": completion.get(\"assumption_mode\"),\n    \"confidence\": certainty.get(\"confidence_percentage\"),\n    \"questions\": completion.get(\"clarifying_questions\"),\n}\nassert result[\"status\"] == \"ready_for_execution_assumptions\", result\nassert result[\"assumption_mode\"] is True, result\nassert float(result[\"confidence\"]) >= 68.0, result\nassert \"Assumption Mode\" in handoff, handoff\nprint(json.dumps(result, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.1,
+      "output_excerpt": "{\n  \"status\": \"ready_for_execution_assumptions\",\n  \"assumption_mode\": true,\n  \"confidence\": 68.0,\n  \"questions\": [\n    \"What scope should D_T operate on?\",\n    \"What are the required acceptance checks after implementation?\"\n  ]\n}"
+    },
+    {
+      "name": "dt_scope_ladder_dark_coder_backend_alignment",
+      "command": "python3 -c import json\nfrom src.dt_integration.backend_dt_system_core import build_backend_codereview_handoff\n\nhandoff = build_backend_codereview_handoff(\n    query_text='Normalize and align the D_T hub, security satellite, Dark_Coder backend, bootstrap_router.py, dt_satellite_router.py, and the Lyra trainer ladder from basic through expert coverage.',\n    session_id=\"lyra-scope-ladder\",\n    dt_available=True,\n    workspace_root='/home/danicous/Dark_Coder',\n)\npolicy = handoff[\"clarification_policy\"]\nresult = {\n    \"mode\": policy.get(\"mode\"),\n    \"actionable_signal_count\": policy.get(\"actionable_signal_count\"),\n    \"scope_signal_count\": policy.get(\"scope_signal_count\"),\n}\nassert result[\"mode\"] == \"actionable_assumption_first\", result\nassert int(result[\"actionable_signal_count\"]) > 0, result\nassert int(result[\"scope_signal_count\"]) > 0, result\nprint(json.dumps(result, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.04,
+      "output_excerpt": "{\n  \"mode\": \"actionable_assumption_first\",\n  \"actionable_signal_count\": 2,\n  \"scope_signal_count\": 6\n}"
+    },
+    {
+      "name": "dt_scope_ladder_dark_coder_satellite_upgrade",
+      "command": "python3 -c import importlib.util\nimport json\nfrom pathlib import Path\n\nmodule_path = Path('/home/danicous/Dark_Coder/D_T_System/dt_satellite_router.py')\nspec = importlib.util.spec_from_file_location(\"dark_coder_dt_satellite_router_probe\", module_path)\nassert spec and spec.loader, module_path\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n\npayload = json.loads('{\"resolution\": {\"completion_status\": {\"status\": \"clarification_needed\", \"clarifying_questions\": [\"What scope should D_T operate on?\"]}, \"certainty_assessment\": {\"level\": \"low\", \"confidence_percentage\": 45.0, \"assessment_reasoning\": \"Initial low-confidence routing result.\"}, \"code_review_handoff\": \"# Existing handoff\"}}')\nupgraded = module.upgrade_actionable_clarification_payload(\n    payload,\n    'Normalize and align the D_T hub, security satellite, Dark_Coder backend, bootstrap_router.py, dt_satellite_router.py, and the Lyra trainer ladder from basic through expert coverage.',\n)\ncompletion = upgraded[\"resolution\"][\"completion_status\"]\ncertainty = upgraded[\"resolution\"][\"certainty_assessment\"]\nresult = {\n    \"status\": completion.get(\"status\"),\n    \"assumption_mode\": completion.get(\"assumption_mode\"),\n    \"confidence\": certainty.get(\"confidence_percentage\"),\n    \"source_mode\": completion.get(\"source_mode\"),\n}\nassert result[\"status\"] == \"ready_for_execution_assumptions\", result\nassert result[\"assumption_mode\"] is True, result\nassert float(result[\"confidence\"]) >= 68.0, result\nassert result[\"source_mode\"] == \"satellite_actionable_scope_upgrade\", result\nprint(json.dumps(result, indent=2))",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.06,
+      "output_excerpt": "{\n  \"status\": \"ready_for_execution_assumptions\",\n  \"assumption_mode\": true,\n  \"confidence\": 68.0,\n  \"source_mode\": \"satellite_actionable_scope_upgrade\"\n}"
+    },
+    {
+      "name": "precommit_guard",
+      "command": "bash scripts/ops/precommit_guard.sh --include-unstaged",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 3.2,
+      "output_excerpt": "[+] precommit_guard: repository=/home/danicous/security\n[+] precommit_guard: scope=staged+unstaged\n[+] precommit_guard: changed files (36):\n    AGENTS.md\n    D_T_System/bootstrap_router.py\n    D_T_System/dt_satellite_router.py\n    D_T_System/profiles/manus_wide_research/src/__init__.py\n    D_T_System/profiles/manus_wide_research/src/orchestrator.py\n    D_T_System/profiles/manus_wide_research/src/swarm_manager.py\n    D_T_System/satellite_config.json\n    D_T_System/tools/manus_runtime_reducer.py\n    android-watchdog/app/src/main/AndroidManifest.xml\n    android-watchdog/app/src/main/assets/workspace_settings.json\n    android-watchdog/app/src/main/java/com/realyn/watchdog/IntegrationMeshConfig.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/LocalDigitalKeyRiskAdapter.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/MainActivity.kt\n    android-watchdog/app/src/main/res/values/strings.xml\n    android-watchdog/app/src/test/java/com/realyn/watchdog/IntegrationMeshConfigTest.kt\n    config/workspace_settings.json\n    docs/integration/competitor_gap_analysis_2026-02-21.md\n    docs/integration/phase1_5_retail_readiness_audit_2026-03-04.md\n    docs/integration/phase6_lyra_qa_trainer_2026-03-04.md\n    docs/integration/phase6_play_store_first_submission_guide_2026-03-04.md\n    docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md\n    docs/integration/phase6_pricing_packaging_update_2026-03-04.md\n    docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md\n    docs/integration/phase6_tutorial_overlay_2026-03-04.md\n    docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md\n    logs/lyra_qa/lyra_qa_report_20260307T053657Z.json\n    logs/lyra_qa/lyra_qa_report_20260307T053657Z.md\n    logs/lyra_qa/lyra_qa_report_20260307T053729Z.json\n    logs/lyra_qa/lyra_qa_report_20260307T053729Z.md\n    logs/lyra_qa/lyra_qa_report_20260307T055120Z.json\n    logs/lyra_qa/lyra_qa_report_20260307T055120Z.md\n    scripts/ops/lyra_beta_trainer.py\n    src/credential_defense/config.py\n    systems/D_T_System/src/dt_system_core.py\n    systems/D_T_System/tasks/active_tasks.json\n    watchdog/watchdog.py\n[!] precommit_guard: identifier-bas\n...[truncated]"
+    },
+    {
+      "name": "gradle_lint_unit",
+      "command": "./gradlew lintDebug testDebugUnitTest",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 2.73,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "gradle_assemble_debug",
+      "command": "./gradlew assembleDebug",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 2.75,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "adb_connection",
+      "command": "bash scripts/ops/check_adb_connection.sh",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.02,
+      "output_excerpt": "[+] Using adb: /home/danicous/security/tools/android/platform-tools/adb\nList of devices attached\nGINVINZLY59HAEFM       device usb:1-7.2 product:corot_global model:23078PND5G device:corot transport_id:1\n\n[+] Android device link is active."
+    },
+    {
+      "name": "adb_install_debug_apk",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb install -r /home/danicous/security/android-watchdog/app/build/outputs/apk/debug/app-debug.apk",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.39,
+      "output_excerpt": "Performing Streamed Install\nSuccess"
+    },
+    {
+      "name": "adb_logcat_clear",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb logcat -c",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.19,
+      "output_excerpt": ""
+    },
+    {
+      "name": "app_launch_smoke",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb shell monkey -p com.realyn.watchdog -c android.intent.category.LAUNCHER 1",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.74,
+      "output_excerpt": "bash arg: -p\n  bash arg: com.realyn.watchdog\n  bash arg: -c\n  bash arg: android.intent.category.LAUNCHER\n  bash arg: 1\nEvents injected: 1\n## Network stats: elapsed time=66ms (0ms mobile, 0ms wifi, 66ms not connected)\nargs: [-p, com.realyn.watchdog, -c, android.intent.category.LAUNCHER, 1]\n arg: \"-p\"\n arg: \"com.realyn.watchdog\"\n arg: \"-c\"\n arg: \"android.intent.category.LAUNCHER\"\n arg: \"1\"\ndata=\"com.realyn.watchdog\"\ndata=\"android.intent.category.LAUNCHER\""
+    },
+    {
+      "name": "app_randomized_monkey",
+      "command": "adb shell monkey ...",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped by --skip-monkey-events"
+    },
+    {
+      "name": "watchdog_baseline",
+      "command": "python3 watchdog/watchdog.py baseline",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 2.1,
+      "output_excerpt": "2026-03-07T06:08:30+00:00 [watchdog] collecting baseline snapshot (default-device)\n2026-03-07T06:08:32+00:00 [watchdog] baseline saved to /home/danicous/security/state/baseline.json"
+    },
+    {
+      "name": "watchdog_scan",
+      "command": "python3 watchdog/watchdog.py scan",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 1.15,
+      "output_excerpt": "2026-03-07T06:08:33+00:00 [watchdog] collecting current snapshot for default-device\n2026-03-07T06:08:34+00:00 [watchdog] scan completed: no suspicious changes against baseline (serial=GINVINZLY59HAEFM)"
+    },
+    {
+      "name": "logcat_capture",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb logcat -d -v time -t 4000",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.05,
+      "output_excerpt": "--------- beginning of main\n03-07 14:08:30.097 I/MiuiNetworkPolicy( 2197): updateUidState uid = 10164, uidState = 5\n03-07 14:08:30.098 I/ConnStatus:PkgChangeReceiver( 8250): onReceive()\n03-07 14:08:30.098 I/GrayResultDBManager(10015): deleteInfoByPackageName from db pkgName com.realyn.watchdog dbr 0\n03-07 14:08:30.098 I/SafetyLabelChangedBroadcastReceiver(26621): received broadcast packageName: com.realyn.watchdog, current user: UserHandle{0}, packageChangeEvent: UPDATE, intent user: UserHandle{0}\n03-07 14:08:30.099 I/MiuiNetworkPolicy( 2197): ACTION_PACKAGE_ADDED uid = 10765\n03-07 14:08:30.099 D/MiuiNetworkPolicyAppBuckets( 2197): updateAppPN packageName=com.realyn.watchdog,uid=10765,installed=true\n03-07 14:08:30.099 I/SdkSandboxManager( 2197): No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10765, mPackageName='com.realyn.watchdog, mAppProcessToken='null'}\n03-07 14:08:30.100 I/SdkSandboxManager( 2197): No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10765, mPackageName='com.realyn.watchdog, mAppProcessToken='null'}\n03-07 14:08:30.101 E/msys    (31079): E[N mns]_LogError(228)=>Failed to resolve using system DNS resolver, getaddrinfo(): No address associated with hostname\n03-07 14:08:30.101 E/msys    (31079): E[N mns]_OnDiskCacheGetData(632)=>Start post callback cache refresh DNS resolution\n03-07 14:08:30.102 I/PI-ScanDispatch(12247): service bind, pkgName = com.realyn.watchdog, installer = null, isReplace = true, firstGoogleTime = 1703320128346\n03-07 14:08:30.103 D/MiuiClockController( 3448): receive package changed com.realyn.watchdog\n03-07 14:08:30.104 E/msys    (31079): E[N mns]_LogError(228)=>Failed to resolve using system DNS resolver, getaddrinfo(): No address associated with hostname\n03-07 14:08:30.105 D/CompactQSListController( 3448): onReceive pkg change\n03-07 14:08:30.106 D/ControlsListingControllerImpl( 3448): ServiceConfig reloaded, count: 2\n03-07 14:08:30.106 D/LockScreenMagazineController( 3448): received broadcast android.intent.action.PACKAGE_ADDED\n03-07 14:08:30.107 D/VolumePanelViewController_true( 3448): onReceive: android.intent.action.PACKAGE_ADDED, time= 0\n03-07 14:08:30.107 D/Launcher.Model( 3104): La\n...[truncated]"
+    },
+    {
+      "name": "logcat_fatal_scan",
+      "command": "scan full logcat capture for fatal signatures",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "No fatal crash signature found in the full captured logcat."
+    },
+    {
+      "name": "adb_force_stop",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb shell am force-stop com.realyn.watchdog",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.09,
+      "output_excerpt": ""
+    },
+    {
+      "name": "adb_devices_probe",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb devices -l",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "List of devices attached\nGINVINZLY59HAEFM       device usb:1-7.2 product:corot_global model:23078PND5G device:corot transport_id:1"
+    }
+  ]
+}

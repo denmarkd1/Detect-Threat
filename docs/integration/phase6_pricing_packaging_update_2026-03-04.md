@@ -1,6 +1,7 @@
 # Phase 6 - Final Pricing and Packaging Update
 
 Date: 2026-03-04
+Last updated: 2026-03-07
 
 ## Objective
 
@@ -37,7 +38,7 @@ Source of truth: `config/workspace_settings.json` (`pricing` block).
 ## Top-feature marketing pillars (launch)
 
 - Local-first credential defense with owner-aware triage order.
-- Connected-home risk posture (SmartThings-first) with audit timeline.
+- SmartThings-first Home Risk readiness layer with local audit timeline.
 - VPN broker status guardrails for high-risk account classes.
 - Digital key guardrails with integrity + guardian checkpoints.
 - Unified non-secret evidence export and KPI telemetry.
@@ -51,6 +52,10 @@ Ensure these surfaces use the same package language before upload:
 - `docs/terms.html`
 - in-app plan dialog text and disclosure strings (`android-watchdog/app/src/main/res/values/strings.xml`)
 - Play Store listing short/full descriptions
+
+Retail-safe wording note:
+
+- Do not market live SmartThings monitoring, Google Home support, or cloud-ingested home inventory until partner OAuth posture ingestion exists in the shipped build.
 
 ## Operator note
 

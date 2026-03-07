@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import shutil
 import sys
 from collections import Counter
 from dataclasses import asdict, is_dataclass
@@ -28,6 +30,7 @@ SKIP_DIRS = {
     "venv",
     "runtimes",
 }
+PROFILE_RUNTIME_REL = Path("D_T_System") / "profiles" / "manus_wide_research" / "runtime"
 
 
 def _json_default(value: Any) -> Any:
@@ -114,6 +117,20 @@ def _ensure_local_profile_paths(workspace_root: Path) -> None:
                 sys.path.insert(0, src_path)
 
 
+def _reset_profile_runtime_dir(workspace_root: Path) -> None:
+    runtime_root = workspace_root / PROFILE_RUNTIME_REL
+    if not runtime_root.exists():
+        return
+
+    for entry in runtime_root.iterdir():
+        if entry.name == ".keep":
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
 def _collect_workspace_snapshot(workspace_root: Path) -> Dict[str, Any]:
     workspace_root = Path(workspace_root).expanduser().resolve()
     top_dirs: list[str] = []
@@ -176,6 +193,18 @@ def _collect_workspace_snapshot(workspace_root: Path) -> Dict[str, Any]:
 
     tech_stack = sorted(t for t in tags if t in {"python", "node"})
     summary = f"{len(top_dirs)} top-level dirs, {len(top_files)} top-level files"
+    shared_update_files: list[str] = []
+    update_dirs = [
+        workspace_root / "systems" / "D_T_System" / "hub" / "updates",
+        workspace_root / "D_T_System" / "hub" / "updates",
+    ]
+    for update_dir in update_dirs:
+        if not update_dir.exists():
+            continue
+        for update_file in sorted(update_dir.glob("*.json")):
+            rel_name = str(update_file.relative_to(workspace_root))
+            if rel_name not in shared_update_files:
+                shared_update_files.append(rel_name)
 
     return {
         "workspace_name": workspace_root.name,
@@ -190,6 +219,8 @@ def _collect_workspace_snapshot(workspace_root: Path) -> Dict[str, Any]:
         "scan_limit_hit": max_files_hit,
         "tags": sorted(tags),
         "tech_stack": tech_stack,
+        "shared_update_files": shared_update_files[:60],
+        "shared_update_count": len(shared_update_files),
     }
 
 
@@ -209,6 +240,159 @@ def _update_required_profiles(config_path: Optional[Path], profiles: list[str]) 
         return
     config["required_profiles"] = profiles
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+
+def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None) -> Dict[str, int | bool]:
+    combined = f"{issue_text} {user_notes or ''}".strip().lower()
+    actionable_tokens = (
+        "review",
+        "audit",
+        "assess",
+        "scan",
+        "inspect",
+        "analyze",
+        "analysis",
+        "fix",
+        "patch",
+        "address",
+        "resolve",
+        "implement",
+        "harden",
+        "update",
+        "refactor",
+        "improve",
+        "normalize",
+        "canonicalize",
+        "align",
+        "sync",
+        "synchronize",
+        "rename",
+        "document",
+        "migrate",
+    )
+    scope_patterns = (
+        r"\bphase\s*\d+\b",
+        r"\bmodule(?:s)?\b",
+        r"\bcomponent(?:s)?\b",
+        r"\bdirector(?:y|ies)\b",
+        r"\bbackend\b",
+        r"\bfrontend\b",
+        r"\bconfig(?:uration)?\b",
+        r"\bdocs?\b",
+        r"\bandroid\b",
+        r"\bpython\b",
+        r"\bhub\b",
+        r"\bsatellite\b",
+        r"\blyra\b",
+        r"\bdark[_\s-]*coder\b",
+        r"\bwatchdog\b",
+        r"\bcredential\b",
+        r"[/\\][\w./\\-]+\.[a-z0-9]{1,8}\b",
+        r"[/\\][\w./\\-]+[/\\][\w./\\-]+\b",
+        r"\b[\w.-]+\.(py|js|ts|kt|java|go|rs|json|yaml|yml|toml|md)\b",
+        r"\((?:\s*[\w./\\-]+\s*,){1,}\s*[\w./\\-]+\s*\)",
+        r"\b(systems|d_t_system|analysis|scripts|tests|gui|docs)\b",
+    )
+    constraint_tokens = (
+        "read-only",
+        "read only",
+        "no code changes",
+        "without code changes",
+        "no destructive",
+        "no destructive git",
+        "do not modify",
+    )
+
+    actionable_signal_count = sum(1 for token in actionable_tokens if token in combined)
+    scope_signal_count = sum(
+        1 for pattern in scope_patterns if re.search(pattern, combined, flags=re.IGNORECASE)
+    )
+    constraints_signal_count = sum(1 for token in constraint_tokens if token in combined)
+    assumption_ready = actionable_signal_count > 0 and scope_signal_count > 0
+    return {
+        "actionable_signal_count": actionable_signal_count,
+        "scope_signal_count": scope_signal_count,
+        "constraints_signal_count": constraints_signal_count,
+        "assumption_ready": assumption_ready,
+    }
+
+
+def upgrade_actionable_clarification_payload(
+    payload: Dict[str, Any],
+    issue_input: str,
+    user_notes: Optional[str] = None,
+    auto_execute: bool = False,
+) -> Dict[str, Any]:
+    if auto_execute or not isinstance(payload, dict):
+        return payload
+
+    resolution = payload.get("resolution")
+    if not isinstance(resolution, dict):
+        return payload
+
+    completion = resolution.get("completion_status")
+    if not isinstance(completion, dict) or completion.get("status") != "clarification_needed":
+        return payload
+
+    profile = _infer_actionable_profile(issue_input, user_notes)
+    if not bool(profile.get("assumption_ready")):
+        return payload
+
+    updated_payload = dict(payload)
+    updated_resolution = dict(resolution)
+    updated_completion = dict(completion)
+
+    existing_questions = completion.get("clarifying_questions", [])
+    questions = [str(item).strip() for item in existing_questions if str(item).strip()] if isinstance(existing_questions, list) else []
+    acceptance_question = "What are the required acceptance checks after implementation?"
+    if acceptance_question not in questions:
+        questions.append(acceptance_question)
+
+    updated_completion.update(
+        {
+            "source_status": "clarification_needed",
+            "status": "ready_for_execution_assumptions",
+            "message": (
+                "Hub requested clarification, but the request is actionable and scoped. "
+                "Proceed with memory-first assumptions and document unresolved questions."
+            ),
+            "assumption_mode": True,
+            "clarifying_questions": questions[:3],
+            "source_mode": "satellite_actionable_scope_upgrade",
+        }
+    )
+    updated_resolution["completion_status"] = updated_completion
+
+    certainty = resolution.get("certainty_assessment")
+    if isinstance(certainty, dict):
+        updated_certainty = dict(certainty)
+        current_confidence = float(updated_certainty.get("confidence_percentage") or 0.0)
+        if current_confidence < 68.0:
+            updated_certainty["confidence_percentage"] = 68.0
+        if str(updated_certainty.get("level") or "").strip().lower() == "low":
+            updated_certainty["level"] = "moderate"
+        reasoning = str(updated_certainty.get("assessment_reasoning") or "").strip()
+        note = (
+            "Satellite actionable-scope upgrade applied because the request includes explicit action "
+            "and target-scope signals."
+        )
+        if note not in reasoning:
+            updated_certainty["assessment_reasoning"] = f"{reasoning}\n\n{note}".strip()
+        updated_resolution["certainty_assessment"] = updated_certainty
+
+    handoff = str(updated_resolution.get("code_review_handoff") or "").strip()
+    assumption_note = (
+        "## Assumption Mode\n"
+        "Hub requested clarification, but this request is actionable and scoped. "
+        "Proceed with memory-first assumptions and document verification criteria."
+    )
+    if assumption_note not in handoff:
+        updated_resolution["code_review_handoff"] = (
+            f"{handoff}\n\n{assumption_note}".strip() if handoff else assumption_note
+        )
+
+    updated_payload["resolution"] = updated_resolution
+    return updated_payload
 
 
 def route_issue(
@@ -242,10 +426,18 @@ def route_issue(
         asset_plan = sync_payload.get("asset_plan", {}) if isinstance(sync_payload, dict) else {}
         if asset_plan.get("profiles"):
             _update_required_profiles(config_path, list(asset_plan["profiles"]))
+        _reset_profile_runtime_dir(workspace_root)
     _ensure_local_profile_paths(workspace_root)
-    return router.route_issue(
+    payload = router.route_issue(
         issue_input,
         workspace_path=workspace_root,
+        user_notes=user_notes,
+        auto_execute=auto_execute,
+    )
+    _reset_profile_runtime_dir(workspace_root)
+    return upgrade_actionable_clarification_payload(
+        payload,
+        issue_input,
         user_notes=user_notes,
         auto_execute=auto_execute,
     )

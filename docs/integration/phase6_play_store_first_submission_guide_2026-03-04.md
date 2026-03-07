@@ -1,6 +1,7 @@
 # Phase 6 - First Play Store Submission Guide (Step-by-Step)
 
-Date: 2026-03-04  
+Date: 2026-03-04
+Last updated: 2026-03-07
 Package: `com.realyn.watchdog`
 
 This guide is for a first-time Play submission and is aligned to current Play Console onboarding and review flow.
@@ -27,6 +28,9 @@ python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>
 Required pass artifacts:
 - `logs/phase6/masvs_sweep_<UTC_TIMESTAMP>.md`
 - `logs/lyra_qa/lyra_qa_report_<UTC_TIMESTAMP>.md`
+
+Release note:
+- Lyra now fails the release gate when the smart-home phase is still simulation-backed or when launch copy overstates Home Risk as retail-connected telemetry.
 
 ## 3) Build Play upload artifacts
 
@@ -90,6 +94,7 @@ Attach this evidence in your release packet:
 
 Do not submit for production review unless all of the following are true:
 - No failing checks in MASVS or Lyra reports.
+- If launch materials mention Home Risk, wording stays at SmartThings-first local readiness scope unless Lyra retail-readiness checks are green.
 - Listing, privacy policy, app content, and data safety forms are complete and consistent.
 - Required testing-track conditions are complete for your account type.
 - Rollback owner and hotfix path are documented.

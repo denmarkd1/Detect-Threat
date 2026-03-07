@@ -726,8 +726,10 @@ def read_optional_json(path: Path) -> Dict[str, Any] | None:
 
 def normalize_owner(raw: str) -> str:
     owner = raw.strip().lower()
-    if owner in {"parent", "child", "son"}:
-        return owner
+    if owner in {"child", "kid", "son"}:
+        return "child"
+    if owner == "parent":
+        return "parent"
     return owner if owner else "parent"
 
 

@@ -1,0 +1,160 @@
+{
+  "generated_at_utc": "2026-03-07T05:51:20+00:00",
+  "workspace": "/home/danicous/security",
+  "package_name": "com.realyn.watchdog",
+  "device_serial": "GINVINZLY59HAEFM",
+  "checks": [
+    {
+      "name": "credential_defense_help",
+      "command": "credential-defense --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.2,
+      "output_excerpt": "usage: credential-defense [-h]\n                          {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n                          ...\n\nCredential Defense - local-first breach response workflow\n\npositional arguments:\n  {init,detect-browsers,watchdog-status,watchdog-daemon,import-exports,list-records,session,run-actions,support-server}\n    init                Initialize config files and encrypted vault\n    detect-browsers     Detect installed browser profile directories\n    watchdog-status     Write and print runtime OS/watchdog status\n    watchdog-daemon     Run watchdog heartbeat loop for Linux/Windows runtime\n                        detection\n    import-exports      Import browser CSV exports into encrypted vault\n    list-records        List vault records (without printing passwords)\n    session             Run guided top-to-bottom triage session\n    run-actions         Run queued rotate/delete actions with confirmations\n    support-server      Run local support hub (AI chat hotline +\n                        feature/problem ticket queue)\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "watchdog_help",
+      "command": "python3 watchdog/watchdog.py --help",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.08,
+      "output_excerpt": "usage: watchdog.py [-h]\n                   {baseline,scan,watch,umbrella-link,umbrella-status,umbrella-scan}\n                   ...\n\nRealyn Android watchdog\n\npositional arguments:\n  {baseline,scan,watch,umbrella-link,umbrella-status,umbrella-scan}\n    baseline            collect and save baseline snapshot\n    scan                scan and compare to baseline\n    watch               run scan in a loop\n    umbrella-link       link one or more connected devices into a shared\n                        protection umbrella\n    umbrella-status     show linked umbrella devices and their current\n                        connection status\n    umbrella-scan       scan all linked umbrella devices in one run\n\noptions:\n  -h, --help            show this help message and exit"
+    },
+    {
+      "name": "memory_phase_fix_coverage",
+      "command": "memory sweep + phase/fix artifact validation",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Loaded 63 memory entities from /home/danicous/security/systems/D_T_System/data/mcp_memory.jsonl.\nPhase 6 memory entities present in local D_T store.\nRoadmap phase headers (Phase 0-6) verified.\nPhase 1-5 audit markers verified.\nPhase 6 artifact bundle validated (8 paths).\nRelocation report present: /home/danicous/security/logs/memory/mcp_relocation_plan_20260304T231659Z.json\nLoaded 19 issue summaries from Zen council memory log.\nfix_false_positive_tuning: validated 3 file marker rule(s).\nfix_home_scan_routing: validated 2 file marker rule(s).\nfix_incident_assistant_flow: validated 7 file marker rule(s).\nfix_vault_hardening: validated 3 file marker rule(s).\nfix_startup_intro_regression: validated 1 file marker rule(s)."
+    },
+    {
+      "name": "integration_mesh_retail_readiness",
+      "command": "integration mesh retail readiness validation",
+      "status": "FAIL",
+      "return_code": 5,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Validated 2 smart-home rollout config path(s).\nValidated wording alignment across 5 file(s).\n\nValidation errors:\n- SmartThingsConnector remains simulation-backed: local consent artifact, installed-app health, and synthetic device counts are still present."
+    },
+    {
+      "name": "family_role_canonicalization",
+      "command": "family role canonicalization validation",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Validated canonical owner config across 2 runtime config path(s)."
+    },
+    {
+      "name": "precommit_guard",
+      "command": "bash scripts/ops/precommit_guard.sh --include-unstaged",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.77,
+      "output_excerpt": "[+] precommit_guard: repository=/home/danicous/security\n[+] precommit_guard: scope=staged+unstaged\n[+] precommit_guard: changed files (33):\n    AGENTS.md\n    D_T_System/bootstrap_router.py\n    D_T_System/dt_satellite_router.py\n    D_T_System/profiles/manus_wide_research/src/__init__.py\n    D_T_System/profiles/manus_wide_research/src/orchestrator.py\n    D_T_System/profiles/manus_wide_research/src/swarm_manager.py\n    D_T_System/satellite_config.json\n    D_T_System/tools/manus_runtime_reducer.py\n    android-watchdog/app/src/main/AndroidManifest.xml\n    android-watchdog/app/src/main/assets/workspace_settings.json\n    android-watchdog/app/src/main/java/com/realyn/watchdog/IntegrationMeshConfig.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/LocalDigitalKeyRiskAdapter.kt\n    android-watchdog/app/src/main/java/com/realyn/watchdog/MainActivity.kt\n    android-watchdog/app/src/main/res/values/strings.xml\n    android-watchdog/app/src/test/java/com/realyn/watchdog/IntegrationMeshConfigTest.kt\n    config/workspace_settings.json\n    docs/integration/competitor_gap_analysis_2026-02-21.md\n    docs/integration/phase1_5_retail_readiness_audit_2026-03-04.md\n    docs/integration/phase6_lyra_qa_trainer_2026-03-04.md\n    docs/integration/phase6_play_store_first_submission_guide_2026-03-04.md\n    docs/integration/phase6_policy_play_disclosure_review_2026-03-04.md\n    docs/integration/phase6_pricing_packaging_update_2026-03-04.md\n    docs/integration/phase6_staged_rollout_rollback_playbook_2026-03-04.md\n    docs/integration/phase6_tutorial_overlay_2026-03-04.md\n    docs/integration/top5_competitor_smart_integration_roadmap_2026-03-03.md\n    logs/lyra_qa/lyra_qa_report_20260307T053657Z.json\n    logs/lyra_qa/lyra_qa_report_20260307T053657Z.md\n    logs/lyra_qa/lyra_qa_report_20260307T053729Z.json\n    logs/lyra_qa/lyra_qa_report_20260307T053729Z.md\n    scripts/ops/lyra_beta_trainer.py\n    src/credential_defense/config.py\n    systems/D_T_System/tasks/active_tasks.json\n    watchdog/watchdog.py\n[!] precommit_guard: identifier-based secret assignment matches (warning only):\n    D_T_System/profiles/manus_wide_research/src/swarm_manager.py:max_tokens\n    scripts/ops/lyra_beta_trai\n...[truncated]"
+    },
+    {
+      "name": "gradle_lint_unit",
+      "command": "./gradlew lintDebug testDebugUnitTest",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 2.37,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "gradle_assemble_debug",
+      "command": "./gradlew assembleDebug",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 6.31,
+      "output_excerpt": "> Configure project :app\nWARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.builtInKotlin=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.newDsl=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.\nThe current default is 'true'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.\nThe current default is 'false'.\nIt will be removed in version 10.0 of the Android Gradle plugin.\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.\nTo suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties\nWARN\n...[truncated]"
+    },
+    {
+      "name": "adb_connection",
+      "command": "bash scripts/ops/check_adb_connection.sh",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.02,
+      "output_excerpt": "[+] Using adb: /home/danicous/security/tools/android/platform-tools/adb\nList of devices attached\nGINVINZLY59HAEFM       device usb:1-7.2 product:corot_global model:23078PND5G device:corot transport_id:1\n\n[+] Android device link is active."
+    },
+    {
+      "name": "adb_install_debug_apk",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb install -r /home/danicous/security/android-watchdog/app/build/outputs/apk/debug/app-debug.apk",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 4.62,
+      "output_excerpt": "Performing Streamed Install\nSuccess"
+    },
+    {
+      "name": "adb_logcat_clear",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb logcat -c",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.15,
+      "output_excerpt": ""
+    },
+    {
+      "name": "app_launch_smoke",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb shell monkey -p com.realyn.watchdog -c android.intent.category.LAUNCHER 1",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.46,
+      "output_excerpt": "bash arg: -p\n  bash arg: com.realyn.watchdog\n  bash arg: -c\n  bash arg: android.intent.category.LAUNCHER\n  bash arg: 1\nEvents injected: 1\n## Network stats: elapsed time=59ms (0ms mobile, 0ms wifi, 59ms not connected)\nargs: [-p, com.realyn.watchdog, -c, android.intent.category.LAUNCHER, 1]\n arg: \"-p\"\n arg: \"com.realyn.watchdog\"\n arg: \"-c\"\n arg: \"android.intent.category.LAUNCHER\"\n arg: \"1\"\ndata=\"com.realyn.watchdog\"\ndata=\"android.intent.category.LAUNCHER\""
+    },
+    {
+      "name": "app_randomized_monkey",
+      "command": "adb shell monkey ...",
+      "status": "SKIP",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "Skipped by --skip-monkey-events"
+    },
+    {
+      "name": "watchdog_baseline",
+      "command": "python3 watchdog/watchdog.py baseline",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 1.51,
+      "output_excerpt": "2026-03-07T05:51:17+00:00 [watchdog] collecting baseline snapshot (default-device)\n2026-03-07T05:51:19+00:00 [watchdog] baseline saved to /home/danicous/security/state/baseline.json"
+    },
+    {
+      "name": "watchdog_scan",
+      "command": "python3 watchdog/watchdog.py scan",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 1.02,
+      "output_excerpt": "2026-03-07T05:51:19+00:00 [watchdog] collecting current snapshot for default-device\n2026-03-07T05:51:20+00:00 [watchdog] scan completed: no suspicious changes against baseline (serial=GINVINZLY59HAEFM)"
+    },
+    {
+      "name": "logcat_capture",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb logcat -d -v time -t 4000",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.03,
+      "output_excerpt": "--------- beginning of main\n03-07 13:51:17.275 I/MiuiNetworkPolicy( 2197): updateUidState uid = 10186, uidState = 19\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): Unable to load component info ResolveInfo{5d1cb25 com.globe.gcash.android/com.alibaba.griver.device.jsapi.nfc.service.TinyAppHostApduService m=0x108000 userHandle=null}\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): org.xmlpull.v1.XmlPullParserException: No android.nfc.cardemulation.host_apdu_service meta-data\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.nfc.cardemulation.ApduServiceInfo.<init>(ApduServiceInfo.java:236)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat com.android.nfc.cardemulation.RegisteredServicesCache.getInstalledServices(RegisteredServicesCache.java:403)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat com.android.nfc.cardemulation.RegisteredServicesCache.invalidateCache(RegisteredServicesCache.java:425)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat com.android.nfc.cardemulation.RegisteredServicesCache$1.onReceive(RegisteredServicesCache.java:207)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.app.LoadedApk$ReceiverDispatcher$Args.lambda$getRunnable$0(LoadedApk.java:1897)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.app.LoadedApk$ReceiverDispatcher$Args.$r8$lambda$mcNAAl1SQ4MyJPyDg8TJ2x2h0Rk(Unknown Source:0)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.app.LoadedApk$ReceiverDispatcher$Args$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.os.Handler.handleCallback(Handler.java:959)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.os.Handler.dispatchMessage(Handler.java:100)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.os.Looper.loopOnce(Looper.java:249)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.os.Looper.loop(Looper.java:337)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat android.app.ActivityThread.main(ActivityThread.java:9410)\n03-07 13:51:17.278 W/RegisteredServicesCache( 5297): \tat java.lang.reflect.Method.invoke(Native Method)\n\n...[truncated]"
+    },
+    {
+      "name": "logcat_fatal_scan",
+      "command": "scan full logcat capture for fatal signatures",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "No fatal crash signature found in the full captured logcat."
+    },
+    {
+      "name": "adb_force_stop",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb shell am force-stop com.realyn.watchdog",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.04,
+      "output_excerpt": ""
+    },
+    {
+      "name": "adb_devices_probe",
+      "command": "/home/danicous/security/tools/android/platform-tools/adb devices -l",
+      "status": "PASS",
+      "return_code": 0,
+      "duration_seconds": 0.0,
+      "output_excerpt": "List of devices attached\nGINVINZLY59HAEFM       device usb:1-7.2 product:corot_global model:23078PND5G device:corot transport_id:1"
+    }
+  ]
+}

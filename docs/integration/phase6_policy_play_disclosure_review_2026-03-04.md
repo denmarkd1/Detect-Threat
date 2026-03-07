@@ -1,6 +1,7 @@
 # Phase 6 - Policy and Play Disclosure Review
 
 Date: 2026-03-04
+Last updated: 2026-03-07
 Package: `com.realyn.watchdog`
 
 ## Scope
@@ -15,6 +16,7 @@ This review aligns three disclosure surfaces:
 
 - Defensive security utility only.
 - VPN flow is broker/status orchestration only in this phase (not native `VpnService` tunneling).
+- Home Risk is limited to SmartThings-first local readiness in the current build; do not claim live SmartThings or Google Home cloud telemetry.
 - No raw password transmission to external services.
 - Breach checks use k-anonymity hash-prefix model.
 - Destructive account actions remain explicit-user-confirmation flows.
@@ -25,7 +27,7 @@ This review aligns three disclosure surfaces:
 | --- | --- | --- | --- |
 | Credential breach checks | Passwords are never sent raw; SHA-1 prefix k-anonymity check only | `CredentialBreachChecker.kt` + policy pages | PASS |
 | VPN language | Broker + provider-status model; no interception/tunnel claim in this phase | `workspace_settings.json` (`integration_mesh.connectors.vpn_brokers.disclosures`) + updated policy pages | PASS |
-| Smart-home connectors | Connected-home posture uses consented connector state and local risk evaluation | `SmartThingsConnector.kt`, `IntegrationMeshAuditStore`, updated privacy page | PASS |
+| Smart-home connectors | Connected-home wording must stay at SmartThings-first local-readiness scope until retail OAuth/cloud posture ingestion ships | `SmartThingsConnector.kt`, `IntegrationMeshAuditStore`, updated tutorial/roadmap/audit docs | PARTIAL |
 | Digital key guardrails | High-risk actions require prerequisites and guardian controls for minor profiles | `LocalDigitalKeyRiskAdapter.kt`, `GuardianOverridePolicy.kt` | PASS |
 | Data handling | Local-first storage/audit with explicit support/contact channels | updated `docs/privacy.html`, `docs/terms.html`, `docs/index.html` | PASS |
 | Family controls | Parent/guardian override and revocation controls disclosed | app flow + updated terms/privacy copy | PASS |
@@ -47,6 +49,7 @@ Before submission, verify these forms in Play Console:
 3. Sensitive permissions and claims
 - Keep permission declarations consistent with current app manifest.
 - Do not claim full device compromise prevention or guaranteed threat elimination.
+- Do not claim live smart-home ecosystem monitoring or active Google Home support in this release.
 
 ## Evidence package to attach per release
 

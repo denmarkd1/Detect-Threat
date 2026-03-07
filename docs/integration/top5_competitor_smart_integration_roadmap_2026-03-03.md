@@ -1,7 +1,7 @@
 # DT Guardian Top-5 Competitive Review + Smart Integration Roadmap (2026-03-03)
 
-Date: 2026-03-03  
-Status: Planning report (research-backed)  
+Date: 2026-03-03
+Status: Planning report with 2026-03-07 implementation revalidation
 Scope: Android security app feature strategy, top-5 parity/gap, smart-device integration feasibility, and implementation roadmap.
 
 ## 1) Requested objective
@@ -37,6 +37,39 @@ From `config/gap research sites of top 5 contenders`:
 3. Avast
 4. TotalAV
 5. ESET
+
+## 2A) 2026-03-07 competitor and implementation revalidation
+
+This addendum cross-checks the current workspace build against official competitor pages and current platform/service documentation.
+
+### Competitor gap revalidation
+
+| Competitor | Verified function set relevant to this roadmap | DT Guardian match in current workspace | Gap / unique representation |
+| --- | --- | --- | --- |
+| Bitdefender | Anti-theft, scam/web protection, app lock, VPN allowance, WearON smartwatch extension | Matches local locator routing, phishing/Wi-Fi posture, app lock, and broker-first VPN guardrails | Wearable trust signals are still a planned differentiator, not a shipped one |
+| Norton | App Advisor, Wi-Fi security, scam/web protection, VPN and dark web monitoring on higher tiers | Matches app-risk board, Wi-Fi posture, phishing triage, broker-first VPN guardrails | Current breach flow is local-first password breach triage, not full dark-web identity monitoring |
+| Avast | Scam protection, malicious-link blocking, Wi-Fi checks, VPN upsell path | Matches phishing triage, Wi-Fi posture, brokered VPN linking, and app-risk review | No first-class browser/webshield module yet |
+| TotalAV | Webshield, VPN, app lock, cleanup utilities, dark web monitoring | Matches app lock, safe cleanup, local breach triage, and broker-first VPN | Cleanup is present, but webshield and dark-web breadth still trail |
+| ESET | Payment protection, anti-theft, app lock, connected-home monitor, Smart TV tie-in | Matches anti-theft routing, app lock, and the Home Risk roadmap direction | Payment-protection isolation is not a standalone module, and Home Risk is not yet retail-grade |
+
+### Phase 0-6 current maturity matrix
+
+| Phase | Current status | 2026-03-07 revalidation note |
+| --- | --- | --- |
+| Phase 0 | PASS | Scope, legal boundaries, rollout framing, and non-invasive connector rules are documented. |
+| Phase 1 | PASS | `integration_mesh` config, interfaces, audit state, and staged rollout controls are implemented. |
+| Phase 2 | PARTIAL | `SmartThingsConnector.kt` is still local/simulated: local consent artifact, app-installed health check, and synthetic device-count estimate. Retail OAuth and live partner posture ingestion are not shipped. |
+| Phase 3 | PASS | Retail-safe at broker scope: provider launch, status assertions, account-class policy gates, and disclosure copy are in place. |
+| Phase 4 | PASS | Retail-safe at advisory scope: wallet/manufacturer guidance, integrity/biometric gates, and guardian approval checks are implemented. |
+| Phase 5 | PARTIAL | Reporting, KPI, app-risk board, and exports are implemented, but connected-home anomaly uniqueness depends on Phase 2 becoming retail-grade. |
+| Phase 6 | BLOCKED | Hardening artifacts exist, but launch-readiness cannot claim retail connected-home parity until Phase 2 is retailized or launch messaging is narrowed to local SmartThings-first readiness. |
+
+### Corrective actions applied in this revalidation
+
+1. Removed `google_home` from the active smart-home rollout list until a real connector exists.
+2. Corrected Google Wallet digital car key setup guidance to the current official help URL.
+3. Narrowed tutorial and Home Risk UI wording to SmartThings-first local readiness.
+4. Tightened Lyra QA checks so simulation-backed smart-home coverage blocks retail-readiness claims.
 
 ## 3) Claim verification: smart-device integration in top five
 
@@ -104,6 +137,7 @@ User-controlled, non-invasive protection orchestration across:
 
 ## SmartThings and Google Home integration
 Feasible, but partner/OAuth onboarding is required and must follow each ecosystem’s authorization and certification requirements.
+Current workspace note (2026-03-07): only SmartThings-first local readiness is shipped. Google Home remains deferred and should not be marketed as active support in the current build.
 
 ## Vehicle digital key / smart fob protection
 Feasible as a **risk guardrail layer** (device integrity, lock-state enforcement guidance, anomaly alerts, anti-social-engineering workflows).
@@ -300,6 +334,14 @@ The product is locked to **broker-first** for this roadmap.
 3. Add `Home Risk` dashboard card and remediation playbooks.
 4. Add guardian escalation hooks for child profiles.
 
+Implementation status (2026-03-07 revalidation):
+- Partially delivered in `android-watchdog`, but not retail-ready:
+  - `SmartThingsConnector.kt` issues local consent artifacts rather than partner OAuth tokens.
+  - Connector health is derived from whether SmartThings client apps are installed on-device.
+  - `collectPosture()` uses local app state plus a synthetic device-count estimate, not live partner inventory.
+  - `Home Risk` therefore represents a SmartThings-first local readiness layer, not live SmartThings or Google Home cloud telemetry.
+- `google_home` was removed from active rollout config in this revalidation because there is no real connector implementation behind that ID.
+
 ## Phase 3 - VPN broker and service linking (1 to 2 weeks)
 1. Add provider registry and deep-link/open-app launcher.
 2. Add VPN status assertions (configured / connected / stale / unknown).
@@ -308,6 +350,7 @@ The product is locked to **broker-first** for this roadmap.
 
 Implementation status (2026-03-04):
 - Delivered in `android-watchdog` with provider registry + launch router, assertion resolver, credential queue policy gate for `banking`/`developer`, and paid-tier/disclosure messaging in setup/status surfaces.
+- Retail gate (2026-03-07): PASS at broker scope. This remains a provider-broker/status feature, not a native VPN tunnel.
 
 ## Phase 4 - Digital key risk guardrails (2 weeks)
 1. Add wallet/manufacturer setup guidance and key-risk checklist.
@@ -317,6 +360,7 @@ Implementation status (2026-03-04):
 
 Implementation status (2026-03-04):
 - Delivered in `android-watchdog` with local digital-key risk adapter assessment, wallet/manufacturer setup capability guidance, prerequisite enforcement (lock-screen/biometric/integrity), social-engineering confirmation prompts for key sharing and remote commands, guardian override enforcement for minor profiles, and integration-mesh timeline audit events for digital-key actions.
+- Retail gate (2026-03-07): PASS at advisory scope. This is a local guardrail layer and should not be marketed as direct key control.
 
 ## Phase 5 - Competitive parity+ enhancements (2 weeks)
 1. Add app-risk board linked to remediation queue.
@@ -331,6 +375,7 @@ Implementation status (2026-03-04):
   - Unified report export flow (`ACTION_CREATE_DOCUMENT`) with non-secret evidence fields only (hash-referenced source IDs, no passwords/raw secrets).
   - KPI telemetry persistence in local audit state via `KpiTelemetryStore` + `WatchdogConfig.KPI_TELEMETRY_FILE`.
   - Unit coverage in `Phase5ParityEngineTest` for queue linkage, anomaly filtering, accountability aggregation, and KPI math.
+- Retail gate (2026-03-07): PARTIAL. Phase-5 reporting is real, but the connected-home anomaly side is only as trustworthy as the upstream SmartThings connector fidelity.
 
 ## Phase 6 - Hardening and launch readiness (1 to 2 weeks)
 1. MASVS-based verification sweep.
@@ -348,10 +393,11 @@ Implementation status (2026-03-04):
   - MASVS sweep runbook: `docs/integration/phase6_masvs_verification_sweep_2026-03-04.md`
   - Embedded tutorial overlay package: `docs/integration/phase6_tutorial_overlay_2026-03-04.md`
   - Device-backed Lyra QA trainer: `scripts/ops/lyra_beta_trainer.py` + `docs/integration/phase6_lyra_qa_trainer_2026-03-04.md`
+- Launch gate (2026-03-07): BLOCKED for retail connected-home claims until Phase 2 is retailized or launch messaging is narrowed to the current local-readiness scope.
 
 ## 10) Proposed acceptance criteria
 
-1. User can connect at least one smart-home ecosystem and see risk posture in-app.
+1. User can complete SmartThings-first Home Risk setup and see a local/read-only risk snapshot in-app.
 2. User can connect at least one VPN provider via broker workflow and validate status.
 3. User gets digital-key risk guidance tied to device integrity and lock posture.
 4. Guardian timeline logs all connector and high-risk actions with timestamps.
@@ -374,7 +420,7 @@ Integration and platform policy sources:
 - https://developer.smartthings.com/docs/connected-services/oauth-integrations
 - https://developer.smartthings.com/docs/devices/cloud-connected/get-started
 - https://developers.home.google.com/apis/android/get-started
-- https://support.google.com/android/answer/12060041?hl=en
+- https://support.google.com/wallet/answer/12060041?hl=en
 - https://developer.android.com/develop/connectivity/vpn
 - https://support.google.com/googleplay/android-developer/answer/12564964?hl=en
 

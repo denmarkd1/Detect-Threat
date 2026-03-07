@@ -316,7 +316,7 @@ def default_settings() -> dict[str, Any]:
                     "rollout_stage": "internal_test",
                     "owner_allowlist": ["parent", "child"],
                     "max_rollout_percent": 0,
-                    "supported_connector_ids": ["smartthings", "google_home"],
+                    "supported_connector_ids": ["smartthings"],
                     "required_scopes": ["home:read", "home:devices:read"],
                     "require_redemption_proof": True,
                 },
@@ -331,7 +331,7 @@ def default_settings() -> dict[str, Any]:
                 "digital_key_risk_adapter": {
                     "enabled": True,
                     "rollout_stage": "internal_test",
-                    "owner_allowlist": ["parent", "child", "son"],
+                    "owner_allowlist": ["parent", "child"],
                     "max_rollout_percent": 100,
                     "supported_connector_ids": ["local_digital_key_guardrails"],
                     "required_scopes": [
@@ -416,7 +416,7 @@ def default_settings() -> dict[str, Any]:
                             "id": "google_wallet",
                             "label": "Google Wallet",
                             "package_names": ["com.google.android.apps.walletnfcrel"],
-                            "setup_uri": "https://support.google.com/wallet/answer/13314575",
+                            "setup_uri": "https://support.google.com/wallet/answer/12060041?hl=en",
                             "fallback_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel",
                         },
                         {

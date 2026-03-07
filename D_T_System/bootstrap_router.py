@@ -23,6 +23,7 @@ AUTO_SYNC_ENV = "DT_BOOTSTRAP_SYNC"
 AUTO_TRACKING_HOOKS_ENV = "DT_BOOTSTRAP_TRACKING_HOOKS"
 TRACKING_INSTALLER_REL = Path("D_T_System") / "scripts" / "install_dt_workspace_tracking_hooks.sh"
 TRACKING_SCRIPT_REL = Path("D_T_System") / "scripts" / "dt_workspace_change_track.sh"
+PROFILE_RUNTIME_REL = Path("D_T_System") / "profiles" / "manus_wide_research" / "runtime"
 
 LOGGER = logging.getLogger("DTSatelliteBootstrap")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
@@ -54,6 +55,12 @@ def _load_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _resolve_workspace_root(*, config_path: Path) -> Path:
+    """Always bind bootstrap routing to the workspace owning the config file."""
+
+    return config_path.parent.parent.expanduser().resolve()
+
+
 def _ensure_sys_paths(hub_root: Path, local_dir: Path) -> None:
     candidates = (
         local_dir.parent,
@@ -74,6 +81,20 @@ def _ensure_sys_paths(hub_root: Path, local_dir: Path) -> None:
             src_path = str(src_dir)
             if src_path not in sys.path:
                 sys.path.insert(0, src_path)
+
+
+def _reset_profile_runtime_dir(workspace_root: Path) -> None:
+    runtime_root = workspace_root / PROFILE_RUNTIME_REL
+    if not runtime_root.exists():
+        return
+
+    for entry in runtime_root.iterdir():
+        if entry.name == ".keep":
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
 
 
 def _update_required_profiles(config_path: Path, profiles: list[str]) -> None:
@@ -311,11 +332,15 @@ def _write_install_marker(destination: Path, payload: Dict[str, Any]) -> None:
         handle.write(message + "\n")
 
 
-def _ensure_full_install(config: Dict[str, Any], config_path: Path) -> None:
+def _ensure_full_install(
+    config: Dict[str, Any],
+    config_path: Path,
+    workspace_root: Path,
+) -> Dict[str, Any]:
     local_dir = config_path.parent
     marker_path = local_dir / INSTALL_MARKER
     if marker_path.exists():
-        return
+        return config
 
     hub_root = _resolve_hub_root(config, config_path=config_path)
     package_source = hub_root / "D_T_System" / "templates" / "satellite_package"
@@ -323,8 +348,9 @@ def _ensure_full_install(config: Dict[str, Any], config_path: Path) -> None:
         raise FileNotFoundError(f"Hub satellite package not found: {package_source}")
 
     _copy_full_package(package_source, local_dir)
-    updated_config = _update_config(config_path, local_dir.parent)
-    registration = _register_with_hub(hub_root, local_dir.parent, updated_config)
+    _reset_profile_runtime_dir(workspace_root)
+    updated_config = _update_config(config_path, workspace_root)
+    registration = _register_with_hub(hub_root, workspace_root, updated_config)
     _write_install_marker(
         local_dir,
         {
@@ -334,6 +360,7 @@ def _ensure_full_install(config: Dict[str, Any], config_path: Path) -> None:
     )
 
     LOGGER.info("Satellite package installed for workspace %s", registration.get("name"))
+    return updated_config
 
 
 def _delegate_route_issue(
@@ -362,10 +389,10 @@ def route_issue(
     config_override: Optional[Path] = None,
 ) -> Dict[str, Any]:
     config_path = Path(config_override) if config_override else Path(__file__).resolve().parent / CONFIG_FILENAME
-    config = _load_config(config_path)
+    workspace_root = _resolve_workspace_root(config_path=config_path)
+    config = _update_config(config_path, workspace_root)
     hub_root = _resolve_hub_root(config, config_path=config_path)
-    workspace_root = config_path.parent.parent
-    _ensure_full_install(config, config_path)
+    config = _ensure_full_install(config, config_path, workspace_root)
     if os.environ.get("DT_ENFORCE_AGENTS_STANDARD", "").lower() in {"1", "true", "yes"}:
         try:
             from agents_standard import ensure_agents_standard
@@ -387,6 +414,7 @@ def route_issue(
     if _should_auto_sync():
         try:
             _sync_workspace_with_hub(hub_root, workspace_root, config_path)
+            _reset_profile_runtime_dir(workspace_root)
         except Exception as exc:  # pragma: no cover - keep routing resilient
             LOGGER.debug("Skipping hub sync: %s", exc)
     return _delegate_route_issue(

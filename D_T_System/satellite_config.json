@@ -21,7 +21,7 @@
     "workspace_objective": "Protect family credentials and Android device posture with local-first defensive workflows",
     "primary_owners": [
       "parent",
-      "son",
+      "child",
       "Realyn"
     ],
     "sensitivity": "high",
@@ -57,5 +57,5 @@
   "required_profiles": [
     "manus_wide_research"
   ],
-  "last_bootstrap": "2026-02-15T04:38:50.908448Z"
+  "last_bootstrap": "2026-03-07T05:45:09.645710Z"
 }

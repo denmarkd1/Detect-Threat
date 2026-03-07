@@ -1,6 +1,7 @@
 # Phase 6 - Staged Rollout and Rollback Playbook
 
 Date: 2026-03-04
+Last updated: 2026-03-07
 Package: `com.realyn.watchdog`
 
 ## Release tracks
@@ -25,6 +26,7 @@ Hold each step until vitals/support checks are reviewed.
 Advance only if all are true:
 
 - `bash scripts/ops/phase6_masvs_sweep.sh` passes.
+- `python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>` passes, including the retail-readiness honesty checks.
 - `cd android-watchdog && ./gradlew lintDebug testDebugUnitTest` passes.
 - No unresolved high-severity regressions in guardian timeline/support queue.
 - Crash and ANR vitals stay within acceptable threshold for the stage.
@@ -48,6 +50,7 @@ Trigger rollback immediately when any condition is met:
 5. Bump `versionCode` and `versionName` in `android-watchdog/app/build.gradle.kts`.
 6. Re-run Phase 6 gate:
    - `bash scripts/ops/phase6_masvs_sweep.sh`
+   - `python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>`
    - `bash scripts/ops/precommit_guard.sh --include-unstaged`
    - `cd android-watchdog && ./gradlew lintDebug testDebugUnitTest`
 7. Build signed artifacts:

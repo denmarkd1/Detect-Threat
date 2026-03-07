@@ -44,8 +44,9 @@ data class IntegrationMeshModuleFeatureFlag(
     val requireRedemptionProof: Boolean
 ) {
     fun isOwnerAllowed(ownerRole: String): Boolean {
-        val role = ownerRole.lowercase(Locale.US)
-        return ownerAllowlist.isEmpty() || ownerAllowlist.contains(role)
+        val role = CredentialPolicy.canonicalOwnerId(ownerRole)
+        return ownerAllowlist.isEmpty() ||
+            ownerAllowlist.any { CredentialPolicy.canonicalOwnerId(it) == role }
     }
 
     fun isRolloutAllowed(stage: IntegrationMeshRolloutStage?, rolloutKey: String): Boolean {
@@ -83,9 +84,12 @@ data class IntegrationMeshRolloutConfig(
         if (!enabled) {
             return null
         }
-        val role = ownerRole.lowercase(Locale.US)
+        val role = CredentialPolicy.canonicalOwnerId(ownerRole)
         val current = stages.firstOrNull { it.name.equals(currentStage, ignoreCase = true) } ?: return null
-        return if (current.ownerRoles.isEmpty() || current.ownerRoles.contains(role)) {
+        return if (
+            current.ownerRoles.isEmpty() ||
+            current.ownerRoles.any { CredentialPolicy.canonicalOwnerId(it) == role }
+        ) {
             current
         } else {
             null
@@ -229,7 +233,7 @@ object IntegrationMeshConfigStore {
             id = "google_wallet",
             label = "Google Wallet",
             packageNames = listOf("com.google.android.apps.walletnfcrel"),
-            setupUri = "https://support.google.com/wallet/answer/13314575",
+            setupUri = "https://support.google.com/wallet/answer/12060041?hl=en",
             fallbackUri = "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel"
         ),
         IntegrationMeshDigitalKeyGuidanceProvider(
@@ -272,7 +276,7 @@ object IntegrationMeshConfigStore {
             smartHomeConnector = IntegrationMeshModuleFeatureFlag(
                 enabled = true,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child", "son"),
+                ownerAllowlist = listOf("parent", "child"),
                 maxRolloutPercent = 100,
                 supportedConnectorIds = listOf("smartthings"),
                 requiredScopes = listOf("home:read", "home:devices:read"),
@@ -281,7 +285,7 @@ object IntegrationMeshConfigStore {
             vpnProviderConnector = IntegrationMeshModuleFeatureFlag(
                 enabled = true,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child", "son"),
+                ownerAllowlist = listOf("parent", "child"),
                 maxRolloutPercent = 100,
                 supportedConnectorIds = listOf("partner_vpn", "protonvpn", "system_vpn"),
                 requiredScopes = listOf("vpn:launch", "vpn:status"),
@@ -290,7 +294,7 @@ object IntegrationMeshConfigStore {
             digitalKeyRiskAdapter = IntegrationMeshModuleFeatureFlag(
                 enabled = true,
                 rolloutStage = "internal_test",
-                ownerAllowlist = listOf("parent", "child", "son"),
+                ownerAllowlist = listOf("parent", "child"),
                 maxRolloutPercent = 100,
                 supportedConnectorIds = listOf("local_digital_key_guardrails"),
                 requiredScopes = listOf("digital_key:advisory", "digital_key:high_risk_prompt"),
@@ -306,19 +310,19 @@ object IntegrationMeshConfigStore {
                     name = "internal_test",
                     enabled = true,
                     maxPercent = 100,
-                    ownerRoles = listOf("parent", "child", "son")
+                    ownerRoles = listOf("parent", "child")
                 ),
                 IntegrationMeshRolloutStage(
                     name = "closed_test",
                     enabled = false,
                     maxPercent = 25,
-                    ownerRoles = listOf("parent", "child", "son")
+                    ownerRoles = listOf("parent", "child")
                 ),
                 IntegrationMeshRolloutStage(
                     name = "production",
                     enabled = false,
                     maxPercent = 5,
-                    ownerRoles = listOf("parent", "child", "son")
+                    ownerRoles = listOf("parent", "child")
                 )
             )
         ),

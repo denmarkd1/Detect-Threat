@@ -134,7 +134,25 @@ def _guess_issue_type(issue_text: str) -> str:
 def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None) -> dict[str, Any]:
     combined = f"{issue_text} {user_notes or ''}".strip().lower()
     review_tokens = ("review", "audit", "assess", "scan", "inspect", "analyze", "analysis")
-    implementation_tokens = ("fix", "patch", "address", "resolve", "implement", "harden", "update", "refactor")
+    implementation_tokens = (
+        "fix",
+        "patch",
+        "address",
+        "resolve",
+        "implement",
+        "harden",
+        "update",
+        "refactor",
+        "improve",
+        "normalize",
+        "canonicalize",
+        "align",
+        "sync",
+        "synchronize",
+        "rename",
+        "document",
+        "migrate",
+    )
     debug_tokens = ("error", "exception", "traceback", "stack trace", "crash", "failing", "failed", "bug")
 
     action_signal_count = 0
@@ -149,6 +167,14 @@ def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None)
         r"\bcomponent\b",
         r"\bbackend\b",
         r"\bfrontend\b",
+        r"\bconfig(?:uration)?\b",
+        r"\bdocs?\b",
+        r"\bandroid\b",
+        r"\bpython\b",
+        r"\bhub\b",
+        r"\bsatellite\b",
+        r"\blyra\b",
+        r"\bdark[_\s-]*coder\b",
         r"[/\\][\w./\\-]+\.[a-z0-9]{1,8}\b",
         r"\b[\w.-]+\.(py|js|ts|kt|java|go|rs|json|yaml|yml|toml|md)\b",
     )

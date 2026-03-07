@@ -12,7 +12,10 @@ from pathlib import Path
 from statistics import mean
 from typing import Iterable, List, Optional
 
-RUNTIME_ROOT = Path(__file__).resolve().parent.parent / "profiles" / "manus_wide_research" / "runtime"
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_ROOT = (
+    WORKSPACE_ROOT / "systems" / "D_T_System" / "profile_runtime" / "manus_wide_research"
+)
 JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 
 

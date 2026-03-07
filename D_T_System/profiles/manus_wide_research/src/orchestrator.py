@@ -12,6 +12,10 @@ from typing import Any, Dict, Iterable, List, Optional
 from .prompt_registry import PromptRegistry
 from .swarm_manager import HiveExecutionPlan, SwarmManager
 
+WORKSPACE_PROFILE_RUNTIME_REL = (
+    Path("systems") / "D_T_System" / "profile_runtime" / "manus_wide_research"
+)
+
 
 @dataclass(slots=True)
 class ResearchJob:
@@ -53,11 +57,16 @@ class WideResearchConfig:
     storage_root: Path
 
     @classmethod
-    def from_profile(cls, profile_root: Path) -> "WideResearchConfig":
+    def from_profile(
+        cls,
+        profile_root: Path,
+        *,
+        workspace_root: Path,
+    ) -> "WideResearchConfig":
         """Build configuration by inspecting the provisioned profile bundle."""
 
         prompt_registry = PromptRegistry.load(profile_root / "prompts")
-        storage_root = profile_root / "runtime"
+        storage_root = workspace_root.expanduser().resolve() / WORKSPACE_PROFILE_RUNTIME_REL
         storage_root.mkdir(parents=True, exist_ok=True)
 
         return cls(

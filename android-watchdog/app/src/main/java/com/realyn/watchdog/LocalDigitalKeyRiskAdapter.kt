@@ -151,7 +151,7 @@ internal object DigitalKeyRiskScorer {
             )
         }
 
-        if (input.ownerRole.equals("child", ignoreCase = true) || input.ownerRole.equals("son", ignoreCase = true)) {
+        if (CredentialPolicy.canonicalOwnerId(input.ownerRole) == "child") {
             addFinding(
                 type = "social_engineering_exposure",
                 severity = "medium",
@@ -233,7 +233,7 @@ class LocalDigitalKeyRiskAdapter(
     }
 
     private fun normalizeRole(value: String): String {
-        return value.trim().lowercase(Locale.US).ifBlank { "parent" }
+        return CredentialPolicy.canonicalOwnerId(value)
     }
 }
 
