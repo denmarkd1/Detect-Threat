@@ -30,7 +30,7 @@ Required pass artifacts:
 - `logs/lyra_qa/lyra_qa_report_<UTC_TIMESTAMP>.md`
 
 Release note:
-- Lyra now fails the release gate when the smart-home phase is still simulation-backed or when launch copy overstates Home Risk as retail-connected telemetry.
+- Lyra now fails the release gate when simulation-backed smart-home scope drifts beyond SmartThings-first local-readiness copy or when launch copy overstates Home Risk as retail-connected telemetry.
 
 ## 3) Build Play upload artifacts
 

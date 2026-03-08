@@ -16,6 +16,7 @@ Objectives:
 
 Guiding principles:
 - Use available tooling (web search, structured data, Puter environment) instead of speculation.
+- Inspect any workspace-local knowledge assets under `systems/D_T_System/documentation/` and `systems/D_T_System/data/context/` before duplicating research.
 - Defer irreversible or sensitive actions to the supervising orchestrator.
 - Prefer diverse, independent sources spanning geographies and viewpoints.
 - Avoid duplication with other agents by focusing on a distinct sub-angle when possible.

@@ -252,6 +252,12 @@ def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None)
         "inspect",
         "analyze",
         "analysis",
+        "extract",
+        "gather",
+        "collect",
+        "enumerate",
+        "map",
+        "report",
         "fix",
         "patch",
         "address",
@@ -269,6 +275,10 @@ def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None)
         "rename",
         "document",
         "migrate",
+        "create",
+        "build",
+        "generate",
+        "add",
     )
     scope_patterns = (
         r"\bphase\s*\d+\b",
@@ -307,11 +317,33 @@ def _infer_actionable_profile(issue_text: str, user_notes: Optional[str] = None)
     scope_signal_count = sum(
         1 for pattern in scope_patterns if re.search(pattern, combined, flags=re.IGNORECASE)
     )
+    deliverable_signal_count = 0
+    for block in re.findall(r"\(([^)]+(?:,[^)]+)+)\)", combined):
+        parts = [part.strip(" \"'`") for part in re.split(r"[,;/\n]+", block) if part.strip()]
+        natural_parts = [
+            part
+            for part in parts
+            if re.fullmatch(r"[-a-z0-9_./\\ ]+", part) and len(part.split()) <= 5
+        ]
+        if len(natural_parts) >= 2:
+            deliverable_signal_count += 1
+    discoverable_scope_patterns = (
+        r"\b(?:steam|proton|wine|gog|epic|lutris)\b",
+        r"\b(?:install(?:ation)?|cache|prefix|manifest|payload|endpoint|schema|launcher|executable)\b",
+        r"\b(?:inventory|roster|profile|account\s+state|local\s+state|workspace\s+state)\b",
+        r"\b(?:file[-\s]?structure|directory[-\s]?structure|workspace[-\s]?layout)\b",
+    )
+    discoverable_scope_signal_count = sum(
+        1 for pattern in discoverable_scope_patterns if re.search(pattern, combined, flags=re.IGNORECASE)
+    )
+    scope_signal_count += deliverable_signal_count + discoverable_scope_signal_count
     constraints_signal_count = sum(1 for token in constraint_tokens if token in combined)
     assumption_ready = actionable_signal_count > 0 and scope_signal_count > 0
     return {
         "actionable_signal_count": actionable_signal_count,
         "scope_signal_count": scope_signal_count,
+        "deliverable_signal_count": deliverable_signal_count,
+        "discoverable_scope_signal_count": discoverable_scope_signal_count,
         "constraints_signal_count": constraints_signal_count,
         "assumption_ready": assumption_ready,
     }
@@ -374,7 +406,7 @@ def upgrade_actionable_clarification_payload(
         reasoning = str(updated_certainty.get("assessment_reasoning") or "").strip()
         note = (
             "Satellite actionable-scope upgrade applied because the request includes explicit action "
-            "and target-scope signals."
+            "and target-scope or local-discovery signals."
         )
         if note not in reasoning:
             updated_certainty["assessment_reasoning"] = f"{reasoning}\n\n{note}".strip()

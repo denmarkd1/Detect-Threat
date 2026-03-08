@@ -92,12 +92,12 @@ Exit code:
 
 Lyra now treats retail smart-home readiness as a release gate:
 
-- If `SmartThingsConnector.kt` is still simulation-backed (local consent artifact, installed-app health check, synthetic device count), Lyra will fail the retail-readiness check.
+- If `SmartThingsConnector.kt` is still simulation-backed (local consent artifact, installed-app health check, synthetic device count), Lyra requires the build to stay explicitly scoped to SmartThings-first local readiness. Retail/cloud claims, rollout drift, or stale disclosure copy will fail the check.
 - If `google_home` appears in the active smart-home rollout config without a real connector implementation, Lyra will fail.
 - If Google Wallet setup guidance points to a stale/non-car-key support page, Lyra will fail.
 - If roadmap/audit docs overstate Phase 2 or Phase 5 as retail-pass, Lyra will fail.
 
-This is intentional. The release package should not pass while the connected-home phase is still below retail scope.
+This is intentional. The release package should not pass while the connected-home phase is still below retail scope and presented as retail-connected telemetry.
 
 Lyra also treats family-role terminology as a compatibility gate:
 

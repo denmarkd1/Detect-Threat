@@ -61,12 +61,15 @@ class WideResearchConfig:
         cls,
         profile_root: Path,
         *,
-        workspace_root: Path,
+        workspace_root: Optional[Path] = None,
     ) -> "WideResearchConfig":
         """Build configuration by inspecting the provisioned profile bundle."""
 
         prompt_registry = PromptRegistry.load(profile_root / "prompts")
-        storage_root = workspace_root.expanduser().resolve() / WORKSPACE_PROFILE_RUNTIME_REL
+        if workspace_root is None:
+            storage_root = profile_root.expanduser().resolve() / "runtime"
+        else:
+            storage_root = workspace_root.expanduser().resolve() / WORKSPACE_PROFILE_RUNTIME_REL
         storage_root.mkdir(parents=True, exist_ok=True)
 
         return cls(

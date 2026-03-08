@@ -91,10 +91,49 @@ DARK_CODER_ROOT = ROOT_DIR.parent / "Dark_Coder"
 DARK_CODER_BACKEND_ROOT = DARK_CODER_ROOT / "local-ai-coding-assistant" / "backend"
 SECURITY_SATELLITE_ROUTER_PATH = ROOT_DIR / "D_T_System" / "dt_satellite_router.py"
 DARK_CODER_SATELLITE_ROUTER_PATH = DARK_CODER_ROOT / "D_T_System" / "dt_satellite_router.py"
+SMARTTHINGS_SIMULATION_MARKERS = (
+    'proofHash = createHash("$connectorId|$ownerId|smart_home|$now|smartthings")',
+    'val status = if (isClientInstalled) "connected" else "unknown"',
+    "val deviceCount = estimateConnectedDevices(",
+)
+INTEGRATION_MESH_WORDING_RULES = {
+    STRINGS_PATH: [
+        "SmartThings-first local readiness snapshot",
+        "read-only local snapshot",
+    ],
+    MAIN_ACTIVITY_PATH: [
+        "local SmartThings-first assessment",
+        "current local snapshot",
+    ],
+    TUTORIAL_DOC_PATH: [
+        "SmartThings-first local readiness only",
+    ],
+    POLICY_DISCLOSURE_DOC_PATH: [
+        "Home Risk is limited to SmartThings-first local readiness",
+        "| Smart-home connectors |",
+        "| PARTIAL |",
+    ],
+    PRICING_PACKAGING_DOC_PATH: [
+        "SmartThings-first Home Risk readiness layer with local audit timeline.",
+    ],
+}
 
 
 def _safe_read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _missing_required_tokens(payload: str, required_tokens: List[str]) -> List[str]:
+    return [token for token in required_tokens if token not in payload]
+
+
+def _smartthings_connector_mode(payload: str) -> str:
+    marker_count = sum(1 for marker in SMARTTHINGS_SIMULATION_MARKERS if marker in payload)
+    if marker_count == 0:
+        return "retail_or_updated"
+    if marker_count == len(SMARTTHINGS_SIMULATION_MARKERS):
+        return "simulation_backed"
+    return "hybrid_drift"
 
 
 def _extract_workspace_paths(text: str) -> List[Path]:
@@ -671,49 +710,28 @@ class QaRunner:
             errors.append(f"Missing SmartThings connector source: {SMARTTHINGS_CONNECTOR_PATH}")
         else:
             smartthings_payload = _safe_read_text(SMARTTHINGS_CONNECTOR_PATH)
-            simulation_markers = (
-                'proofHash = createHash("$connectorId|$ownerId|smart_home|$now|smartthings")',
-                'val status = if (isClientInstalled) "connected" else "unknown"',
-                "val deviceCount = estimateConnectedDevices(",
-            )
-            if all(marker in smartthings_payload for marker in simulation_markers):
+            smartthings_mode = _smartthings_connector_mode(smartthings_payload)
+            if smartthings_mode == "simulation_backed":
+                notes.append(
+                    "SmartThingsConnector remains simulation-backed; Lyra will rely on the local-readiness wording "
+                    "and rollout honesty checks for this build."
+                )
+            elif smartthings_mode == "hybrid_drift":
                 errors.append(
-                    "SmartThingsConnector remains simulation-backed: local consent artifact, installed-app health, "
-                    "and synthetic device counts are still present."
+                    "SmartThingsConnector is in a mixed transition state: only part of the legacy simulation-backed "
+                    "signature remains. Finish the connector upgrade or refresh the Lyra readiness markers."
                 )
             else:
                 notes.append("SmartThingsConnector simulation markers are no longer fully present.")
 
-        wording_rules = {
-            STRINGS_PATH: [
-                "SmartThings-first local readiness snapshot",
-                "read-only local snapshot",
-            ],
-            MAIN_ACTIVITY_PATH: [
-                "local SmartThings-first assessment",
-                "current local snapshot",
-            ],
-            TUTORIAL_DOC_PATH: [
-                "SmartThings-first local readiness only",
-            ],
-            POLICY_DISCLOSURE_DOC_PATH: [
-                "Home Risk is limited to SmartThings-first local readiness",
-                "| Smart-home connectors |",
-                "| PARTIAL |",
-            ],
-            PRICING_PACKAGING_DOC_PATH: [
-                "SmartThings-first Home Risk readiness layer with local audit timeline.",
-            ],
-        }
-        for path, required_tokens in wording_rules.items():
+        for path, required_tokens in INTEGRATION_MESH_WORDING_RULES.items():
             if not path.exists():
                 errors.append(f"Missing wording validation file: {path}")
                 continue
             payload = _safe_read_text(path)
-            for token in required_tokens:
-                if token not in payload:
-                    errors.append(f"Required wording token missing from {path}: {token}")
-        notes.append(f"Validated wording alignment across {len(wording_rules)} file(s).")
+            for token in _missing_required_tokens(payload, required_tokens):
+                errors.append(f"Required wording token missing from {path}: {token}")
+        notes.append(f"Validated wording alignment across {len(INTEGRATION_MESH_WORDING_RULES)} file(s).")
 
         output_lines = notes
         if errors:

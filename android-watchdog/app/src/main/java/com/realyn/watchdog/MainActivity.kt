@@ -214,6 +214,7 @@ class MainActivity : AppCompatActivity() {
 
     private data class HomeRiskLookupResult(
         val posture: SmartHomePostureSnapshot? = null,
+        val connectorLabel: String = "",
         val errorRes: Int = 0,
         val errorMessage: String = ""
     )
@@ -872,7 +873,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configureWidgetHintTicker(hint: TextView, destination: HomeNavDestination) {
-        val enableTicker = destination == HomeNavDestination.SWEEP
+        val enableTicker = destination == HomeNavDestination.SWEEP ||
+            destination == HomeNavDestination.HOME_RISK
         if (enableTicker) {
             hint.isSingleLine = true
             hint.ellipsize = TextUtils.TruncateAt.MARQUEE
@@ -3708,8 +3710,22 @@ class MainActivity : AppCompatActivity() {
                 val dialogBuilder = LionAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.home_risk_dialog_title)
                     .setMessage(buildHomeRiskDialogMessage(result))
-                    .setPositiveButton(android.R.string.ok, null)
-                if (result.posture == null) {
+                    .setPositiveButton(R.string.scan_results_action_back_home, null)
+                if (result.posture != null) {
+                    when (HomeRiskCopy.resolvePostureAction(result.posture)) {
+                        HomeRiskCopy.PostureAction.OPEN_SMARTTHINGS -> {
+                            dialogBuilder.setNeutralButton(R.string.action_install_or_open_smartthings) { _, _ ->
+                                openSmartThingsInstallOrApp()
+                            }
+                        }
+
+                        HomeRiskCopy.PostureAction.OPEN_SETUP -> {
+                            dialogBuilder.setNeutralButton(R.string.action_home_risk_setup) { _, _ ->
+                                openHomeRiskSetupFlow()
+                            }
+                        }
+                    }
+                } else {
                     if (result.errorRes == R.string.home_risk_not_configured ||
                         result.errorRes == R.string.home_risk_consent_missing ||
                         result.errorRes == R.string.home_risk_connector_missing
@@ -3739,7 +3755,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         )
-                        .setPositiveButton(android.R.string.ok, null)
+                        .setPositiveButton(R.string.scan_results_action_back_home, null)
                         .show()
                 }
             } finally {
@@ -3764,7 +3780,7 @@ class MainActivity : AppCompatActivity() {
                 val dialogBuilder = LionAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.home_risk_setup_dialog_title)
                     .setMessage(buildHomeRiskSetupDialogMessage(result))
-                    .setPositiveButton(android.R.string.ok, null)
+                    .setPositiveButton(R.string.scan_results_action_back_home, null)
                 when (result.status) {
                     HomeRiskSetupStatus.READY -> {
                         if (shouldOfferSmartThingsInstallCta(result)) {
@@ -3805,7 +3821,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                         )
-                        .setPositiveButton(android.R.string.ok, null)
+                        .setPositiveButton(R.string.scan_results_action_back_home, null)
                         .setNeutralButton(R.string.action_guardian_settings) { _, _ ->
                             openGuardianSettingsDialog()
                         }
@@ -3909,13 +3925,16 @@ class MainActivity : AppCompatActivity() {
                 )
                 val connectorLabel = result.connectorLabel.ifBlank { result.connectorId.ifBlank { "smart_home" } }
                 buildString {
-                    appendLine("Home Risk setup is ready for local SmartThings-first assessment.")
+                    appendLine("Home Risk setup is ready.")
+                    appendLine("This build only reads a local SmartThings snapshot. It does not change your home account from this screen.")
                     appendLine()
                     appendLine("What to do now")
-                    appendLine("1. Open Home Risk posture to review the current local snapshot and findings.")
-                    appendLine("2. Keep SmartThings installed if you want app-readiness checks to stay current.")
                     if (shouldOfferSmartThingsInstallCta(result)) {
-                        appendLine("3. Install or open SmartThings to improve connector readiness.")
+                        appendLine("1. Tap Install/Open SmartThings to finish app-readiness on this phone.")
+                        appendLine("2. Tap Back to home if you want to return without opening SmartThings.")
+                    } else {
+                        appendLine("1. Tap Open home risk posture to review the latest local snapshot.")
+                        appendLine("2. Tap Back to home if you want to return without opening the snapshot.")
                     }
                     appendLine()
                     appendLine("Technical details (optional)")
@@ -4032,7 +4051,13 @@ class MainActivity : AppCompatActivity() {
         ) ?: return HomeRiskLookupResult(errorRes = R.string.home_risk_consent_missing)
 
         return runCatching {
-            HomeRiskLookupResult(posture = connector.collectPosture(this, consent))
+            HomeRiskLookupResult(
+                posture = connector.collectPosture(this, consent),
+                connectorLabel = HomeRiskCopy.connectorDisplayLabel(
+                    connectorLabel = connector.connectorLabel,
+                    connectorId = connector.connectorId
+                )
+            )
         }.getOrElse { ex ->
             HomeRiskLookupResult(
                 errorRes = R.string.home_risk_collection_failed,
@@ -4043,30 +4068,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildHomeRiskDialogMessage(result: HomeRiskLookupResult): String {
         if (result.posture != null) {
-            val posture = result.posture
-            return buildString {
-                appendLine("Home Risk posture was updated from the current local snapshot.")
-                appendLine("Current score: ${posture.riskScore}/100")
-                appendLine()
-                appendLine("What to do now")
-                if (posture.findings.isEmpty()) {
-                    appendLine("1. No active home-risk findings were reported.")
-                    appendLine("2. Keep scans active and review this screen regularly.")
-                } else {
-                    posture.findings.take(4).forEachIndexed { index, finding ->
-                        appendLine("${index + 1}. $finding")
-                    }
-                    val hiddenFindings = (posture.findings.size - 4).coerceAtLeast(0)
-                    if (hiddenFindings > 0) {
-                        appendLine("${posture.findings.take(4).size + 1}. Review $hiddenFindings more finding(s) in follow-up scans.")
-                    }
-                }
-                appendLine()
-                appendLine("Technical details (optional)")
-                appendLine("Connector: ${posture.connectorId}")
-                appendLine("Owner profile: ${posture.ownerRole}")
-                append("Readiness sample: ${posture.deviceCount}")
-            }.trim()
+            return HomeRiskCopy.buildPostureMessage(
+                posture = result.posture,
+                connectorLabel = result.connectorLabel
+            )
         }
 
         return buildString {
@@ -4079,8 +4084,8 @@ class MainActivity : AppCompatActivity() {
             )
             appendLine()
             appendLine("What to do now")
-            appendLine("1. Open Home Risk setup and finish SmartThings-first local readiness.")
-            appendLine("2. Keep Wi-Fi scan, threat triage, and credential queue checks active in the meantime.")
+            appendLine("1. Tap Home Risk setup to finish SmartThings-first local readiness.")
+            appendLine("2. Tap Back to home if you want to keep using regular scans for now.")
             val detail = result.errorMessage.trim()
             if (detail.isNotBlank()) {
                 appendLine()
@@ -8134,7 +8139,10 @@ class MainActivity : AppCompatActivity() {
             },
             widgetHomeRiskHint = getString(
                 R.string.home_widget_home_risk_hint_template,
-                inputs.meshState.smartHomeConnectorId
+                HomeRiskCopy.connectorDisplayLabel(
+                    connectorLabel = IntegrationMeshController.getActiveSmartHomeConnector(this)?.connectorLabel.orEmpty(),
+                    connectorId = inputs.meshState.smartHomeConnectorId
+                )
             ),
             widgetVpnValue = when {
                 !inputs.vpnEnabled -> getString(R.string.home_widget_vpn_setup_needed)
