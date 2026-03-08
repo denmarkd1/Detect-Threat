@@ -60,7 +60,7 @@ REQUIRED_ROADMAP_REVALIDATION_MARKERS = (
     "| Phase 2 | PARTIAL |",
     "| Phase 5 | PARTIAL |",
     "| Phase 6 | BLOCKED |",
-    "SmartThings-first local readiness",
+    "local smart-device umbrella",
 )
 REQUIRED_PHASE1_5_AUDIT_ROWS = {
     "| Phase 1 - Architecture and data model |": "PASS",
@@ -98,23 +98,24 @@ SMARTTHINGS_SIMULATION_MARKERS = (
 )
 INTEGRATION_MESH_WORDING_RULES = {
     STRINGS_PATH: [
-        "SmartThings-first local readiness snapshot",
-        "read-only local snapshot",
+        "choose a provider, import devices, and select protection locally",
+        "read-only local snapshot and protected-device list",
     ],
     MAIN_ACTIVITY_PATH: [
-        "local SmartThings-first assessment",
-        "current local snapshot",
+        "local provider readiness, imported device lists, and read-only posture collection",
+        "local smart-device umbrella flow",
     ],
     TUTORIAL_DOC_PATH: [
-        "SmartThings-first local readiness only",
+        "local smart-device umbrella",
     ],
     POLICY_DISCLOSURE_DOC_PATH: [
-        "Home Risk is limited to SmartThings-first local readiness",
+        "Home Risk is limited to local provider readiness",
         "| Smart-home connectors |",
         "| PARTIAL |",
     ],
     PRICING_PACKAGING_DOC_PATH: [
-        "SmartThings-first Home Risk readiness layer with local audit timeline.",
+        "live Google Home cloud telemetry",
+        "cloud-ingested home inventory",
     ],
 }
 
@@ -134,6 +135,31 @@ def _smartthings_connector_mode(payload: str) -> str:
     if marker_count == len(SMARTTHINGS_SIMULATION_MARKERS):
         return "simulation_backed"
     return "hybrid_drift"
+
+
+def _active_smart_home_connectors_from_json(payload: str) -> List[str]:
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    values = (
+        parsed.get("integration_mesh", {})
+        .get("feature_flags", {})
+        .get("smart_home_connector", {})
+        .get("supported_connector_ids", [])
+    )
+    return [str(item).strip().lower() for item in values if str(item).strip()]
+
+
+def _active_smart_home_connectors_from_python_config(payload: str) -> List[str]:
+    match = re.search(
+        r'"smart_home_connector"\s*:\s*\{.*?"supported_connector_ids"\s*:\s*\[(.*?)\]',
+        payload,
+        re.S,
+    )
+    if not match:
+        return []
+    return [token.strip().strip("\"'").lower() for token in match.group(1).split(",") if token.strip()]
 
 
 def _extract_workspace_paths(text: str) -> List[Path]:
@@ -596,6 +622,9 @@ class QaRunner:
                         "incident_overlay_finish",
                         "incident_assistant_screen_subtitle",
                         "incident_assistant_back_to_scan_results",
+                        "home_tutorial_step_samsung_overlay_note_title",
+                        "home_tutorial_step_samsung_overlay_note_body",
+                        "home_tutorial_step_samsung_overlay_note_hint",
                         "home_tutorial_step_timeline_window_body",
                         "home_tutorial_step_incident_assistant_body",
                         "home_tutorial_step_incident_assistant_hint",
@@ -678,8 +707,11 @@ class QaRunner:
                 errors.append(f"Missing smart-home config path: {path}")
                 continue
             payload = _safe_read_text(path)
-            if '"google_home"' in payload:
-                errors.append(f"Active smart-home rollout still advertises google_home in {path}")
+            active_connector_ids = _active_smart_home_connectors_from_json(payload)
+            if "google_home" in active_connector_ids:
+                errors.append(
+                    f"Active smart-home rollout still advertises google_home in smart_home_connector.supported_connector_ids for {path}"
+                )
             if EXPECTED_WALLET_SETUP_URI not in payload:
                 errors.append(f"Current Google Wallet digital key setup URI missing in {path}")
         notes.append(f"Validated {len(SMART_HOME_CONFIG_PATHS)} smart-home rollout config path(s).")
@@ -697,9 +729,9 @@ class QaRunner:
             errors.append(f"Missing Python default config source: {PYTHON_DEFAULT_CONFIG_PATH}")
         else:
             python_default_payload = _safe_read_text(PYTHON_DEFAULT_CONFIG_PATH)
-            if '"google_home"' in python_default_payload:
+            if "google_home" in _active_smart_home_connectors_from_python_config(python_default_payload):
                 errors.append(
-                    "credential_defense.config still advertises google_home in the default smart-home connector list."
+                    "credential_defense.config still advertises google_home in the active smart-home connector list."
                 )
             if EXPECTED_WALLET_SETUP_URI not in python_default_payload:
                 errors.append(

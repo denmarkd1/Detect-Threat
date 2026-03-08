@@ -31,6 +31,7 @@
 - Use local satellite under `D_T_System/`.
 - Keep workspace category/capabilities tuned for cybersecurity.
 - Follow memory-first + code-review discipline for non-trivial changes.
+- For fixes/add-ons that change onboarding, guided flows, incident assistant behavior, user-visible copy, or QA expectations, update the relevant tutorial surfaces and `scripts/ops/lyra_beta_trainer.py` when applicable.
 
 ## Key paths
 - Credential defense source: `src/credential_defense/`

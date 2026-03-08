@@ -42,9 +42,11 @@ object WatchdogConfig {
 
     const val FOREGROUND_CHANNEL_ID = "dt_scanner_foreground"
     const val ALERT_CHANNEL_ID = "dt_scanner_alerts"
+    const val INCIDENT_GUIDE_CHANNEL_ID = "dt_incident_guide"
 
     const val FOREGROUND_NOTIFICATION_ID = 4101
     const val ALERT_NOTIFICATION_ID = 4102
+    const val INCIDENT_GUIDE_NOTIFICATION_ID = 4103
 
     const val SCAN_INTERVAL_MS = 5 * 60 * 1000L
 }

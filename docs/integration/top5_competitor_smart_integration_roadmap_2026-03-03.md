@@ -339,8 +339,8 @@ Implementation status (2026-03-07 revalidation):
   - `SmartThingsConnector.kt` issues local consent artifacts rather than partner OAuth tokens.
   - Connector health is derived from whether SmartThings client apps are installed on-device.
   - `collectPosture()` uses local app state plus a synthetic device-count estimate, not live partner inventory.
-  - `Home Risk` therefore represents a SmartThings-first local readiness layer, not live SmartThings or Google Home cloud telemetry.
-- `google_home` was removed from active rollout config in this revalidation because there is no real connector implementation behind that ID.
+  - `Home Risk` therefore represents a local smart-device umbrella with provider selection, local readiness confirmation, imported-device selection, and protected-device scans, not live SmartThings or Google Home cloud telemetry.
+- Additional provider entries such as `google_home` may exist in the local provider catalog, but they must remain local/on-device guidance until a real connector implementation exists behind that ID.
 
 ## Phase 3 - VPN broker and service linking (1 to 2 weeks)
 1. Add provider registry and deep-link/open-app launcher.

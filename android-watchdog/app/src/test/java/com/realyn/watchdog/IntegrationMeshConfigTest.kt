@@ -54,4 +54,13 @@ class IntegrationMeshConfigTest {
 
         assertTrue(result.findings.any { it.findingType == "social_engineering_exposure" })
     }
+
+    @Test
+    fun smartHomeProviders_includeDeviceTemplatesInDefaultConfig() {
+        val config = IntegrationMeshConfigStore.parse(null)
+
+        val provider = config.connectors.smartHome.providers.first { it.id == "smartthings" }
+        assertEquals("smartthings", provider.id)
+        assertEquals("Samsung TV", provider.deviceTemplates.first().label)
+    }
 }

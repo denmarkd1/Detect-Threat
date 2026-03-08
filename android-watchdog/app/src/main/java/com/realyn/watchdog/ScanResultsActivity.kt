@@ -1077,12 +1077,22 @@ class ScanResultsActivity : AppCompatActivity() {
         if (launchActions.isNotEmpty()) {
             dialogBuilder
                 .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
-                    startRecommendedSettingsWithOverlayFlow(
-                        incident = incident,
-                        guidance = guidance,
-                        launchActions = launchActions,
-                        continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch
-                    )
+                    if (oemPack == OemStepPack.SAMSUNG) {
+                        showSamsungOverlayLaunchWarningDialog(
+                            incident = incident,
+                            guidance = guidance,
+                            launchActions = launchActions,
+                            continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch,
+                            firstTapTarget = tapTargets.firstOrNull().orEmpty()
+                        )
+                    } else {
+                        startRecommendedSettingsWithOverlayFlow(
+                            incident = incident,
+                            guidance = guidance,
+                            launchActions = launchActions,
+                            continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch
+                        )
+                    }
                 }
                 .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
                     launchRecommendedSettingsWithOverlayOption(
@@ -1102,6 +1112,45 @@ class ScanResultsActivity : AppCompatActivity() {
                 .setNegativeButton(R.string.scan_results_cancel, null)
         }
         dialogBuilder.show()
+    }
+
+    private fun showSamsungOverlayLaunchWarningDialog(
+        incident: IncidentRecord,
+        guidance: IncidentGuidance,
+        launchActions: List<IncidentAction>,
+        continueWithContainmentAfterLaunch: Boolean,
+        firstTapTarget: String
+    ) {
+        val target = firstTapTarget.ifBlank {
+            getString(R.string.incident_overlay_default_step)
+        }
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.incident_assistant_samsung_overlay_warning_title)
+            .setMessage(
+                getString(
+                    R.string.incident_assistant_samsung_overlay_warning_message,
+                    target
+                )
+            )
+            .setPositiveButton(R.string.incident_assistant_samsung_overlay_warning_continue) { _, _ ->
+                startRecommendedSettingsWithOverlayFlow(
+                    incident = incident,
+                    guidance = guidance,
+                    launchActions = launchActions,
+                    continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch
+                )
+            }
+            .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                launchRecommendedSettingsWithOverlayOption(
+                    incident = incident,
+                    guidance = guidance,
+                    launchActions = launchActions,
+                    continueWithContainmentAfterLaunch = continueWithContainmentAfterLaunch,
+                    useOverlayGuide = false
+                )
+            }
+            .setNegativeButton(R.string.scan_results_cancel, null)
+            .show()
     }
 
     private fun startRecommendedSettingsWithOverlayFlow(

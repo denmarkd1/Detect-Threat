@@ -52,10 +52,16 @@
       "source_workspace": "/home/danicous/Realyn Phone",
       "merged_on": "2026-02-20",
       "merge_mode": "flattened_conflict_safe"
-    }
+    },
+    "codex_handoff_requirements": [
+      {
+        "id": "tutorial_lyra_sync",
+        "instruction": "For this workspace, when a fix, correction, add-on, or user-visible behavior change affects onboarding, guided flows, incident assistant behavior, copy, or QA expectations, update the relevant tutorial surfaces and `scripts/ops/lyra_beta_trainer.py` as applicable."
+      }
+    ]
   },
   "required_profiles": [
     "manus_wide_research"
   ],
-  "last_bootstrap": "2026-03-08T03:34:08.276673Z"
+  "last_bootstrap": "2026-03-08T04:28:39.106208Z"
 }

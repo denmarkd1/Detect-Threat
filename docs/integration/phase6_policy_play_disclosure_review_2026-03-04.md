@@ -16,7 +16,7 @@ This review aligns three disclosure surfaces:
 
 - Defensive security utility only.
 - VPN flow is broker/status orchestration only in this phase (not native `VpnService` tunneling).
-- Home Risk is limited to SmartThings-first local readiness in the current build; do not claim live SmartThings or Google Home cloud telemetry.
+- Home Risk is limited to local provider readiness, imported-device selection, and read-only/local snapshot behavior in the current build; do not claim live SmartThings or Google Home cloud telemetry.
 - No raw password transmission to external services.
 - Breach checks use k-anonymity hash-prefix model.
 - Destructive account actions remain explicit-user-confirmation flows.
@@ -49,7 +49,7 @@ Before submission, verify these forms in Play Console:
 3. Sensitive permissions and claims
 - Keep permission declarations consistent with current app manifest.
 - Do not claim full device compromise prevention or guaranteed threat elimination.
-- Do not claim live smart-home ecosystem monitoring or active Google Home support in this release.
+- Do not claim live smart-home ecosystem monitoring, live Google Home cloud telemetry, or direct smart-fob control in this release.
 
 ## Evidence package to attach per release
 

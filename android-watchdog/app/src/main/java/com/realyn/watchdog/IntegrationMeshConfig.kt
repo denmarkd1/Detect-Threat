@@ -122,7 +122,26 @@ data class IntegrationMeshSmartHomeConfig(
     val allowedConnectorIds: List<String>,
     val readOnly: Boolean,
     val maxCachedDevices: Int,
-    val defaultScopeSet: List<String>
+    val defaultScopeSet: List<String>,
+    val providers: List<IntegrationMeshSmartHomeProvider>
+)
+
+data class IntegrationMeshSmartDeviceTemplate(
+    val id: String,
+    val label: String,
+    val deviceType: String
+)
+
+data class IntegrationMeshSmartHomeProvider(
+    val id: String,
+    val label: String,
+    val connectorId: String,
+    val category: String,
+    val packageNames: List<String>,
+    val deepLinkUri: String,
+    val fallbackUri: String,
+    val setupUri: String,
+    val deviceTemplates: List<IntegrationMeshSmartDeviceTemplate>
 )
 
 data class IntegrationMeshVpnProvider(
@@ -192,6 +211,105 @@ fun loadIntegrationMeshConfig(context: Context): IntegrationMeshConfig {
 }
 
 object IntegrationMeshConfigStore {
+    private val defaultSmartHomeProviders = listOf(
+        IntegrationMeshSmartHomeProvider(
+            id = "smartthings",
+            label = "Samsung SmartThings",
+            connectorId = "smartthings",
+            category = "smart_home",
+            packageNames = listOf("com.samsung.android.oneconnect", "com.smartthings.android"),
+            deepLinkUri = "",
+            fallbackUri = "https://play.google.com/store/apps/details?id=com.samsung.android.oneconnect",
+            setupUri = "https://www.samsung.com/us/support/owners/app/smartthings",
+            deviceTemplates = listOf(
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "samsung_tv",
+                    label = "Samsung TV",
+                    deviceType = "tv"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "samsung_refrigerator",
+                    label = "Samsung Refrigerator",
+                    deviceType = "appliance"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "smart_hub",
+                    label = "Smart home hub",
+                    deviceType = "hub"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "smart_tag",
+                    label = "Smart tag or tracker",
+                    deviceType = "tracker"
+                )
+            )
+        ),
+        IntegrationMeshSmartHomeProvider(
+            id = "google_home",
+            label = "Google Home",
+            connectorId = "google_home",
+            category = "smart_home",
+            packageNames = listOf("com.google.android.apps.chromecast.app", "com.google.android.apps.nest"),
+            deepLinkUri = "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
+            fallbackUri = "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
+            setupUri = "https://support.google.com/googlenest/answer/7073477?hl=en",
+            deviceTemplates = listOf(
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "google_tv",
+                    label = "Google TV or Chromecast",
+                    deviceType = "tv"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "nest_display",
+                    label = "Nest display",
+                    deviceType = "display"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "nest_thermostat",
+                    label = "Nest thermostat",
+                    deviceType = "thermostat"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "nest_camera",
+                    label = "Nest camera",
+                    deviceType = "camera"
+                )
+            )
+        ),
+        IntegrationMeshSmartHomeProvider(
+            id = "home_assistant",
+            label = "Home Assistant",
+            connectorId = "home_assistant",
+            category = "smart_home",
+            packageNames = listOf("io.homeassistant.companion.android"),
+            deepLinkUri = "",
+            fallbackUri = "https://play.google.com/store/apps/details?id=io.homeassistant.companion.android",
+            setupUri = "https://www.home-assistant.io/integrations/mobile_app/",
+            deviceTemplates = listOf(
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "ha_hub",
+                    label = "Home Assistant hub",
+                    deviceType = "hub"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "ha_lock",
+                    label = "Connected lock",
+                    deviceType = "lock"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "ha_sensor",
+                    label = "Security sensor",
+                    deviceType = "sensor"
+                ),
+                IntegrationMeshSmartDeviceTemplate(
+                    id = "ha_camera",
+                    label = "Connected camera",
+                    deviceType = "camera"
+                )
+            )
+        )
+    )
+
     private val defaultVpnProviders = listOf(
         IntegrationMeshVpnProvider(
             id = "partner_vpn",
@@ -344,7 +462,8 @@ object IntegrationMeshConfigStore {
                 allowedConnectorIds = listOf("smartthings"),
                 readOnly = true,
                 maxCachedDevices = 250,
-                defaultScopeSet = listOf("home:read", "lock:read")
+                defaultScopeSet = listOf("home:read", "lock:read"),
+                providers = defaultSmartHomeProviders
             ),
             vpnBrokers = IntegrationMeshVpnConfig(
                 healthTtlMinutes = 30,
@@ -525,7 +644,115 @@ object IntegrationMeshConfigStore {
             allowedConnectorIds = parseIdentifierList(payload.optJSONArray("allowed_connector_ids"), fallback.allowedConnectorIds),
             readOnly = payload.optBoolean("read_only", fallback.readOnly),
             maxCachedDevices = payload.optInt("max_cached_devices", fallback.maxCachedDevices).coerceAtLeast(1),
-            defaultScopeSet = parseIdentifierList(payload.optJSONArray("default_scope_set"), fallback.defaultScopeSet)
+            defaultScopeSet = parseIdentifierList(payload.optJSONArray("default_scope_set"), fallback.defaultScopeSet),
+            providers = parseSmartHomeProviders(payload.optJSONArray("providers"), fallback.providers)
+        )
+    }
+
+    private fun parseSmartHomeProviders(
+        array: JSONArray?,
+        fallback: List<IntegrationMeshSmartHomeProvider>
+    ): List<IntegrationMeshSmartHomeProvider> {
+        if (array == null) {
+            return fallback
+        }
+        val providers = mutableListOf<IntegrationMeshSmartHomeProvider>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            parseSmartHomeProvider(item)?.let { providers += it }
+        }
+        return if (providers.isEmpty()) fallback else providers
+    }
+
+    private fun parseSmartHomeProvider(item: JSONObject): IntegrationMeshSmartHomeProvider? {
+        val id = normalizeIdentifier(item.optString("id", ""))
+        val label = item.optString("label", "").trim().replace("\n", " ").replace("\r", " ")
+        if (id.isBlank() || label.isBlank()) {
+            return null
+        }
+
+        val connectorId = normalizeIdentifier(
+            firstNonBlank(
+                item.optString("connector_id", ""),
+                item.optString("connectorId", ""),
+                id
+            )
+        ).ifBlank { id }
+        val category = normalizeIdentifier(item.optString("category", "smart_home"))
+            .ifBlank { "smart_home" }
+        val packageNames = parseIdentifierList(item.optJSONArray("package_names"), emptyList())
+            .map { it.replace("[^a-z0-9._]".toRegex(), "") }
+            .filter { it.isNotBlank() }
+        val deepLinkUri = parseUri(
+            firstNonBlank(
+                item.optString("deep_link_uri", ""),
+                item.optString("deepLinkUri", ""),
+                item.optString("uri", "")
+            )
+        )
+        val fallbackUri = parseUri(
+            firstNonBlank(
+                item.optString("fallback_uri", ""),
+                item.optString("fallbackUri", "")
+            )
+        )
+        val setupUri = parseUri(
+            firstNonBlank(
+                item.optString("setup_uri", ""),
+                item.optString("setupUri", ""),
+                fallbackUri
+            )
+        )
+        val deviceTemplates = parseSmartDeviceTemplates(
+            item.optJSONArray("device_templates"),
+            emptyList()
+        )
+
+        return IntegrationMeshSmartHomeProvider(
+            id = id,
+            label = label.take(72),
+            connectorId = connectorId,
+            category = category,
+            packageNames = packageNames,
+            deepLinkUri = deepLinkUri,
+            fallbackUri = fallbackUri,
+            setupUri = setupUri,
+            deviceTemplates = deviceTemplates
+        )
+    }
+
+    private fun parseSmartDeviceTemplates(
+        array: JSONArray?,
+        fallback: List<IntegrationMeshSmartDeviceTemplate>
+    ): List<IntegrationMeshSmartDeviceTemplate> {
+        if (array == null) {
+            return fallback
+        }
+        val templates = mutableListOf<IntegrationMeshSmartDeviceTemplate>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            parseSmartDeviceTemplate(item)?.let { templates += it }
+        }
+        return if (templates.isEmpty()) fallback else templates
+    }
+
+    private fun parseSmartDeviceTemplate(item: JSONObject): IntegrationMeshSmartDeviceTemplate? {
+        val id = normalizeIdentifier(item.optString("id", ""))
+        val label = item.optString("label", "").trim().replace("\n", " ").replace("\r", " ")
+        if (id.isBlank() || label.isBlank()) {
+            return null
+        }
+        val deviceType = normalizeIdentifier(
+            firstNonBlank(
+                item.optString("device_type", ""),
+                item.optString("deviceType", ""),
+                "device"
+            )
+        ).ifBlank { "device" }
+        return IntegrationMeshSmartDeviceTemplate(
+            id = id,
+            label = label.take(72),
+            deviceType = deviceType
         )
     }
 

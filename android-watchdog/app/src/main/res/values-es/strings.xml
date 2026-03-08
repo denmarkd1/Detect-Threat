@@ -146,6 +146,9 @@
     <string name="incident_assistant_recommended_overlay_permission_granted">Permiso de guía flotante habilitado. Toca Abrir con guía flotante otra vez para continuar con los toques guiados.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">No se concedió el permiso de guía flotante. Se abrirán los ajustes sin guía superpuesta.</string>
     <string name="incident_assistant_recommended_overlay_visibility_caveat">Nota: algunas pantallas de seguridad en %1$s ocultan temporalmente la guía flotante. Si desaparece, sigue el toque indicado manualmente y vuelve a abrir la guía al regresar.</string>
+    <string name="incident_assistant_samsung_overlay_warning_title">Aviso de superposición en Samsung</string>
+    <string name="incident_assistant_samsung_overlay_warning_message">Samsung One UI suele ocultar la guía flotante en las pantallas de Información de la app y Permisos. Si eso ocurre, sigue manualmente la lista exacta de toques. La app también mantendrá el objetivo de toque actual en una notificación persistente cuando Android permita notificaciones.\n\nSiguiente objetivo de toque:\n%1$s</string>
+    <string name="incident_assistant_samsung_overlay_warning_continue">Continuar con la guía</string>
     <string name="incident_assistant_recommended_manual_continue">Después de esto, continúa con la guía completa paso a paso del incidente.</string>
     <string name="incident_overlay_title">Guía flotante de incidente</string>
     <string name="incident_overlay_step_template">Paso %1$d de %2$d</string>
@@ -158,6 +161,9 @@
     <string name="incident_overlay_permission_required">Permite \"mostrar sobre otras apps\" para usar la guía flotante de incidentes.</string>
     <string name="incident_overlay_started">Se inició la guía flotante del incidente.</string>
     <string name="incident_overlay_default_step">Sigue la guía de seguridad en pantalla y verifica cada cambio antes de marcar como resuelto.</string>
+    <string name="incident_overlay_notification_title">Guía de incidente: %1$s</string>
+    <string name="incident_overlay_notification_hint">Si Samsung oculta la superposición en Información de la app o Permisos, baja las notificaciones para no perder el paso actual.</string>
+    <string name="notification_channel_incident_guide">Guía de incidente</string>
 
     <string name="scam_shield_title">Scam Shield + Triaje de Riesgo</string>
     <string name="scam_shield_loading">Cargando estado de Scam Shield...</string>

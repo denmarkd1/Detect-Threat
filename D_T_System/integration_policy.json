@@ -81,6 +81,11 @@
     "code_review_first_for_reviews": true,
     "dt_autorun_if_available": true
   },
+  "workspace_handoff_rules": {
+    "codex_requirements": [
+      "When a fix, correction, add-on, or user-visible behavior change affects onboarding, guided flows, incident assistant behavior, copy, or QA expectations, update the relevant tutorial surfaces and `scripts/ops/lyra_beta_trainer.py` as applicable."
+    ]
+  },
   "precommit_review": {
     "primary_tool": "zen.precommit",
     "primary_timeout_seconds": 60,

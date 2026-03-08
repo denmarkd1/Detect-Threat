@@ -1,7 +1,12 @@
 package com.realyn.watchdog
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -14,11 +19,18 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 
 class IncidentGuideOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createGuideChannel()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
@@ -51,6 +63,7 @@ class IncidentGuideOverlayService : Service() {
 
     override fun onDestroy() {
         removeOverlay()
+        cancelPinnedGuideNotification()
         super.onDestroy()
     }
 
@@ -235,6 +248,11 @@ class IncidentGuideOverlayService : Service() {
                 stepView.text = steps[stepIndex]
                 prevButton.isEnabled = stepIndex > 0
                 nextButton.isEnabled = stepIndex < steps.lastIndex
+                updatePinnedGuideNotification(
+                    stepIndex = stepIndex,
+                    total = steps.size,
+                    steps = steps
+                )
             }
 
             prevButton.setOnClickListener {
@@ -280,6 +298,11 @@ class IncidentGuideOverlayService : Service() {
         } else {
             getString(R.string.incident_overlay_complete_step)
         }
+        updatePinnedGuideNotification(
+            stepIndex = stepIndex,
+            total = total,
+            steps = steps
+        )
     }
 
     private fun createOverlayParams(): WindowManager.LayoutParams {
@@ -316,5 +339,103 @@ class IncidentGuideOverlayService : Service() {
         val view = overlayView ?: return
         runCatching { windowManager?.removeView(view) }
         overlayView = null
+    }
+
+    private fun updatePinnedGuideNotification(
+        stepIndex: Int,
+        total: Int,
+        steps: List<String>
+    ) {
+        if (!shouldPinGuideNotification() || !canPostGuideNotifications()) {
+            return
+        }
+        val stepLabel = getString(
+            R.string.incident_overlay_step_template,
+            stepIndex + 1,
+            total
+        )
+        val currentTarget = steps.getOrNull(stepIndex)
+            .orEmpty()
+            .trim()
+            .ifBlank { getString(R.string.incident_overlay_default_step) }
+        val detail = buildString {
+            appendLine(currentTarget)
+            appendLine()
+            append(getString(R.string.incident_overlay_notification_hint))
+        }
+        val notification = NotificationCompat.Builder(this, WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(getString(R.string.incident_overlay_notification_title, stepLabel))
+            .setContentText(currentTarget)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(buildGuidePendingIntent())
+            .build()
+        try {
+            NotificationManagerCompat.from(this).notify(
+                WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
+                notification
+            )
+        } catch (_: SecurityException) {
+            // Ignore if notifications are denied.
+        }
+    }
+
+    private fun buildGuidePendingIntent(): PendingIntent {
+        val openIntent = Intent(this, ScanResultsActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(
+                ScanResultsActivity.EXTRA_SCREEN_MODE,
+                ScanResultsActivity.SCREEN_MODE_INCIDENT_ASSISTANT
+            )
+        }
+        return PendingIntent.getActivity(
+            this,
+            WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun canPostGuideNotifications(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                return false
+            }
+        }
+        return NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
+
+    private fun shouldPinGuideNotification(): Boolean {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
+        val brand = Build.BRAND.orEmpty().lowercase()
+        return manufacturer.contains("samsung") || brand.contains("samsung")
+    }
+
+    private fun createGuideChannel() {
+        if (!shouldPinGuideNotification() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        val channel = NotificationChannel(
+            WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID,
+            getString(R.string.notification_channel_incident_guide),
+            NotificationManager.IMPORTANCE_LOW
+        )
+        manager.createNotificationChannel(channel)
+    }
+
+    private fun cancelPinnedGuideNotification() {
+        try {
+            NotificationManagerCompat.from(this).cancel(WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID)
+        } catch (_: SecurityException) {
+            // Ignore if notifications are denied.
+        }
     }
 }

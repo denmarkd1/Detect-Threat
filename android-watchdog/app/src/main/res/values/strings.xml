@@ -442,6 +442,9 @@
     <string name="incident_assistant_recommended_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">Overlay guide permission was not granted. Opening settings without overlay guidance.</string>
     <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. If the overlay disappears, follow the listed tap target manually and reopen the overlay guide when you return.</string>
+    <string name="incident_assistant_samsung_overlay_warning_title">Samsung overlay warning</string>
+    <string name="incident_assistant_samsung_overlay_warning_message">Samsung One UI often hides the floating guide on App info and Permissions screens. If that happens, keep following the exact tap list manually. The app will also keep the current tap target in an ongoing notification when Android allows notifications.\n\nNext tap target:\n%1$s</string>
+    <string name="incident_assistant_samsung_overlay_warning_continue">Continue with guide</string>
     <string name="incident_assistant_recommended_manual_continue">After this, continue with the full incident step-by-step guide.</string>
     <string name="incident_assistant_tip_auto_template">Tip: %1$d quick action(s) can be opened by the app.</string>
     <string name="incident_assistant_tip_manual">Tip: This incident needs manual steps.</string>
@@ -744,13 +747,24 @@
     <string name="security_action_open_home_risk">Open home risk posture</string>
     <string name="action_home_risk_setup">Home Risk setup</string>
     <string name="action_install_or_open_smartthings">Install/Open SmartThings</string>
+    <string name="home_risk_action_open_provider">Open provider</string>
+    <string name="home_risk_action_choose_provider">Choose provider</string>
+    <string name="home_risk_action_mark_ready">Mark provider ready</string>
+    <string name="home_risk_action_import_devices">Import devices</string>
+    <string name="home_risk_action_save_import">Save imported devices</string>
+    <string name="home_risk_action_select_protection">Select protection</string>
+    <string name="home_risk_action_save_protection">Save protection list</string>
+    <string name="home_risk_action_scan_now">Scan now</string>
+    <string name="home_risk_provider_picker_title">Choose Home Risk provider</string>
+    <string name="home_risk_import_devices_title">Import local devices</string>
+    <string name="home_risk_select_protection_title">Choose protected devices</string>
     <string name="home_risk_loading">Loading home-risk posture...</string>
     <string name="home_risk_setup_loading">Preparing Home Risk setup...</string>
     <string name="home_risk_dialog_title">Home risk posture</string>
     <string name="home_risk_setup_dialog_title">Home Risk setup</string>
     <string name="home_risk_not_configured">Home Risk module is not enabled.</string>
     <string name="home_risk_connector_missing">Home Risk connector is unavailable.</string>
-    <string name="home_risk_consent_missing">Home Risk setup is incomplete for this profile. Open Home Risk setup to finish local connector readiness.</string>
+    <string name="home_risk_consent_missing">Home Risk setup is incomplete for this profile. Open Home Risk setup to finish local provider readiness and device protection.</string>
     <string name="home_risk_collection_failed">Home Risk posture refresh failed.</string>
     <string name="home_risk_setup_state_consent_issued">Consent issued</string>
     <string name="home_risk_setup_state_consent_active">Consent already active</string>
@@ -767,7 +781,7 @@
     <string name="home_risk_summary_template">Connector: %1$s\nOwner: %2$s\nReadiness sample: %3$d\nRisk score: %4$d / 100</string>
     <string name="home_risk_findings_title">Findings</string>
     <string name="home_risk_findings_empty">No posture findings were reported.</string>
-    <string name="home_risk_fallback_summary_template">Baseline fallback:\nWi-Fi tier: %1$s\nThreat alerts: high %2$d, medium %3$d\nCredential queue pending: %4$d\n\nUse Home Risk setup to prepare SmartThings-first local readiness for this profile.</string>
+    <string name="home_risk_fallback_summary_template">Baseline fallback:\nWi-Fi tier: %1$s\nThreat alerts: high %2$d, medium %3$d\nCredential queue pending: %4$d\n\nUse Home Risk setup to choose a provider, import devices, and select protection locally.</string>
     <string name="lion_nav_dialog_title">Lion navigation</string>
     <string name="lion_nav_action_home_risk">Home Risk posture</string>
     <string name="lion_nav_action_vpn_status">VPN status</string>
@@ -910,6 +924,9 @@
     <string name="home_tutorial_status_tap_target">ADHD-friendly hint: Tap the highlighted control when ready, then continue.</string>
     <string name="home_tutorial_status_target_done">Nice. You triggered this control. Tap Next to continue.</string>
     <string name="home_tutorial_complete_status">Tutorial completed. Reopen it from Lion navigation anytime.</string>
+    <string name="home_tutorial_step_samsung_overlay_note_title">Samsung incident guide note</string>
+    <string name="home_tutorial_step_samsung_overlay_note_body">On Samsung One UI, the floating incident guide can disappear on protected App info and Permissions screens even when Appear on top is already enabled. That is a Samsung limitation, not a setup mistake in this app.</string>
+    <string name="home_tutorial_step_samsung_overlay_note_hint">If the overlay disappears, keep following the exact tap list manually and pull down the ongoing incident-guide notification to keep your current target in view.</string>
 
     <string name="home_tutorial_step_sweep_title">Scan now control</string>
     <string name="home_tutorial_step_sweep_body">Scan now opens deep scan custom mode so you can choose modules before starting.</string>
@@ -948,10 +965,10 @@
     <string name="home_tutorial_step_settings_window_body">Inside settings: Run tutorial, Plan and billing, AI connection, Language, Locator setup, Home Risk setup, VPN setup, and Credential Center buttons.</string>
     <string name="home_tutorial_step_settings_window_hint">Use these routes when a module reports setup, rollout, or consent requirements.</string>
     <string name="home_tutorial_step_home_risk_title">Home Risk feature</string>
-    <string name="home_tutorial_step_home_risk_body">Page 1 Home Risk opens the SmartThings-first local readiness snapshot or setup when Home Risk setup is still incomplete.</string>
+    <string name="home_tutorial_step_home_risk_body">Page 1 Home Risk opens a local smart-device umbrella flow: choose a provider, confirm readiness, import devices, select protection, then review the local snapshot.</string>
     <string name="home_tutorial_step_home_risk_hint">Swipe widgets or use guided pages to reach Home Risk quickly.</string>
     <string name="home_tutorial_step_home_risk_window_title">Home Risk windows</string>
-    <string name="home_tutorial_step_home_risk_window_body">Home Risk status shows a read-only local snapshot and findings. Setup can open SmartThings install/app or route back to settings.</string>
+    <string name="home_tutorial_step_home_risk_window_body">Home Risk status shows a read-only local snapshot and protected-device list. Setup can open a selected provider, confirm readiness, import devices, and choose protection.</string>
     <string name="home_tutorial_step_home_risk_window_hint">If collection is blocked, use setup or settings from the dialog.</string>
     <string name="home_tutorial_step_vpn_title">VPN guard feature</string>
     <string name="home_tutorial_step_vpn_body">Page 2 VPN opens provider status and setup routes for configured/connected/stale posture states.</string>
@@ -1246,6 +1263,9 @@
     <string name="incident_overlay_permission_required">Allow display over other apps to use incident guide overlay.</string>
     <string name="incident_overlay_started">Incident overlay guide started.</string>
     <string name="incident_overlay_default_step">Follow the on-screen security guidance and verify each change before marking fixed.</string>
+    <string name="incident_overlay_notification_title">Incident guide: %1$s</string>
+    <string name="incident_overlay_notification_hint">If Samsung hides the overlay on App info or Permissions, pull down notifications to keep your place.</string>
+    <string name="notification_channel_incident_guide">Incident guide</string>
     <string name="profile_overlay_restricted">Overlay assistant is disabled for child profile.</string>
     <string name="profile_copy_stored_restricted">Copying stored passwords is disabled for child profile.</string>
 

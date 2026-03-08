@@ -94,7 +94,7 @@ Attach this evidence in your release packet:
 
 Do not submit for production review unless all of the following are true:
 - No failing checks in MASVS or Lyra reports.
-- If launch materials mention Home Risk, wording stays at SmartThings-first local readiness scope unless Lyra retail-readiness checks are green.
+- If launch materials mention Home Risk, wording stays at local smart-device umbrella/read-only snapshot scope unless Lyra retail-readiness checks are green.
 - Listing, privacy policy, app content, and data safety forms are complete and consistent.
 - Required testing-track conditions are complete for your account type.
 - Rollback owner and hotfix path are documented.

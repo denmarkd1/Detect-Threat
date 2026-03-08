@@ -215,19 +215,29 @@ class MainActivity : AppCompatActivity() {
     private data class HomeRiskLookupResult(
         val posture: SmartHomePostureSnapshot? = null,
         val connectorLabel: String = "",
+        val selectedProvider: HomeRiskUmbrellaProvider? = null,
+        val importedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
+        val protectedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
         val errorRes: Int = 0,
         val errorMessage: String = ""
     )
 
     private enum class HomeRiskSetupStatus {
-        READY,
         ROLLOUT_DISABLED,
         CONNECTOR_UNAVAILABLE,
-        CONSENT_FAILED
+        INSTALL_PROVIDER,
+        AUTHORIZE_PROVIDER,
+        IMPORT_DEVICES,
+        SELECT_PROTECTION,
+        READY_TO_SCAN
     }
 
     private data class HomeRiskSetupResult(
         val status: HomeRiskSetupStatus,
+        val selectedProvider: HomeRiskUmbrellaProvider? = null,
+        val providerStatuses: List<HomeRiskOnboardingProviderStatus> = emptyList(),
+        val importedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
+        val protectedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
         val connectorLabel: String = "",
         val connectorId: String = "",
         val ownerRole: String = "",
@@ -235,7 +245,6 @@ class MainActivity : AppCompatActivity() {
         val healthLastError: String = "",
         val readOnlyMode: Boolean = true,
         val scopeCount: Int = 0,
-        val consentIssued: Boolean = false,
         val rolloutStage: String = "",
         val rolloutPercent: Int = 0,
         val errorMessage: String = ""
@@ -3242,7 +3251,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildHomeTutorialSteps(): List<HomeTutorialStep> {
-        return listOf(
+        val samsungNotice = if (isSamsungDevice()) {
+            listOf(
+                HomeTutorialStep(
+                    stepId = "samsung_incident_overlay_note",
+                    titleRes = R.string.home_tutorial_step_samsung_overlay_note_title,
+                    bodyRes = R.string.home_tutorial_step_samsung_overlay_note_body,
+                    hintRes = R.string.home_tutorial_step_samsung_overlay_note_hint,
+                    targetViewProvider = { binding.widgetServicesCard },
+                    widgetPageIndex = 0,
+                    navPageIndex = 0,
+                    requireTargetTapInLearnMode = false
+                )
+            )
+        } else {
+            emptyList()
+        }
+        return samsungNotice + listOf(
             HomeTutorialStep(
                 stepId = "sweep_primary",
                 titleRes = R.string.home_tutorial_step_sweep_title,
@@ -3511,6 +3536,12 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun isSamsungDevice(): Boolean {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
+        return manufacturer.contains("samsung") || brand.contains("samsung")
+    }
+
     private fun moveHomeTutorialStep(direction: Int) {
         if (!homeTutorialActive) {
             return
@@ -3688,7 +3719,8 @@ class MainActivity : AppCompatActivity() {
             connectorId = state.smartHomeConnectorId,
             ownerId = state.ownerId
         )
-        if (!homeRiskEnabled || consent == null) {
+        val protectedDevices = HomeRiskUmbrellaStore.readProtectedDevices(this, state.ownerRole)
+        if (!homeRiskEnabled || (consent == null && protectedDevices.isEmpty())) {
             openHomeRiskSetupFlow()
             return
         }
@@ -3713,9 +3745,16 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.scan_results_action_back_home, null)
                 if (result.posture != null) {
                     when (HomeRiskCopy.resolvePostureAction(result.posture)) {
-                        HomeRiskCopy.PostureAction.OPEN_SMARTTHINGS -> {
-                            dialogBuilder.setNeutralButton(R.string.action_install_or_open_smartthings) { _, _ ->
-                                openSmartThingsInstallOrApp()
+                        HomeRiskCopy.PostureAction.OPEN_PROVIDER -> {
+                            val provider = result.selectedProvider
+                            if (provider != null) {
+                                dialogBuilder.setNeutralButton(R.string.home_risk_action_open_provider) { _, _ ->
+                                    launchHomeRiskProvider(provider, preferSetup = false)
+                                }
+                            } else {
+                                dialogBuilder.setNeutralButton(R.string.action_home_risk_setup) { _, _ ->
+                                    openHomeRiskSetupFlow()
+                                }
                             }
                         }
 
@@ -3777,33 +3816,8 @@ class MainActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) {
                     return@launch
                 }
-                val dialogBuilder = LionAlertDialogBuilder(this@MainActivity)
-                    .setTitle(R.string.home_risk_setup_dialog_title)
-                    .setMessage(buildHomeRiskSetupDialogMessage(result))
-                    .setPositiveButton(R.string.scan_results_action_back_home, null)
-                when (result.status) {
-                    HomeRiskSetupStatus.READY -> {
-                        if (shouldOfferSmartThingsInstallCta(result)) {
-                            dialogBuilder.setNeutralButton(R.string.action_install_or_open_smartthings) { _, _ ->
-                                openSmartThingsInstallOrApp()
-                            }
-                        } else {
-                            dialogBuilder.setNeutralButton(R.string.security_action_open_home_risk) { _, _ ->
-                                openHomeRiskDialog()
-                            }
-                        }
-                    }
-
-                    HomeRiskSetupStatus.ROLLOUT_DISABLED,
-                    HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE,
-                    HomeRiskSetupStatus.CONSENT_FAILED -> {
-                        dialogBuilder.setNeutralButton(R.string.action_guardian_settings) { _, _ ->
-                            openGuardianSettingsDialog()
-                        }
-                    }
-                }
-                dialogBuilder.show()
-                if (result.status == HomeRiskSetupStatus.READY) {
+                showHomeRiskSetupDialog(result)
+                if (result.status == HomeRiskSetupStatus.READY_TO_SCAN) {
                     refreshUiState()
                 }
             } catch (error: Exception) {
@@ -3835,6 +3849,102 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showHomeRiskSetupDialog(result: HomeRiskSetupResult) {
+        val dialogBuilder = LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_risk_setup_dialog_title)
+            .setMessage(buildHomeRiskSetupDialogMessage(result))
+
+        when (result.status) {
+            HomeRiskSetupStatus.ROLLOUT_DISABLED,
+            HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE -> {
+                dialogBuilder
+                    .setPositiveButton(R.string.scan_results_action_back_home, null)
+                    .setNeutralButton(R.string.action_guardian_settings) { _, _ ->
+                        openGuardianSettingsDialog()
+                    }
+            }
+
+            HomeRiskSetupStatus.INSTALL_PROVIDER -> {
+                dialogBuilder
+                    .setPositiveButton(R.string.home_risk_action_open_provider) { _, _ ->
+                        result.selectedProvider?.let { provider ->
+                            launchHomeRiskProvider(provider, preferSetup = true)
+                        }
+                    }
+                if (result.providerStatuses.size > 1) {
+                    dialogBuilder.setNeutralButton(R.string.home_risk_action_choose_provider) { _, _ ->
+                        openHomeRiskProviderChooser(result)
+                    }
+                } else {
+                    dialogBuilder.setNeutralButton(R.string.scan_results_action_back_home, null)
+                }
+            }
+
+            HomeRiskSetupStatus.AUTHORIZE_PROVIDER -> {
+                dialogBuilder
+                    .setPositiveButton(R.string.home_risk_action_mark_ready) { _, _ ->
+                        markHomeRiskProviderReady(result)
+                    }
+                    .setNeutralButton(R.string.home_risk_action_open_provider) { _, _ ->
+                        result.selectedProvider?.let { provider ->
+                            launchHomeRiskProvider(provider, preferSetup = false)
+                        }
+                    }
+                if (result.providerStatuses.size > 1) {
+                    dialogBuilder.setNegativeButton(R.string.home_risk_action_choose_provider) { _, _ ->
+                        openHomeRiskProviderChooser(result)
+                    }
+                } else {
+                    dialogBuilder.setNegativeButton(R.string.scan_results_action_back_home, null)
+                }
+            }
+
+            HomeRiskSetupStatus.IMPORT_DEVICES -> {
+                dialogBuilder.setPositiveButton(R.string.home_risk_action_import_devices) { _, _ ->
+                    openHomeRiskDeviceImportDialog(result)
+                }
+                if (result.providerStatuses.size > 1) {
+                    dialogBuilder.setNeutralButton(R.string.home_risk_action_choose_provider) { _, _ ->
+                        openHomeRiskProviderChooser(result)
+                    }
+                } else {
+                    dialogBuilder.setNeutralButton(R.string.scan_results_action_back_home, null)
+                }
+            }
+
+            HomeRiskSetupStatus.SELECT_PROTECTION -> {
+                dialogBuilder.setPositiveButton(R.string.home_risk_action_select_protection) { _, _ ->
+                    openHomeRiskProtectionDialog(result)
+                }
+                if (result.providerStatuses.size > 1) {
+                    dialogBuilder.setNeutralButton(R.string.home_risk_action_choose_provider) { _, _ ->
+                        openHomeRiskProviderChooser(result)
+                    }
+                } else {
+                    dialogBuilder.setNeutralButton(R.string.scan_results_action_back_home, null)
+                }
+            }
+
+            HomeRiskSetupStatus.READY_TO_SCAN -> {
+                dialogBuilder
+                    .setPositiveButton(R.string.home_risk_action_scan_now) { _, _ ->
+                        runHomeRiskScanNow(result)
+                    }
+                    .setNeutralButton(R.string.security_action_open_home_risk) { _, _ ->
+                        openHomeRiskDialog()
+                    }
+                if (result.providerStatuses.size > 1) {
+                    dialogBuilder.setNegativeButton(R.string.home_risk_action_choose_provider) { _, _ ->
+                        openHomeRiskProviderChooser(result)
+                    }
+                } else {
+                    dialogBuilder.setNegativeButton(R.string.scan_results_action_back_home, null)
+                }
+            }
+        }
+        dialogBuilder.show()
+    }
+
     private suspend fun resolveHomeRiskSetup(): HomeRiskSetupResult {
         IntegrationMeshController.refresh(this)
         val state = IntegrationMeshController.snapshot(this)
@@ -3859,94 +3969,103 @@ class MainActivity : AppCompatActivity() {
                 rolloutPercent = rolloutPercent
             )
         }
-        val connector = IntegrationMeshController.getActiveSmartHomeConnector(this)
-            ?: return HomeRiskSetupResult(
+        val providers = HomeRiskUmbrellaRegistry.listProviders(config)
+        if (providers.isEmpty()) {
+            return HomeRiskSetupResult(
                 status = HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE,
                 ownerRole = state.ownerRole,
                 connectorId = state.smartHomeConnectorId
             )
+        }
 
+        val connector = IntegrationMeshController.getActiveSmartHomeConnector(this)
         val activeConsent = IntegrationMeshAuditStore.latestActiveConsent(
             context = this,
             connectorId = state.smartHomeConnectorId,
             ownerId = state.ownerId
         )
-        val consent = activeConsent ?: connector.ensureConsent(this, state.ownerRole)
-            ?: return HomeRiskSetupResult(
-                status = HomeRiskSetupStatus.CONSENT_FAILED,
-                ownerRole = state.ownerRole,
-                connectorId = connector.connectorId,
-                connectorLabel = connector.connectorLabel,
-                errorMessage = "consent_artifact_unavailable"
-            )
+        val providerStateOverrides = HomeRiskUmbrellaStore.readProviderStates(this, state.ownerRole)
+            .toMutableList()
+        if (activeConsent != null) {
+            val smartHomeProvider = providers.firstOrNull {
+                it.connectorId.equals(state.smartHomeConnectorId, ignoreCase = true)
+            }
+            if (smartHomeProvider != null &&
+                providerStateOverrides.none { stored ->
+                    stored.providerId.equals(smartHomeProvider.id, ignoreCase = true)
+                }
+            ) {
+                providerStateOverrides += HomeRiskUmbrellaProviderState(
+                    ownerRole = state.ownerRole,
+                    providerId = smartHomeProvider.id,
+                    category = smartHomeProvider.category,
+                    authorizedAtEpochMs = activeConsent.grantedAtEpochMs,
+                    authorizationMethod = "consent_artifact",
+                    lastOpenedAtEpochMs = 0L,
+                    lastImportedAtEpochMs = 0L,
+                    lastScanAtEpochMs = 0L
+                )
+            }
+        }
+        val providerCapabilities = providers.map { provider ->
+            HomeRiskUmbrellaRegistry.inspectProvider(this, provider)
+        }
+        val protectedDevices = HomeRiskUmbrellaStore.readProtectedDevices(this, state.ownerRole)
+        val plan = HomeRiskOnboardingPlanner.plan(
+            providerCapabilities = providerCapabilities,
+            selectedProviderId = HomeRiskUmbrellaStore.selectedProviderId(this, state.ownerRole),
+            providerStates = providerStateOverrides,
+            protectedDevices = protectedDevices
+        ) ?: return HomeRiskSetupResult(
+            status = HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE,
+            ownerRole = state.ownerRole,
+            connectorId = state.smartHomeConnectorId
+        )
 
-        val health = runCatching {
-            connector.getHealth(this, consent)
-        }.getOrElse { error ->
-            return HomeRiskSetupResult(
-                status = HomeRiskSetupStatus.CONSENT_FAILED,
-                ownerRole = consent.ownerRole,
-                connectorId = connector.connectorId,
-                connectorLabel = connector.connectorLabel,
-                scopeCount = consent.consentScopes.size,
-                errorMessage = error.message.orEmpty().trim()
-            )
+        val selectedProvider = plan.selectedProvider
+        val consentScopeCount = activeConsent?.consentScopes?.size
+            ?: smartHomeFlag.requiredScopes.size
+        val health = if (activeConsent != null &&
+            connector != null &&
+            connector.connectorId.equals(selectedProvider.connectorId, ignoreCase = true)
+        ) {
+            runCatching { connector.getHealth(this, activeConsent) }.getOrNull()
+        } else {
+            null
+        }
+
+        val status = when (plan.stage) {
+            HomeRiskOnboardingStage.INSTALL_PROVIDER -> HomeRiskSetupStatus.INSTALL_PROVIDER
+            HomeRiskOnboardingStage.AUTHORIZE_PROVIDER -> HomeRiskSetupStatus.AUTHORIZE_PROVIDER
+            HomeRiskOnboardingStage.IMPORT_DEVICES -> HomeRiskSetupStatus.IMPORT_DEVICES
+            HomeRiskOnboardingStage.SELECT_PROTECTION -> HomeRiskSetupStatus.SELECT_PROTECTION
+            HomeRiskOnboardingStage.READY_TO_SCAN -> HomeRiskSetupStatus.READY_TO_SCAN
         }
 
         return HomeRiskSetupResult(
-            status = HomeRiskSetupStatus.READY,
-            connectorLabel = connector.connectorLabel,
-            connectorId = connector.connectorId,
-            ownerRole = consent.ownerRole,
-            healthStatus = health.status,
-            healthLastError = health.lastError,
-            readOnlyMode = connector.isReadOnlyModeEnabled(),
-            scopeCount = consent.consentScopes.size,
-            consentIssued = activeConsent == null
+            status = status,
+            selectedProvider = selectedProvider,
+            providerStatuses = plan.providerStatuses,
+            importedDevices = plan.importedDevices,
+            protectedDevices = plan.protectedDevices,
+            connectorLabel = selectedProvider.label,
+            connectorId = selectedProvider.connectorId,
+            ownerRole = state.ownerRole,
+            healthStatus = health?.status ?: if (plan.selectedProviderStatus.appInstalled) {
+                "app_ready"
+            } else {
+                "app_missing"
+            },
+            healthLastError = health?.lastError.orEmpty(),
+            readOnlyMode = connector?.isReadOnlyModeEnabled() ?: true,
+            scopeCount = consentScopeCount,
+            rolloutStage = rolloutStage,
+            rolloutPercent = rolloutPercent
         )
     }
 
     private fun buildHomeRiskSetupDialogMessage(result: HomeRiskSetupResult): String {
         return when (result.status) {
-            HomeRiskSetupStatus.READY -> {
-                val setupStateLabel = getString(
-                    if (result.consentIssued) {
-                        R.string.home_risk_setup_state_consent_issued
-                    } else {
-                        R.string.home_risk_setup_state_consent_active
-                    }
-                )
-                val readOnlyLabel = getString(
-                    if (result.readOnlyMode) {
-                        R.string.home_risk_setup_mode_read_only
-                    } else {
-                        R.string.home_risk_setup_mode_live
-                    }
-                )
-                val connectorLabel = result.connectorLabel.ifBlank { result.connectorId.ifBlank { "smart_home" } }
-                buildString {
-                    appendLine("Home Risk setup is ready.")
-                    appendLine("This build only reads a local SmartThings snapshot. It does not change your home account from this screen.")
-                    appendLine()
-                    appendLine("What to do now")
-                    if (shouldOfferSmartThingsInstallCta(result)) {
-                        appendLine("1. Tap Install/Open SmartThings to finish app-readiness on this phone.")
-                        appendLine("2. Tap Back to home if you want to return without opening SmartThings.")
-                    } else {
-                        appendLine("1. Tap Open home risk posture to review the latest local snapshot.")
-                        appendLine("2. Tap Back to home if you want to return without opening the snapshot.")
-                    }
-                    appendLine()
-                    appendLine("Technical details (optional)")
-                    appendLine("Setup status: $setupStateLabel")
-                    appendLine("Connector: $connectorLabel")
-                    appendLine("Owner profile: ${result.ownerRole.ifBlank { "owner" }}")
-                    appendLine("Health: ${result.healthStatus.ifBlank { getString(R.string.home_risk_setup_health_unknown) }}")
-                    appendLine("Mode: $readOnlyLabel")
-                    append("Scopes granted: ${result.scopeCount}")
-                }.trim()
-            }
-
             HomeRiskSetupStatus.ROLLOUT_DISABLED -> buildString {
                 appendLine("Home Risk setup is not enabled yet for this profile.")
                 appendLine()
@@ -3970,93 +4089,450 @@ class MainActivity : AppCompatActivity() {
                 append("Technical details (optional)\nConnector ID: ${result.connectorId.ifBlank { "smart_home" }}")
             }.trim()
 
-            HomeRiskSetupStatus.CONSENT_FAILED -> buildString {
-                appendLine("Home Risk setup could not finish local connector setup.")
+            HomeRiskSetupStatus.INSTALL_PROVIDER -> buildString {
+                val provider = result.selectedProvider
+                appendLine("Home Risk umbrella is waiting for provider install or app access.")
+                appendLine("This build keeps onboarding local. You still sign in and manage inventory inside the provider app.")
                 appendLine()
                 appendLine("What to do now")
-                appendLine("1. Retry setup and confirm the local connector prompts.")
-                appendLine("2. If retry fails, continue with regular scan and threat review for now.")
-                val detail = result.errorMessage.trim()
-                if (detail.isNotBlank()) {
-                    appendLine()
-                    appendLine("Technical details (optional)")
-                    append(detail)
-                }
+                appendLine("1. Tap Open provider to install or launch ${provider?.label ?: "the selected provider"}.")
+                appendLine("2. Return here once the provider app is available on this phone.")
+                appendLine("3. Choose provider if you want a different smart-home or smart-fob ecosystem.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Selected provider: ${provider?.label ?: "not selected"}")
+                appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
+                appendLine("Imported devices: ${result.importedDevices.size}")
+                append("Protected devices: ${result.protectedDevices.size}")
+            }.trim()
+
+            HomeRiskSetupStatus.AUTHORIZE_PROVIDER -> buildString {
+                val provider = result.selectedProvider
+                appendLine("Home Risk umbrella needs local provider authorization confirmation.")
+                appendLine("This build does not read live cloud sessions, so you confirm readiness after signing in inside the provider app.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Tap Open provider and sign in or finish provider linking.")
+                appendLine("2. Come back here and tap Mark provider ready.")
+                appendLine("3. Import devices after readiness is confirmed locally.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Selected provider: ${provider?.label ?: "not selected"}")
+                appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
+                appendLine("App status: ${homeRiskAppStatusLabel(result)}")
+                append("Protected devices: ${result.protectedDevices.size}")
+            }.trim()
+
+            HomeRiskSetupStatus.IMPORT_DEVICES -> buildString {
+                val provider = result.selectedProvider
+                appendLine("Home Risk umbrella is ready to import local devices.")
+                appendLine("Device import stays local in this build. DT Guardian does not pull live provider inventory yet.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Tap Import devices to add TVs, appliances, hubs, trackers, or smart fobs under ${provider?.label ?: "this provider"}.")
+                appendLine("2. Review the imported list and keep only the devices you want under Home Risk.")
+                appendLine("3. Choose protection after the import list looks right.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Selected provider: ${provider?.label ?: "not selected"}")
+                appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
+                append("Template devices available: ${provider?.deviceTemplates?.size ?: 0}")
+            }.trim()
+
+            HomeRiskSetupStatus.SELECT_PROTECTION -> buildString {
+                val provider = result.selectedProvider
+                appendLine("Home Risk umbrella has imported devices waiting for protection choices.")
+                appendLine("This step decides which devices are included in local scans and follow-up reviews.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Tap Select protection and choose the imported devices you want included in scans.")
+                appendLine("2. Keep only the high-value devices under protection if you want a tighter scope.")
+                appendLine("3. Scan now after the protected list looks correct.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Selected provider: ${provider?.label ?: "not selected"}")
+                appendLine("Imported devices: ${result.importedDevices.size}")
+                append("Protected devices: ${result.protectedDevices.size}")
+            }.trim()
+
+            HomeRiskSetupStatus.READY_TO_SCAN -> buildString {
+                val provider = result.selectedProvider
+                val readOnlyLabel = getString(
+                    if (result.readOnlyMode) {
+                        R.string.home_risk_setup_mode_read_only
+                    } else {
+                        R.string.home_risk_setup_mode_live
+                    }
+                )
+                appendLine("Home Risk umbrella is ready for a local scan.")
+                appendLine("This build uses local provider readiness, imported device lists, and read-only posture collection when available.")
+                appendLine()
+                appendLine("What to do now")
+                appendLine("1. Tap Scan now to refresh the local Home Risk snapshot.")
+                appendLine("2. Open home risk posture if you want to review the current snapshot before scanning again.")
+                appendLine("3. Choose provider if you want to switch ecosystems or smart-fob guidance.")
+                appendLine()
+                appendLine("Technical details (optional)")
+                appendLine("Selected provider: ${provider?.label ?: "not selected"}")
+                appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
+                appendLine("Health: ${result.healthStatus.ifBlank { getString(R.string.home_risk_setup_health_unknown) }}")
+                appendLine("Mode: $readOnlyLabel")
+                appendLine("Imported devices: ${result.importedDevices.size}")
+                append("Protected devices: ${result.protectedDevices.size}")
             }.trim()
         }
     }
 
-    private fun shouldOfferSmartThingsInstallCta(result: HomeRiskSetupResult): Boolean {
-        if (result.status != HomeRiskSetupStatus.READY) {
-            return false
+    private fun homeRiskProviderCategoryLabel(category: String): String {
+        return when (category.trim().lowercase(Locale.US)) {
+            "smart_fob" -> "Smart fob / digital key"
+            else -> "Smart home"
         }
-        val missingClient = result.healthLastError.equals("smart_home_app_not_installed", ignoreCase = true)
-        val smartThingsConnector = result.connectorId.contains("smartthings", ignoreCase = true) ||
-            result.connectorLabel.contains("smartthings", ignoreCase = true)
-        return missingClient && smartThingsConnector
     }
 
-    private fun openSmartThingsInstallOrApp() {
-        val packageNames = listOf(
-            "com.samsung.android.oneconnect",
-            "com.smartthings.android"
-        )
-        packageNames.firstNotNullOfOrNull { packageName ->
-            packageManager.getLaunchIntentForPackage(packageName)
-        }?.let { launchIntent ->
-            runCatching { startActivity(launchIntent) }
-                .onFailure { openSmartThingsInstallFallback() }
+    private fun homeRiskAppStatusLabel(result: HomeRiskSetupResult): String {
+        return if (result.providerStatuses.firstOrNull { it.selected }?.appInstalled == true) {
+            "installed"
+        } else {
+            "action needed"
+        }
+    }
+
+    private fun openHomeRiskProviderChooser(result: HomeRiskSetupResult) {
+        val statuses = result.providerStatuses
+        if (statuses.isEmpty()) {
             return
         }
-        openSmartThingsInstallFallback()
+        val options = statuses.map { status ->
+            buildString {
+                append(status.provider.label)
+                append(" - ")
+                append(homeRiskProviderCategoryLabel(status.provider.category))
+                append(" - ")
+                append(
+                    when {
+                        status.protectedDeviceCount > 0 -> "${status.protectedDeviceCount} protected"
+                        status.importedDeviceCount > 0 -> "${status.importedDeviceCount} imported"
+                        status.authorized -> "ready to import"
+                        status.appInstalled -> "app detected"
+                        else -> "install required"
+                    }
+                )
+            }
+        }.toTypedArray()
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_risk_provider_picker_title)
+            .setItems(options) { _, which ->
+                val selected = statuses[which].provider
+                HomeRiskUmbrellaStore.setSelectedProvider(this, result.ownerRole, selected.id)
+                appendHomeRiskUmbrellaEvent(
+                    eventType = "home_risk.provider.selected",
+                    provider = selected,
+                    ownerRole = result.ownerRole,
+                    outcome = "success",
+                    details = "category=${selected.category}"
+                )
+                refreshUiState()
+                openHomeRiskSetupFlow()
+            }
+            .setPositiveButton(android.R.string.cancel, null)
+            .show()
     }
 
-    private fun openSmartThingsInstallFallback() {
-        val intents = listOf(
-            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.samsung.android.oneconnect")),
-            Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("https://play.google.com/store/apps/details?id=com.samsung.android.oneconnect")
+    private fun openHomeRiskDeviceImportDialog(result: HomeRiskSetupResult) {
+        val provider = result.selectedProvider ?: return
+        val templates = provider.deviceTemplates.ifEmpty {
+            listOf(
+                HomeRiskUmbrellaDeviceTemplate(
+                    id = "${provider.id}_device",
+                    label = "${provider.label} device",
+                    deviceType = "device"
+                )
             )
-        )
-        for (intent in intents) {
-            val opened = runCatching {
-                startActivity(intent)
-                true
-            }.getOrElse { false }
-            if (opened) {
-                return
+        }
+        val selectedIds = result.importedDevices.map { it.deviceId }.toMutableSet()
+        val labels = templates.map { template ->
+            "${template.label} (${template.deviceType.replace('_', ' ')})"
+        }.toTypedArray()
+        val checks = templates.map { template ->
+            selectedIds.contains(homeRiskTemplateDeviceId(provider, template))
+        }.toBooleanArray()
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_risk_import_devices_title)
+            .setMultiChoiceItems(labels, checks) { _, which, isChecked ->
+                val template = templates[which]
+                val deviceId = homeRiskTemplateDeviceId(provider, template)
+                if (isChecked) {
+                    selectedIds += deviceId
+                } else {
+                    selectedIds -= deviceId
+                }
+            }
+            .setPositiveButton(R.string.home_risk_action_save_import) { _, _ ->
+                val chosenTemplates = templates.filter { template ->
+                    selectedIds.contains(homeRiskTemplateDeviceId(provider, template))
+                }
+                val imported = HomeRiskUmbrellaStore.replaceImportedDevices(
+                    context = this,
+                    ownerRole = result.ownerRole,
+                    provider = provider,
+                    templates = chosenTemplates
+                )
+                appendHomeRiskUmbrellaEvent(
+                    eventType = "home_risk.devices.imported",
+                    provider = provider,
+                    ownerRole = result.ownerRole,
+                    outcome = "success",
+                    details = "imported_count=${imported.size}"
+                )
+                refreshUiState()
+                openHomeRiskSetupFlow()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openHomeRiskProtectionDialog(result: HomeRiskSetupResult) {
+        val provider = result.selectedProvider ?: return
+        if (result.importedDevices.isEmpty()) {
+            return
+        }
+        val selectedIds = result.protectedDevices.map { it.deviceId }.toMutableSet()
+        val labels = result.importedDevices.map { device ->
+            "${device.label} (${device.deviceType.replace('_', ' ')})"
+        }.toTypedArray()
+        val checks = result.importedDevices.map { device ->
+            selectedIds.contains(device.deviceId)
+        }.toBooleanArray()
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_risk_select_protection_title)
+            .setMultiChoiceItems(labels, checks) { _, which, isChecked ->
+                val deviceId = result.importedDevices[which].deviceId
+                if (isChecked) {
+                    selectedIds += deviceId
+                } else {
+                    selectedIds -= deviceId
+                }
+            }
+            .setPositiveButton(R.string.home_risk_action_save_protection) { _, _ ->
+                val updated = HomeRiskUmbrellaStore.updateProtectionSelection(
+                    context = this,
+                    ownerRole = result.ownerRole,
+                    provider = provider,
+                    protectedDeviceIds = selectedIds
+                )
+                appendHomeRiskUmbrellaEvent(
+                    eventType = "home_risk.protection.updated",
+                    provider = provider,
+                    ownerRole = result.ownerRole,
+                    outcome = "success",
+                    details = "protected_count=${updated.count { it.protectionEnabled }}"
+                )
+                refreshUiState()
+                openHomeRiskSetupFlow()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun markHomeRiskProviderReady(result: HomeRiskSetupResult) {
+        val provider = result.selectedProvider ?: return
+        if (homeIntroAnimating) {
+            return
+        }
+        setBusy(true, getString(R.string.home_risk_setup_loading))
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.Default) {
+                    val state = IntegrationMeshController.snapshot(this@MainActivity)
+                    if (provider.connectorId.equals(state.smartHomeConnectorId, ignoreCase = true)) {
+                        val connector = IntegrationMeshController.getActiveSmartHomeConnector(this@MainActivity)
+                        val activeConsent = IntegrationMeshAuditStore.latestActiveConsent(
+                            context = this@MainActivity,
+                            connectorId = state.smartHomeConnectorId,
+                            ownerId = state.ownerId
+                        )
+                        if (connector != null && activeConsent == null) {
+                            connector.ensureConsent(this@MainActivity, state.ownerRole)
+                        }
+                    }
+                    HomeRiskUmbrellaStore.markProviderAuthorized(
+                        context = this@MainActivity,
+                        ownerRole = result.ownerRole,
+                        provider = provider,
+                        authorizationMethod = "local_confirmed"
+                    )
+                }
+                appendHomeRiskUmbrellaEvent(
+                    eventType = "home_risk.provider.authorized",
+                    provider = provider,
+                    ownerRole = result.ownerRole,
+                    outcome = "success",
+                    details = "method=local_confirmed"
+                )
+                refreshUiState()
+                openHomeRiskSetupFlow()
+            } finally {
+                if (!isFinishing && !isDestroyed) {
+                    setBusy(false)
+                }
             }
         }
-        binding.subStatusLabel.text = getString(R.string.home_risk_setup_smartthings_open_failed)
+    }
+
+    private fun launchHomeRiskProvider(provider: HomeRiskUmbrellaProvider, preferSetup: Boolean) {
+        val ownerRole = IntegrationMeshController.ownerRole(this)
+        val launchResult = if (preferSetup) {
+            HomeRiskUmbrellaLauncher.openSetup(this, provider)
+        } else {
+            HomeRiskUmbrellaLauncher.openProvider(this, provider)
+        }
+        if (launchResult.opened) {
+            HomeRiskUmbrellaStore.markProviderOpened(this, ownerRole, provider)
+        }
+        appendHomeRiskUmbrellaEvent(
+            eventType = "home_risk.provider.opened",
+            provider = provider,
+            ownerRole = ownerRole,
+            outcome = if (launchResult.opened) "success" else "failed",
+            details = "mode=${launchResult.mode};used_setup=${launchResult.usedSetup};used_fallback=${launchResult.usedFallback}"
+        )
+        binding.subStatusLabel.text = if (launchResult.opened) {
+            "${provider.label} opened for Home Risk."
+        } else {
+            "${provider.label} could not be opened from Home Risk."
+        }
+    }
+
+    private fun runHomeRiskScanNow(result: HomeRiskSetupResult) {
+        val provider = result.selectedProvider ?: return
+        HomeRiskUmbrellaStore.markScanRequested(this, result.ownerRole, provider)
+        appendHomeRiskUmbrellaEvent(
+            eventType = "home_risk.scan.requested",
+            provider = provider,
+            ownerRole = result.ownerRole,
+            outcome = "success",
+            details = "protected_count=${result.protectedDevices.size}"
+        )
+        refreshUiState()
+        openHomeRiskDialog()
+    }
+
+    private fun appendHomeRiskUmbrellaEvent(
+        eventType: String,
+        provider: HomeRiskUmbrellaProvider,
+        ownerRole: String,
+        outcome: String,
+        details: String
+    ) {
+        val ownerId = IntegrationMeshController.ownerId(this)
+        val recordedAt = System.currentTimeMillis()
+        IntegrationMeshAuditStore.appendConnectorEvent(
+            context = this,
+            event = ConnectorAuditEvent(
+                schemaVersion = INTEGRATION_MESH_SCHEMA_VERSION,
+                eventId = java.util.UUID.randomUUID().toString(),
+                eventType = eventType,
+                recordType = CONNECTOR_AUDIT_EVENT_TYPE,
+                connectorId = provider.connectorId.ifBlank { provider.id },
+                connectorType = provider.category.ifBlank { "smart_device" },
+                ownerRole = ownerRole,
+                ownerId = ownerId,
+                actorRole = ownerRole,
+                actorId = ownerId,
+                recordedAtEpochMs = recordedAt,
+                recordedAtIso = toIsoUtc(recordedAt),
+                outcome = outcome,
+                consentArtifactId = "",
+                sourceModule = "home_risk_umbrella",
+                details = details,
+                detailsHash = createHash("${provider.id}|$eventType|$outcome|$details|$recordedAt"),
+                riskLevel = if (outcome.equals("success", ignoreCase = true)) "low" else "medium"
+            )
+        )
+    }
+
+    private fun homeRiskTemplateDeviceId(
+        provider: HomeRiskUmbrellaProvider,
+        template: HomeRiskUmbrellaDeviceTemplate
+    ): String {
+        return "${provider.id.trim().lowercase(Locale.US)}:${template.id.trim().lowercase(Locale.US)}"
     }
 
     private suspend fun resolveHomeRiskLookup(): HomeRiskLookupResult {
-        val smartHomeEnabled = IntegrationMeshController.isModuleEnabled(
-            context = this,
-            module = IntegrationMeshModule.SMART_HOME_CONNECTOR
-        )
-        if (!smartHomeEnabled) {
-            return HomeRiskLookupResult(errorRes = R.string.home_risk_not_configured)
+        val setupResult = resolveHomeRiskSetup()
+        when (setupResult.status) {
+            HomeRiskSetupStatus.ROLLOUT_DISABLED ->
+                return HomeRiskLookupResult(errorRes = R.string.home_risk_not_configured)
+            HomeRiskSetupStatus.CONNECTOR_UNAVAILABLE ->
+                return HomeRiskLookupResult(errorRes = R.string.home_risk_connector_missing)
+            HomeRiskSetupStatus.INSTALL_PROVIDER,
+            HomeRiskSetupStatus.AUTHORIZE_PROVIDER,
+            HomeRiskSetupStatus.IMPORT_DEVICES,
+            HomeRiskSetupStatus.SELECT_PROTECTION ->
+                return HomeRiskLookupResult(errorRes = R.string.home_risk_consent_missing)
+            HomeRiskSetupStatus.READY_TO_SCAN -> Unit
         }
 
+        val selectedProvider = setupResult.selectedProvider
+            ?: return HomeRiskLookupResult(errorRes = R.string.home_risk_connector_missing)
         val state = IntegrationMeshController.snapshot(this)
         val connector = IntegrationMeshController.getActiveSmartHomeConnector(this)
-            ?: return HomeRiskLookupResult(errorRes = R.string.home_risk_connector_missing)
-
-        val consent = IntegrationMeshAuditStore.latestActiveConsent(
-            context = this,
-            connectorId = state.smartHomeConnectorId,
-            ownerId = state.ownerId
-        ) ?: return HomeRiskLookupResult(errorRes = R.string.home_risk_consent_missing)
+        val consent = if (selectedProvider.connectorId.equals(state.smartHomeConnectorId, ignoreCase = true)) {
+            IntegrationMeshAuditStore.latestActiveConsent(
+                context = this,
+                connectorId = state.smartHomeConnectorId,
+                ownerId = state.ownerId
+            )
+        } else {
+            null
+        }
 
         return runCatching {
-            HomeRiskLookupResult(
-                posture = connector.collectPosture(this, consent),
-                connectorLabel = HomeRiskCopy.connectorDisplayLabel(
-                    connectorLabel = connector.connectorLabel,
-                    connectorId = connector.connectorId
+            val basePosture = if (connector != null &&
+                consent != null &&
+                connector.connectorId.equals(selectedProvider.connectorId, ignoreCase = true)
+            ) {
+                val connectorPosture = connector.collectPosture(this, consent)
+                connectorPosture.copy(
+                    deviceCount = maxOf(
+                        connectorPosture.deviceCount,
+                        setupResult.importedDevices.size,
+                        setupResult.protectedDevices.size
+                    ),
+                    findings = (
+                        connectorPosture.findings +
+                            buildHomeRiskOverlayFindings(
+                                provider = selectedProvider,
+                                importedDevices = setupResult.importedDevices,
+                                protectedDevices = setupResult.protectedDevices,
+                                appInstalled = setupResult.providerStatuses.firstOrNull { it.selected }?.appInstalled == true,
+                                authorized = true
+                            )
+                        ).distinct()
                 )
+            } else {
+                buildLocalHomeRiskPosture(
+                    ownerRole = setupResult.ownerRole,
+                    provider = selectedProvider,
+                    importedDevices = setupResult.importedDevices,
+                    protectedDevices = setupResult.protectedDevices,
+                    appInstalled = setupResult.providerStatuses.firstOrNull { it.selected }?.appInstalled == true,
+                    authorized = true
+                )
+            }
+            HomeRiskLookupResult(
+                posture = basePosture,
+                connectorLabel = HomeRiskCopy.connectorDisplayLabel(
+                    connectorLabel = selectedProvider.label,
+                    connectorId = selectedProvider.connectorId
+                ),
+                selectedProvider = selectedProvider,
+                importedDevices = setupResult.importedDevices,
+                protectedDevices = setupResult.protectedDevices
             )
         }.getOrElse { ex ->
             HomeRiskLookupResult(
@@ -4066,11 +4542,77 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildLocalHomeRiskPosture(
+        ownerRole: String,
+        provider: HomeRiskUmbrellaProvider,
+        importedDevices: List<HomeRiskUmbrellaProtectedDevice>,
+        protectedDevices: List<HomeRiskUmbrellaProtectedDevice>,
+        appInstalled: Boolean,
+        authorized: Boolean
+    ): SmartHomePostureSnapshot {
+        val findings = buildHomeRiskOverlayFindings(
+            provider = provider,
+            importedDevices = importedDevices,
+            protectedDevices = protectedDevices,
+            appInstalled = appInstalled,
+            authorized = authorized
+        )
+        val riskScore = when {
+            !authorized -> 62
+            protectedDevices.isEmpty() -> 38
+            else -> 14
+        }.coerceIn(0, 100)
+        return SmartHomePostureSnapshot(
+            connectorId = provider.connectorId.ifBlank { provider.id },
+            ownerRole = ownerRole,
+            deviceCount = maxOf(importedDevices.size, protectedDevices.size),
+            riskScore = riskScore,
+            findings = findings,
+            snapshotAtEpochMs = System.currentTimeMillis()
+        )
+    }
+
+    private fun buildHomeRiskOverlayFindings(
+        provider: HomeRiskUmbrellaProvider,
+        importedDevices: List<HomeRiskUmbrellaProtectedDevice>,
+        protectedDevices: List<HomeRiskUmbrellaProtectedDevice>,
+        appInstalled: Boolean,
+        authorized: Boolean
+    ): List<String> {
+        val findings = mutableListOf("connector_read_only_mode", "local_provider_snapshot")
+        if (appInstalled) {
+            findings += "provider_app_detected"
+        } else {
+            findings += "provider_app_missing"
+        }
+        if (authorized) {
+            findings += "provider_authorized_locally"
+        } else {
+            findings += "authorization_pending_provider"
+        }
+        if (provider.category.equals("smart_fob", ignoreCase = true)) {
+            findings += "smart_fob_provider_selected"
+        }
+        if (importedDevices.isEmpty()) {
+            findings += "no_devices_seen_in_connector_snapshot"
+        } else {
+            findings += "devices_imported_locally"
+        }
+        if (protectedDevices.isEmpty()) {
+            findings += "no_protected_devices_selected"
+        } else {
+            findings += "protected_devices_selected"
+        }
+        return findings.distinct()
+    }
+
     private fun buildHomeRiskDialogMessage(result: HomeRiskLookupResult): String {
         if (result.posture != null) {
             return HomeRiskCopy.buildPostureMessage(
                 posture = result.posture,
-                connectorLabel = result.connectorLabel
+                connectorLabel = result.connectorLabel,
+                importedDeviceLabels = result.importedDevices.map { it.label },
+                protectedDeviceLabels = result.protectedDevices.map { it.label }
             )
         }
 
@@ -4084,7 +4626,7 @@ class MainActivity : AppCompatActivity() {
             )
             appendLine()
             appendLine("What to do now")
-            appendLine("1. Tap Home Risk setup to finish SmartThings-first local readiness.")
+            appendLine("1. Tap Home Risk setup to finish the local smart-device umbrella flow.")
             appendLine("2. Tap Back to home if you want to keep using regular scans for now.")
             val detail = result.errorMessage.trim()
             if (detail.isNotBlank()) {
@@ -4107,7 +4649,8 @@ class MainActivity : AppCompatActivity() {
             appendLine("Fallback snapshot (until Home Risk setup is complete)")
             appendLine("- Wi-Fi posture: $wifiState")
             appendLine("- Threat alerts: high $high | medium $medium")
-            append("- Credential actions waiting: $pendingQueue")
+            appendLine("- Credential actions waiting: $pendingQueue")
+            append("- Use Home Risk setup to choose a provider, import devices, and select protection locally.")
         }
     }
 

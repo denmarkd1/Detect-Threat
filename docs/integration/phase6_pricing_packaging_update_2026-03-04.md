@@ -55,7 +55,7 @@ Ensure these surfaces use the same package language before upload:
 
 Retail-safe wording note:
 
-- Do not market live SmartThings monitoring, Google Home support, or cloud-ingested home inventory until partner OAuth posture ingestion exists in the shipped build.
+- Do not market live SmartThings monitoring, live Google Home cloud telemetry, direct smart-fob control, or cloud-ingested home inventory until partner OAuth posture ingestion exists in the shipped build.
 
 ## Operator note
 

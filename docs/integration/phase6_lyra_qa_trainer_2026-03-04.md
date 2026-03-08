@@ -83,8 +83,8 @@ Exit code:
    - Use `Back to scan results` and confirm return path is clean.
 4. Manually verify Home Risk wording honesty:
    - Open Home Risk setup and Home Risk posture from the dashboard.
-   - Confirm the UI describes SmartThings-first local readiness, local snapshot, or read-only behavior.
-   - Confirm no screen claims live SmartThings cloud telemetry or active Google Home support.
+   - Confirm the UI describes a local smart-device umbrella, local provider readiness, local snapshot, or read-only behavior.
+   - Confirm no screen claims live SmartThings cloud telemetry, live Google Home cloud telemetry, or direct smart-fob control.
 5. Fix any failed checks and re-run until clean.
 6. Attach the latest markdown report to release evidence.
 
@@ -93,7 +93,8 @@ Exit code:
 Lyra now treats retail smart-home readiness as a release gate:
 
 - If `SmartThingsConnector.kt` is still simulation-backed (local consent artifact, installed-app health check, synthetic device count), Lyra requires the build to stay explicitly scoped to SmartThings-first local readiness. Retail/cloud claims, rollout drift, or stale disclosure copy will fail the check.
-- If `google_home` appears in the active smart-home rollout config without a real connector implementation, Lyra will fail.
+- If local Home Risk copy drifts beyond provider selection, local readiness confirmation, imported-device selection, or read-only/local snapshot wording, Lyra will fail.
+- If `google_home` appears in active connector rollout IDs or is presented as live cloud telemetry without a real connector implementation, Lyra will fail.
 - If Google Wallet setup guidance points to a stale/non-car-key support page, Lyra will fail.
 - If roadmap/audit docs overstate Phase 2 or Phase 5 as retail-pass, Lyra will fail.
 

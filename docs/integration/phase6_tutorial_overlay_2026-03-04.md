@@ -58,6 +58,13 @@ Coverage includes these destination windows:
 
 Tutorial guidance is now aligned to the latest remediation UX:
 
+0. Samsung-first limitation note
+   - On Samsung One UI devices, the tutorial now starts with a dedicated note before the normal widget walkthrough.
+   - It explains that protected `App info` / `Permissions` screens can hide the floating guide even when
+     `Appear on top` is enabled.
+   - It also tells users to keep following the exact tap list and use the pinned incident-guide notification if the
+     overlay disappears.
+
 1. Dedicated page split between scan results and incident assistant
    - `Start incident` from scan results now opens Incident assistant on its own screen.
    - Scan summary/details and Incident assistant no longer share one visual scroll surface.
@@ -120,6 +127,10 @@ Tutorial guidance is now aligned to the latest remediation UX:
      the app re-opens manual dialog so user can tap `Open with overlay guide` again.
    - On Samsung/MIUI, confirm manual dialog warns that some native security/settings screens can temporarily hide overlays.
      Validate user can still continue via exact tap targets even when overlay is hidden.
+   - On Samsung One UI, confirm `Open with overlay guide` now shows an extra warning before launch and that the
+     current tap target is pinned in an ongoing notification while the guide is active (when notifications are allowed).
+   - On Samsung One UI, confirm the tutorial begins with a dedicated note about the overlay limitation and
+     notification fallback before the standard walkthrough steps.
    - Confirm compact overlay guide shows one current target at a time with:
      `Previous`, `Done this step`, and `Finish guide`.
    - Confirm compact overlay advances step-by-step and closes cleanly at completion.
@@ -134,18 +145,19 @@ Tutorial guidance is now aligned to the latest remediation UX:
 
 Tutorial guidance now reflects the current Home Risk implementation scope:
 
-1. SmartThings-first local readiness only
+1. Local smart-device umbrella only
    - Home Risk should be described as a read-only local readiness/snapshot layer in this build.
-   - It should not be described as live SmartThings cloud telemetry or active Google Home support.
+   - It should not be described as live SmartThings cloud telemetry, live Google Home cloud telemetry, or retail smart-home inventory sync.
 
 2. Setup wording expectations
-   - Setup flow should describe local connector readiness rather than completed partner OAuth authorization.
-   - SmartThings install/open CTA should be framed as improving readiness on-device.
+   - Setup flow should describe local provider readiness, provider selection, local authorization confirmation, device import, and protection selection.
+   - Provider CTAs should be framed as opening the selected provider app or setup path on-device.
+   - Smart-fob and digital-key providers may appear under the same umbrella as local advisory/setup surfaces, not as direct key control.
 
 3. QA checks for this wording
-   - Confirm Home Risk tutorial copy says `SmartThings-first local readiness` or equivalent local/read-only wording.
-   - Confirm Home Risk dialogs refer to `local snapshot`, `readiness`, or `read-only` behavior.
-   - Confirm no tutorial surface claims Google Home is currently supported in-app.
+   - Confirm Home Risk tutorial copy says `local smart-device umbrella`, `local snapshot`, `read-only`, or equivalent wording.
+   - Confirm Home Risk dialogs refer to choosing a provider, importing devices locally, selecting protection, or running a local scan.
+   - Confirm no tutorial surface claims retail connected-home cloud telemetry or direct smart-fob control.
 
 ## 2026-03-07 update: Canonical family-role language
 

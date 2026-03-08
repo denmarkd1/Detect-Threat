@@ -519,13 +519,119 @@
     "connectors": {
       "smart_home": {
         "allowed_connector_ids": [
-          "smartthings"
+          "smartthings",
+          "google_home",
+          "home_assistant"
         ],
         "read_only": true,
         "max_cached_devices": 250,
         "default_scope_set": [
           "home:read",
           "lock:read"
+        ],
+        "providers": [
+          {
+            "id": "smartthings",
+            "label": "Samsung SmartThings",
+            "connector_id": "smartthings",
+            "category": "smart_home",
+            "package_names": [
+              "com.samsung.android.oneconnect",
+              "com.smartthings.android"
+            ],
+            "fallback_uri": "https://play.google.com/store/apps/details?id=com.samsung.android.oneconnect",
+            "setup_uri": "https://www.samsung.com/us/support/owners/app/smartthings",
+            "device_templates": [
+              {
+                "id": "samsung_tv",
+                "label": "Samsung TV",
+                "device_type": "tv"
+              },
+              {
+                "id": "samsung_refrigerator",
+                "label": "Samsung Refrigerator",
+                "device_type": "appliance"
+              },
+              {
+                "id": "smart_hub",
+                "label": "Smart home hub",
+                "device_type": "hub"
+              },
+              {
+                "id": "smart_tag",
+                "label": "Smart tag or tracker",
+                "device_type": "tracker"
+              }
+            ]
+          },
+          {
+            "id": "google_home",
+            "label": "Google Home",
+            "connector_id": "google_home",
+            "category": "smart_home",
+            "package_names": [
+              "com.google.android.apps.chromecast.app",
+              "com.google.android.apps.nest"
+            ],
+            "deep_link_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
+            "fallback_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
+            "setup_uri": "https://support.google.com/googlenest/answer/7073477?hl=en",
+            "device_templates": [
+              {
+                "id": "google_tv",
+                "label": "Google TV or Chromecast",
+                "device_type": "tv"
+              },
+              {
+                "id": "nest_display",
+                "label": "Nest display",
+                "device_type": "display"
+              },
+              {
+                "id": "nest_thermostat",
+                "label": "Nest thermostat",
+                "device_type": "thermostat"
+              },
+              {
+                "id": "nest_camera",
+                "label": "Nest camera",
+                "device_type": "camera"
+              }
+            ]
+          },
+          {
+            "id": "home_assistant",
+            "label": "Home Assistant",
+            "connector_id": "home_assistant",
+            "category": "smart_home",
+            "package_names": [
+              "io.homeassistant.companion.android"
+            ],
+            "fallback_uri": "https://play.google.com/store/apps/details?id=io.homeassistant.companion.android",
+            "setup_uri": "https://www.home-assistant.io/integrations/mobile_app/",
+            "device_templates": [
+              {
+                "id": "ha_hub",
+                "label": "Home Assistant hub",
+                "device_type": "hub"
+              },
+              {
+                "id": "ha_lock",
+                "label": "Connected lock",
+                "device_type": "lock"
+              },
+              {
+                "id": "ha_sensor",
+                "label": "Security sensor",
+                "device_type": "sensor"
+              },
+              {
+                "id": "ha_camera",
+                "label": "Connected camera",
+                "device_type": "camera"
+              }
+            ]
+          }
         ]
       },
       "vpn_brokers": {
