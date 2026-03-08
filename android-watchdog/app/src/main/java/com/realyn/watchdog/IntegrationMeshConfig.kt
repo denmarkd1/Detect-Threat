@@ -141,7 +141,12 @@ data class IntegrationMeshSmartHomeProvider(
     val deepLinkUri: String,
     val fallbackUri: String,
     val setupUri: String,
-    val deviceTemplates: List<IntegrationMeshSmartDeviceTemplate>
+    val deviceTemplates: List<IntegrationMeshSmartDeviceTemplate>,
+    val authMode: String = "local_only",
+    val inventoryMode: String = "local_catalog",
+    val apiBaseUrl: String = "",
+    val requiresInstanceUrl: Boolean = false,
+    val supportNotice: String = ""
 )
 
 data class IntegrationMeshVpnProvider(
@@ -242,7 +247,12 @@ object IntegrationMeshConfigStore {
                     label = "Smart tag or tracker",
                     deviceType = "tracker"
                 )
-            )
+            ),
+            authMode = "token",
+            inventoryMode = "smartthings_rest",
+            apiBaseUrl = "https://api.smartthings.com/v1",
+            requiresInstanceUrl = false,
+            supportNotice = "Use a SmartThings personal access token for live inventory in this build. SmartThings Home API remains preview-gated and OAuth-In SmartApp flows require a hosted backend."
         ),
         IntegrationMeshSmartHomeProvider(
             id = "google_home",
@@ -274,7 +284,12 @@ object IntegrationMeshConfigStore {
                     label = "Nest camera",
                     deviceType = "camera"
                 )
-            )
+            ),
+            authMode = "sdk",
+            inventoryMode = "google_home_sdk",
+            apiBaseUrl = "",
+            requiresInstanceUrl = false,
+            supportNotice = "Google Home live access requires the Google Home Android SDK, OAuth setup, and internal-user registration in Google Home Developer Console. That platform path is not bundled in this workspace build."
         ),
         IntegrationMeshSmartHomeProvider(
             id = "home_assistant",
@@ -306,7 +321,12 @@ object IntegrationMeshConfigStore {
                     label = "Connected camera",
                     deviceType = "camera"
                 )
-            )
+            ),
+            authMode = "token",
+            inventoryMode = "home_assistant_rest",
+            apiBaseUrl = "",
+            requiresInstanceUrl = true,
+            supportNotice = "Use your Home Assistant base URL and a long-lived access token from the instance profile page for live inventory sync."
         )
     )
 
@@ -707,6 +727,31 @@ object IntegrationMeshConfigStore {
             item.optJSONArray("device_templates"),
             emptyList()
         )
+        val authMode = normalizeIdentifier(
+            firstNonBlank(
+                item.optString("auth_mode", ""),
+                item.optString("authMode", ""),
+                "local_only"
+            )
+        ).ifBlank { "local_only" }
+        val inventoryMode = normalizeIdentifier(
+            firstNonBlank(
+                item.optString("inventory_mode", ""),
+                item.optString("inventoryMode", ""),
+                if (authMode == "token") "remote" else "local_only"
+            )
+        ).ifBlank { "local_only" }
+        val apiBaseUrl = parseUri(
+            firstNonBlank(
+                item.optString("api_base_url", ""),
+                item.optString("apiBaseUrl", "")
+            )
+        )
+        val requiresInstanceUrl = item.optBoolean("requires_instance_url", item.optBoolean("requiresInstanceUrl", false))
+        val supportNotice = item.optString("support_notice", item.optString("supportNotice", ""))
+            .trim()
+            .replace("\n", " ")
+            .replace("\r", " ")
 
         return IntegrationMeshSmartHomeProvider(
             id = id,
@@ -717,7 +762,12 @@ object IntegrationMeshConfigStore {
             deepLinkUri = deepLinkUri,
             fallbackUri = fallbackUri,
             setupUri = setupUri,
-            deviceTemplates = deviceTemplates
+            deviceTemplates = deviceTemplates,
+            authMode = authMode,
+            inventoryMode = inventoryMode,
+            apiBaseUrl = apiBaseUrl,
+            requiresInstanceUrl = requiresInstanceUrl,
+            supportNotice = supportNotice.take(240)
         )
     }
 

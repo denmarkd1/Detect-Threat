@@ -38,7 +38,7 @@ Source of truth: `config/workspace_settings.json` (`pricing` block).
 ## Top-feature marketing pillars (launch)
 
 - Local-first credential defense with owner-aware triage order.
-- SmartThings-first Home Risk readiness layer with local audit timeline.
+- Smart-home protection umbrella with live SmartThings/Home Assistant inventory sync and local audit timeline.
 - VPN broker status guardrails for high-risk account classes.
 - Digital key guardrails with integrity + guardian checkpoints.
 - Unified non-secret evidence export and KPI telemetry.
@@ -55,7 +55,7 @@ Ensure these surfaces use the same package language before upload:
 
 Retail-safe wording note:
 
-- Do not market live SmartThings monitoring, live Google Home cloud telemetry, direct smart-fob control, or cloud-ingested home inventory until partner OAuth posture ingestion exists in the shipped build.
+- Do not market universal live smart-home monitoring, live Google Home cloud telemetry, direct smart-fob control, or provider inventory sync that is not shipped in the current build.
 
 ## Operator note
 

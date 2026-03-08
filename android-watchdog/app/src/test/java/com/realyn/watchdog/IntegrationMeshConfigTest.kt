@@ -62,5 +62,22 @@ class IntegrationMeshConfigTest {
         val provider = config.connectors.smartHome.providers.first { it.id == "smartthings" }
         assertEquals("smartthings", provider.id)
         assertEquals("Samsung TV", provider.deviceTemplates.first().label)
+        assertEquals("token", provider.authMode)
+        assertEquals("smartthings_rest", provider.inventoryMode)
+    }
+
+    @Test
+    fun smartHomeProviders_exposeLiveInventoryMetadataHonesty() {
+        val config = IntegrationMeshConfigStore.parse(null)
+
+        val homeAssistant = config.connectors.smartHome.providers.first { it.id == "home_assistant" }
+        assertEquals("token", homeAssistant.authMode)
+        assertEquals("home_assistant_rest", homeAssistant.inventoryMode)
+        assertTrue(homeAssistant.requiresInstanceUrl)
+
+        val googleHome = config.connectors.smartHome.providers.first { it.id == "google_home" }
+        assertEquals("sdk", googleHome.authMode)
+        assertEquals("google_home_sdk", googleHome.inventoryMode)
+        assertTrue(googleHome.supportNotice.contains("not bundled", ignoreCase = true))
     }
 }

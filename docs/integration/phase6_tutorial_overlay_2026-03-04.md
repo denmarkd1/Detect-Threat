@@ -141,23 +141,24 @@ Tutorial guidance is now aligned to the latest remediation UX:
    - Confirm section toggles open/close correctly in both incident assistant and report card.
    - Confirm the dedicated `Incident assistant screen` tutorial step appears in sequence.
 
-## 2026-03-07 update: Home Risk wording revalidation
+## 2026-03-08 update: Home Risk wording revalidation
 
 Tutorial guidance now reflects the current Home Risk implementation scope:
 
-1. Local smart-device umbrella only
-   - Home Risk should be described as a read-only local readiness/snapshot layer in this build.
-   - It should not be described as live SmartThings cloud telemetry, live Google Home cloud telemetry, or retail smart-home inventory sync.
+1. Mixed live/local smart-device umbrella
+   - Home Risk should be described as a posture snapshot layer that can sync live inventory for supported providers.
+   - SmartThings and Home Assistant can use locally stored provider tokens for live inventory sync in this build.
+   - Google Home and smart-fob providers remain non-live advisory/setup surfaces in this build.
 
 2. Setup wording expectations
-   - Setup flow should describe local provider readiness, provider selection, local authorization confirmation, device import, and protection selection.
-   - Provider CTAs should be framed as opening the selected provider app or setup path on-device.
+   - Setup flow should describe provider selection, token-based connection where supported, device import, and protection selection.
+   - Provider CTAs should be framed as connecting the provider or opening the selected provider app/setup path on-device.
    - Smart-fob and digital-key providers may appear under the same umbrella as local advisory/setup surfaces, not as direct key control.
 
 3. QA checks for this wording
-   - Confirm Home Risk tutorial copy says `local smart-device umbrella`, `local snapshot`, `read-only`, or equivalent wording.
-   - Confirm Home Risk dialogs refer to choosing a provider, importing devices locally, selecting protection, or running a local scan.
-   - Confirm no tutorial surface claims retail connected-home cloud telemetry or direct smart-fob control.
+   - Confirm Home Risk tutorial copy says `live inventory sync for supported providers`, `snapshot`, or equivalent mixed-scope wording.
+   - Confirm Home Risk dialogs refer to choosing a provider, connecting a provider token where supported, importing devices, selecting protection, or running a scan.
+   - Confirm no tutorial surface claims live Google Home cloud telemetry or direct smart-fob control.
 
 ## 2026-03-07 update: Canonical family-role language
 

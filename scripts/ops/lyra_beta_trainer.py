@@ -59,8 +59,8 @@ REQUIRED_ROADMAP_REVALIDATION_MARKERS = (
     "## 2A) 2026-03-07 competitor and implementation revalidation",
     "| Phase 2 | PARTIAL |",
     "| Phase 5 | PARTIAL |",
-    "| Phase 6 | BLOCKED |",
-    "local smart-device umbrella",
+    "| Phase 6 | PARTIAL |",
+    "mixed live/local scope",
 )
 REQUIRED_PHASE1_5_AUDIT_ROWS = {
     "| Phase 1 - Architecture and data model |": "PASS",
@@ -79,6 +79,7 @@ COMPETITOR_GAP_DOC_PATH = ROOT_DIR / "docs" / "integration" / "competitor_gap_an
 PYTHON_DEFAULT_CONFIG_PATH = ROOT_DIR / "src" / "credential_defense" / "config.py"
 INTEGRATION_MESH_CONFIG_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "IntegrationMeshConfig.kt"
 SMARTTHINGS_CONNECTOR_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "SmartThingsConnector.kt"
+HOME_RISK_LIVE_PROVIDER_BROKER_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "HomeRiskLiveProviderBroker.kt"
 MAIN_ACTIVITY_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "MainActivity.kt"
 STRINGS_PATH = ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml"
 TUTORIAL_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay_2026-03-04.md"
@@ -98,26 +99,36 @@ SMARTTHINGS_SIMULATION_MARKERS = (
 )
 INTEGRATION_MESH_WORDING_RULES = {
     STRINGS_PATH: [
-        "choose a provider, import devices, and select protection locally",
-        "read-only local snapshot and protected-device list",
+        "connect live inventory where supported",
+        "current posture snapshot and protected-device list",
     ],
     MAIN_ACTIVITY_PATH: [
-        "local provider readiness, imported device lists, and read-only posture collection",
-        "local smart-device umbrella flow",
+        "Home Risk can connect to live inventory for this provider.",
+        "Supported providers can use live inventory sync, while unsupported providers stay on local advisory/setup mode.",
+        "connect live inventory where supported",
     ],
     TUTORIAL_DOC_PATH: [
-        "local smart-device umbrella",
+        "Mixed live/local smart-device umbrella",
+        "live inventory sync for supported providers",
+        "Google Home and smart-fob providers remain non-live",
     ],
     POLICY_DISCLOSURE_DOC_PATH: [
-        "Home Risk is limited to local provider readiness",
+        "Home Risk supports live SmartThings and Home Assistant inventory sync",
         "| Smart-home connectors |",
-        "| PARTIAL |",
+        "| PASS |",
     ],
     PRICING_PACKAGING_DOC_PATH: [
+        "live SmartThings/Home Assistant inventory sync",
         "live Google Home cloud telemetry",
-        "cloud-ingested home inventory",
+        "direct smart-fob control",
     ],
 }
+LIVE_PROVIDER_BROKER_MARKERS = (
+    "connectWithToken(",
+    "fetchInventory(",
+    "\"smartthings_rest\"",
+    "\"home_assistant_rest\"",
+)
 
 
 def _safe_read_text(path: Path) -> str:
@@ -755,6 +766,13 @@ class QaRunner:
                 )
             else:
                 notes.append("SmartThingsConnector simulation markers are no longer fully present.")
+
+        if not HOME_RISK_LIVE_PROVIDER_BROKER_PATH.exists():
+            errors.append(f"Missing live provider broker source: {HOME_RISK_LIVE_PROVIDER_BROKER_PATH}")
+        else:
+            broker_payload = _safe_read_text(HOME_RISK_LIVE_PROVIDER_BROKER_PATH)
+            for token in _missing_required_tokens(broker_payload, list(LIVE_PROVIDER_BROKER_MARKERS)):
+                errors.append(f"Required live-provider marker missing from {HOME_RISK_LIVE_PROVIDER_BROKER_PATH}: {token}")
 
         for path, required_tokens in INTEGRATION_MESH_WORDING_RULES.items():
             if not path.exists():

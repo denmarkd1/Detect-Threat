@@ -47,7 +47,7 @@ class SmartThingsConnector(
             expiresAtEpochMs = now + CONSENT_TTL_MS,
             revokedAtEpochMs = 0L,
             status = "active",
-            proofHash = createHash("$connectorId|$ownerId|smart_home|$now|smartthings"),
+            proofHash = createHash("$connectorId|$ownerId|smart_home|$now|provider_auth"),
             grantedBy = normalizedOwnerRole,
             appVersion = appVersion(context),
             consentScopes = requiredScopes,
@@ -102,8 +102,40 @@ class SmartThingsConnector(
         }
 
         val isClientInstalled = isSmartHomeClientInstalled(context)
-        val status = if (isClientInstalled) "connected" else "unknown"
-        val lastError = if (isClientInstalled) "" else "smart_home_app_not_installed"
+        val provider = resolveProvider(context)
+        val credential = provider?.let {
+            HomeRiskLiveProviderBroker.readCredential(context, consentArtifact.ownerRole, it)
+        }
+        val health = when {
+            provider == null -> SmartHomeConnectorHealth(
+                connectorId = connectorId,
+                status = if (isClientInstalled) "app_ready" else "app_missing",
+                connectedAtEpochMs = 0L,
+                lastError = if (isClientInstalled) "" else "smart_home_app_not_installed"
+            )
+            !HomeRiskLiveProviderBroker.isCredentialUsable(credential) -> SmartHomeConnectorHealth(
+                connectorId = connectorId,
+                status = if (isClientInstalled) "authorization_needed" else "app_missing",
+                connectedAtEpochMs = 0L,
+                lastError = if (isClientInstalled) "smartthings_live_token_missing" else "smart_home_app_not_installed"
+            )
+            else -> try {
+                HomeRiskLiveProviderBroker.fetchInventory(context, consentArtifact.ownerRole, provider)
+                SmartHomeConnectorHealth(
+                    connectorId = connectorId,
+                    status = "connected",
+                    connectedAtEpochMs = credential?.linkedAtEpochMs ?: consentArtifact.grantedAtEpochMs,
+                    lastError = ""
+                )
+            } catch (error: Exception) {
+                SmartHomeConnectorHealth(
+                    connectorId = connectorId,
+                    status = "error",
+                    connectedAtEpochMs = 0L,
+                    lastError = error.message.orEmpty().trim().ifBlank { "inventory_sync_failed" }
+                )
+            }
+        }
 
         logConnectorEvent(
             context = context,
@@ -116,17 +148,12 @@ class SmartThingsConnector(
             consentArtifactId = consentArtifact.artifactId,
             eventType = "smart_home.health.query",
             recordType = CONNECTOR_AUDIT_EVENT_TYPE,
-            outcome = if (isClientInstalled) "success" else "degraded",
+            outcome = if (health.lastError.isBlank()) "success" else "degraded",
             sourceModule = "integration_mesh_controller",
-            details = "smart_home_client_installed=$isClientInstalled"
+            details = "smart_home_client_installed=$isClientInstalled status=${health.status} error=${health.lastError}"
         )
 
-        return SmartHomeConnectorHealth(
-            connectorId = connectorId,
-            status = status,
-            connectedAtEpochMs = if (isClientInstalled) consentArtifact.grantedAtEpochMs else 0L,
-            lastError = lastError
-        )
+        return health
     }
 
     override suspend fun collectPosture(
@@ -162,8 +189,7 @@ class SmartThingsConnector(
 
         val normalizedOwnerRole = IntegrationMeshController.resolveOwnerRole(context, consentArtifact.ownerRole)
         val appInstalled = isSmartHomeClientInstalled(context)
-        val deviceCount = estimateConnectedDevices(consentArtifact.ownerId, normalizedOwnerRole)
-            .coerceIn(0, connectorConfig.maxCachedDevices.coerceAtLeast(1))
+        val provider = resolveProvider(context)
         val findings = mutableListOf<String>()
         if (connectorConfig.readOnly) {
             findings += "connector_read_only_mode"
@@ -173,14 +199,36 @@ class SmartThingsConnector(
         } else {
             findings += "smart_home_client_detected"
         }
+        val credential = provider?.let {
+            HomeRiskLiveProviderBroker.readCredential(context, normalizedOwnerRole, it)
+        }
+        val liveDevices = when {
+            provider == null -> emptyList()
+            !HomeRiskLiveProviderBroker.isCredentialUsable(credential) -> {
+                findings += "authorization_pending_provider"
+                emptyList()
+            }
+            else -> try {
+                val devices = HomeRiskLiveProviderBroker.fetchInventory(context, normalizedOwnerRole, provider)
+                    .take(connectorConfig.maxCachedDevices.coerceAtLeast(1))
+                findings += "provider_connected_live"
+                findings += "provider_live_inventory_synced"
+                devices
+            } catch (error: Exception) {
+                findings += "authorization_pending_provider"
+                emptyList()
+            }
+        }
+        val deviceCount = liveDevices.size
         if (deviceCount == 0) {
             findings += "no_devices_seen_in_connector_snapshot"
         }
 
-        val riskScoreBase = if (normalizedOwnerRole == "child") 32 else 18
-        val appPenalty = if (appInstalled) 0 else 36
-        val readOnlyDiscount = if (connectorConfig.readOnly) 8 else 0
-        val riskScore = (riskScoreBase + appPenalty - readOnlyDiscount).coerceIn(0, 100)
+        val riskScore = when {
+            !HomeRiskLiveProviderBroker.isCredentialUsable(credential) -> if (appInstalled) 52 else 74
+            deviceCount == 0 -> if (normalizedOwnerRole == "child") 40 else 28
+            else -> if (normalizedOwnerRole == "child") 24 else 12
+        }.coerceIn(0, 100)
         if (riskScore >= 35) {
             findings += "remote_home_control_exposure"
         }
@@ -274,11 +322,6 @@ class SmartThingsConnector(
         return profile.identityLabel.ifBlank { ownerRole.ifBlank { "owner" } }
     }
 
-    private fun estimateConnectedDevices(ownerId: String, ownerRole: String): Int {
-        val seed = (ownerId.ifBlank { ownerRole }.hashCode().and(Int.MAX_VALUE))
-        return seed % (connectorConfig.maxCachedDevices.coerceAtLeast(1) + 1)
-    }
-
     private fun appVersion(context: Context): String {
         val packageManager = context.packageManager
         val packageInfo = runCatching {
@@ -329,6 +372,13 @@ class SmartThingsConnector(
             riskLevel = if (connectorConfig.readOnly) "low" else "medium"
         )
         IntegrationMeshAuditStore.appendConnectorEvent(context, event)
+    }
+
+    private fun resolveProvider(context: Context): HomeRiskUmbrellaProvider? {
+        val config = IntegrationMeshController.readConfig(context)
+        return HomeRiskUmbrellaRegistry.listProviders(config).firstOrNull {
+            it.connectorId.equals(connectorId, ignoreCase = true) || it.id.equals(connectorId, ignoreCase = true)
+        }
     }
 
     companion object {

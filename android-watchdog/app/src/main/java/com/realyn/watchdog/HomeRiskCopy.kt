@@ -106,12 +106,16 @@ internal object HomeRiskCopy {
                 "$connectorDisplay is not ready on this phone yet. Install or reopen the provider before adding devices under Home Risk."
             "provider_authorized_locally" ->
                 "$connectorDisplay has been marked ready for local Home Risk onboarding."
+            "provider_connected_live" ->
+                "$connectorDisplay is connected with a stored provider token and can sync live inventory."
             "authorization_pending_provider" ->
                 "$connectorDisplay still needs sign-in or local readiness confirmation before new devices can be imported."
             "no_devices_seen_in_connector_snapshot" ->
                 "No connected-home devices were found in the latest local snapshot. Reopen Home Risk setup after checking $connectorDisplay."
             "devices_imported_locally" ->
                 "Device import is saved locally so you can decide what stays under Home Risk protection."
+            "provider_live_inventory_synced" ->
+                "Live provider inventory was included in the latest Home Risk snapshot."
             "no_protected_devices_selected" ->
                 "Imported devices exist, but none are protected yet. Choose the devices you want included in Home Risk scans."
             "protected_devices_selected" ->

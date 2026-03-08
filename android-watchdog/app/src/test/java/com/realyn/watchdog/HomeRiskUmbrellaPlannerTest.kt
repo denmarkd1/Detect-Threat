@@ -23,7 +23,10 @@ class HomeRiskUmbrellaPlannerTest {
                     label = "Samsung TV",
                     deviceType = "tv"
                 )
-            )
+            ),
+            authMode = "token",
+            inventoryMode = "smartthings_rest",
+            supportNotice = "Use a SmartThings personal access token."
         )
         val wallet = HomeRiskUmbrellaProvider(
             id = "google_wallet",
@@ -40,7 +43,10 @@ class HomeRiskUmbrellaPlannerTest {
                     label = "Google Wallet digital key",
                     deviceType = "smart_fob"
                 )
-            )
+            ),
+            authMode = "local_only",
+            inventoryMode = "local_catalog",
+            supportNotice = "No live inventory API."
         )
 
         val plan = HomeRiskOnboardingPlanner.plan(
@@ -82,7 +88,10 @@ class HomeRiskUmbrellaPlannerTest {
                     label = "Samsung TV",
                     deviceType = "tv"
                 )
-            )
+            ),
+            authMode = "token",
+            inventoryMode = "smartthings_rest",
+            supportNotice = "Use a SmartThings personal access token."
         )
         val protectedDevice = HomeRiskUmbrellaProtectedDevice(
             ownerRole = "parent",

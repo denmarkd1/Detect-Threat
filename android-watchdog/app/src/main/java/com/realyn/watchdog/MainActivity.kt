@@ -31,6 +31,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
+import android.text.method.PasswordTransformationMethod
 import android.text.style.ClickableSpan
 import android.util.Log
 import android.util.TypedValue
@@ -236,11 +237,14 @@ class MainActivity : AppCompatActivity() {
         val status: HomeRiskSetupStatus,
         val selectedProvider: HomeRiskUmbrellaProvider? = null,
         val providerStatuses: List<HomeRiskOnboardingProviderStatus> = emptyList(),
+        val selectedCredential: HomeRiskProviderCredential? = null,
         val importedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
         val protectedDevices: List<HomeRiskUmbrellaProtectedDevice> = emptyList(),
         val connectorLabel: String = "",
         val connectorId: String = "",
         val ownerRole: String = "",
+        val liveInventorySupported: Boolean = false,
+        val supportNotice: String = "",
         val healthStatus: String = "",
         val healthLastError: String = "",
         val readOnlyMode: Boolean = true,
@@ -3881,9 +3885,22 @@ class MainActivity : AppCompatActivity() {
             }
 
             HomeRiskSetupStatus.AUTHORIZE_PROVIDER -> {
+                val usesLiveCredentials = result.selectedProvider?.let { provider ->
+                    HomeRiskLiveProviderBroker.supportsLiveAuth(provider)
+                } == true
                 dialogBuilder
-                    .setPositiveButton(R.string.home_risk_action_mark_ready) { _, _ ->
-                        markHomeRiskProviderReady(result)
+                    .setPositiveButton(
+                        if (usesLiveCredentials) {
+                            R.string.home_risk_action_connect_provider
+                        } else {
+                            R.string.home_risk_action_mark_ready
+                        }
+                    ) { _, _ ->
+                        if (usesLiveCredentials) {
+                            authorizeHomeRiskProvider(result)
+                        } else {
+                            markHomeRiskProviderReady(result)
+                        }
                     }
                     .setNeutralButton(R.string.home_risk_action_open_provider) { _, _ ->
                         result.selectedProvider?.let { provider ->
@@ -3986,11 +4003,36 @@ class MainActivity : AppCompatActivity() {
         )
         val providerStateOverrides = HomeRiskUmbrellaStore.readProviderStates(this, state.ownerRole)
             .toMutableList()
+        providers.forEach { provider ->
+            if (!HomeRiskLiveProviderBroker.supportsLiveAuth(provider)) {
+                return@forEach
+            }
+            val existing = providerStateOverrides.firstOrNull {
+                it.providerId.equals(provider.id, ignoreCase = true)
+            }
+            providerStateOverrides.removeAll { stored ->
+                stored.providerId.equals(provider.id, ignoreCase = true)
+            }
+            val credential = HomeRiskLiveProviderBroker.readCredential(this, state.ownerRole, provider)
+            if (HomeRiskLiveProviderBroker.isCredentialUsable(credential)) {
+                providerStateOverrides += HomeRiskUmbrellaProviderState(
+                    ownerRole = state.ownerRole,
+                    providerId = provider.id,
+                    category = provider.category,
+                    authorizedAtEpochMs = credential?.linkedAtEpochMs ?: 0L,
+                    authorizationMethod = provider.authMode,
+                    lastOpenedAtEpochMs = existing?.lastOpenedAtEpochMs ?: 0L,
+                    lastImportedAtEpochMs = existing?.lastImportedAtEpochMs ?: 0L,
+                    lastScanAtEpochMs = existing?.lastScanAtEpochMs ?: 0L
+                )
+            }
+        }
         if (activeConsent != null) {
             val smartHomeProvider = providers.firstOrNull {
                 it.connectorId.equals(state.smartHomeConnectorId, ignoreCase = true)
             }
             if (smartHomeProvider != null &&
+                !HomeRiskLiveProviderBroker.supportsLiveAuth(smartHomeProvider) &&
                 providerStateOverrides.none { stored ->
                     stored.providerId.equals(smartHomeProvider.id, ignoreCase = true)
                 }
@@ -4023,6 +4065,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         val selectedProvider = plan.selectedProvider
+        val selectedCredential = HomeRiskLiveProviderBroker.readCredential(this, state.ownerRole, selectedProvider)
         val consentScopeCount = activeConsent?.consentScopes?.size
             ?: smartHomeFlag.requiredScopes.size
         val health = if (activeConsent != null &&
@@ -4046,17 +4089,24 @@ class MainActivity : AppCompatActivity() {
             status = status,
             selectedProvider = selectedProvider,
             providerStatuses = plan.providerStatuses,
+            selectedCredential = selectedCredential,
             importedDevices = plan.importedDevices,
             protectedDevices = plan.protectedDevices,
             connectorLabel = selectedProvider.label,
             connectorId = selectedProvider.connectorId,
             ownerRole = state.ownerRole,
+            liveInventorySupported = HomeRiskLiveProviderBroker.supportsLiveInventory(selectedProvider),
+            supportNotice = HomeRiskLiveProviderBroker.supportNotice(selectedProvider),
             healthStatus = health?.status ?: if (plan.selectedProviderStatus.appInstalled) {
-                "app_ready"
+                if (HomeRiskLiveProviderBroker.isCredentialUsable(selectedCredential)) {
+                    "live_connected"
+                } else {
+                    "app_ready"
+                }
             } else {
                 "app_missing"
             },
-            healthLastError = health?.lastError.orEmpty(),
+            healthLastError = health?.lastError.orEmpty().ifBlank { selectedCredential?.lastError.orEmpty() },
             readOnlyMode = connector?.isReadOnlyModeEnabled() ?: true,
             scopeCount = consentScopeCount,
             rolloutStage = rolloutStage,
@@ -4092,7 +4142,7 @@ class MainActivity : AppCompatActivity() {
             HomeRiskSetupStatus.INSTALL_PROVIDER -> buildString {
                 val provider = result.selectedProvider
                 appendLine("Home Risk umbrella is waiting for provider install or app access.")
-                appendLine("This build keeps onboarding local. You still sign in and manage inventory inside the provider app.")
+                appendLine("The provider app still handles account sign-in and any external account management.")
                 appendLine()
                 appendLine("What to do now")
                 appendLine("1. Tap Open provider to install or launch ${provider?.label ?: "the selected provider"}.")
@@ -4102,31 +4152,60 @@ class MainActivity : AppCompatActivity() {
                 appendLine("Technical details (optional)")
                 appendLine("Selected provider: ${provider?.label ?: "not selected"}")
                 appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
+                if (result.supportNotice.isNotBlank()) {
+                    appendLine("Support note: ${result.supportNotice}")
+                }
                 appendLine("Imported devices: ${result.importedDevices.size}")
                 append("Protected devices: ${result.protectedDevices.size}")
             }.trim()
 
             HomeRiskSetupStatus.AUTHORIZE_PROVIDER -> buildString {
                 val provider = result.selectedProvider
-                appendLine("Home Risk umbrella needs local provider authorization confirmation.")
-                appendLine("This build does not read live cloud sessions, so you confirm readiness after signing in inside the provider app.")
+                val usesLiveCredentials = provider?.let { HomeRiskLiveProviderBroker.supportsLiveAuth(it) } == true
+                if (usesLiveCredentials) {
+                    appendLine("Home Risk can connect to live inventory for this provider.")
+                    appendLine("This path stores provider tokens locally on this device and uses them only to validate access and read inventory.")
+                } else {
+                    appendLine("Home Risk umbrella needs local provider authorization confirmation.")
+                    appendLine("This provider remains in local-only mode in this build.")
+                }
                 appendLine()
                 appendLine("What to do now")
-                appendLine("1. Tap Open provider and sign in or finish provider linking.")
-                appendLine("2. Come back here and tap Mark provider ready.")
-                appendLine("3. Import devices after readiness is confirmed locally.")
+                if (usesLiveCredentials) {
+                    appendLine("1. Tap Connect provider and enter the required provider token.")
+                    if (provider?.requiresInstanceUrl == true) {
+                        appendLine("2. Enter the Home Assistant instance URL so DT Guardian can reach your API.")
+                    } else {
+                        appendLine("2. DT Guardian will validate the token and read live inventory from the provider API.")
+                    }
+                    appendLine("3. Import devices after the connection succeeds.")
+                } else {
+                    appendLine("1. Tap Open provider and sign in or finish provider linking.")
+                    appendLine("2. Come back here and tap Mark provider ready.")
+                    appendLine("3. Import devices after readiness is confirmed locally.")
+                }
                 appendLine()
                 appendLine("Technical details (optional)")
                 appendLine("Selected provider: ${provider?.label ?: "not selected"}")
                 appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
                 appendLine("App status: ${homeRiskAppStatusLabel(result)}")
+                appendLine("Connection mode: ${homeRiskConnectionModeLabel(provider)}")
+                appendLine("Connection: ${homeRiskConnectionLabel(result)}")
+                if (result.supportNotice.isNotBlank()) {
+                    appendLine("Support note: ${result.supportNotice}")
+                }
                 append("Protected devices: ${result.protectedDevices.size}")
             }.trim()
 
             HomeRiskSetupStatus.IMPORT_DEVICES -> buildString {
                 val provider = result.selectedProvider
-                appendLine("Home Risk umbrella is ready to import local devices.")
-                appendLine("Device import stays local in this build. DT Guardian does not pull live provider inventory yet.")
+                if (result.liveInventorySupported) {
+                    appendLine("Home Risk is ready to sync live devices from ${provider?.label ?: "the selected provider"}.")
+                    appendLine("DT Guardian will read the provider inventory, then let you choose which devices stay under Home Risk.")
+                } else {
+                    appendLine("Home Risk umbrella is ready to import local devices.")
+                    appendLine("This provider stays on local device selection in this build.")
+                }
                 appendLine()
                 appendLine("What to do now")
                 appendLine("1. Tap Import devices to add TVs, appliances, hubs, trackers, or smart fobs under ${provider?.label ?: "this provider"}.")
@@ -4136,7 +4215,8 @@ class MainActivity : AppCompatActivity() {
                 appendLine("Technical details (optional)")
                 appendLine("Selected provider: ${provider?.label ?: "not selected"}")
                 appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
-                append("Template devices available: ${provider?.deviceTemplates?.size ?: 0}")
+                appendLine("Inventory mode: ${if (result.liveInventorySupported) "live sync" else "local catalog"}")
+                append("Devices currently listed: ${result.importedDevices.size}")
             }.trim()
 
             HomeRiskSetupStatus.SELECT_PROTECTION -> buildString {
@@ -4164,8 +4244,8 @@ class MainActivity : AppCompatActivity() {
                         R.string.home_risk_setup_mode_live
                     }
                 )
-                appendLine("Home Risk umbrella is ready for a local scan.")
-                appendLine("This build uses local provider readiness, imported device lists, and read-only posture collection when available.")
+                appendLine("Home Risk umbrella is ready for a scan.")
+                appendLine("Supported providers can use live inventory sync, while unsupported providers stay on local advisory/setup mode.")
                 appendLine()
                 appendLine("What to do now")
                 appendLine("1. Tap Scan now to refresh the local Home Risk snapshot.")
@@ -4177,6 +4257,8 @@ class MainActivity : AppCompatActivity() {
                 appendLine("Provider type: ${homeRiskProviderCategoryLabel(provider?.category.orEmpty())}")
                 appendLine("Health: ${result.healthStatus.ifBlank { getString(R.string.home_risk_setup_health_unknown) }}")
                 appendLine("Mode: $readOnlyLabel")
+                appendLine("Connection: ${homeRiskConnectionLabel(result)}")
+                appendLine("Inventory mode: ${if (result.liveInventorySupported) "live sync" else "local catalog"}")
                 appendLine("Imported devices: ${result.importedDevices.size}")
                 append("Protected devices: ${result.protectedDevices.size}")
             }.trim()
@@ -4195,6 +4277,32 @@ class MainActivity : AppCompatActivity() {
             "installed"
         } else {
             "action needed"
+        }
+    }
+
+    private fun homeRiskConnectionModeLabel(provider: HomeRiskUmbrellaProvider?): String {
+        provider ?: return "local"
+        return when {
+            HomeRiskLiveProviderBroker.supportsLiveAuth(provider) && provider.requiresInstanceUrl ->
+                "live token + instance URL"
+            HomeRiskLiveProviderBroker.supportsLiveAuth(provider) ->
+                "live token"
+            else ->
+                "local-only"
+        }
+    }
+
+    private fun homeRiskConnectionLabel(result: HomeRiskSetupResult): String {
+        val provider = result.selectedProvider ?: return "not configured"
+        return when {
+            HomeRiskLiveProviderBroker.supportsLiveAuth(provider) &&
+                HomeRiskLiveProviderBroker.isCredentialUsable(result.selectedCredential) -> {
+                val accountLabel = result.selectedCredential?.accountLabel.orEmpty().ifBlank { provider.label }
+                "connected ($accountLabel)"
+            }
+            HomeRiskLiveProviderBroker.supportsLiveAuth(provider) -> "credential required"
+            result.providerStatuses.firstOrNull { it.selected }?.authorized == true -> "local ready"
+            else -> "local confirmation required"
         }
     }
 
@@ -4242,7 +4350,55 @@ class MainActivity : AppCompatActivity() {
 
     private fun openHomeRiskDeviceImportDialog(result: HomeRiskSetupResult) {
         val provider = result.selectedProvider ?: return
-        val templates = provider.deviceTemplates.ifEmpty {
+        if (result.liveInventorySupported) {
+            setBusy(true, getString(R.string.home_risk_live_inventory_loading))
+            lifecycleScope.launch {
+                try {
+                    val liveDevices = withContext(Dispatchers.IO) {
+                        HomeRiskLiveProviderBroker.fetchInventory(
+                            context = this@MainActivity,
+                            ownerRole = result.ownerRole,
+                            provider = provider
+                        )
+                    }
+                    if (!isFinishing && !isDestroyed) {
+                        showHomeRiskDeviceImportChooser(
+                            result = result,
+                            provider = provider,
+                            devices = liveDevices
+                        )
+                    }
+                } catch (error: Exception) {
+                    if (!isFinishing && !isDestroyed) {
+                        LionAlertDialogBuilder(this@MainActivity)
+                            .setTitle(R.string.home_risk_import_devices_title)
+                            .setMessage(
+                                buildString {
+                                    append(getString(R.string.home_risk_live_inventory_failed))
+                                    val detail = error.message.orEmpty().trim()
+                                    if (detail.isNotBlank()) {
+                                        appendLine()
+                                        appendLine()
+                                        append(detail)
+                                    }
+                                }
+                            )
+                            .setPositiveButton(R.string.scan_results_action_back_home, null)
+                            .setNeutralButton(R.string.home_risk_action_connect_provider) { _, _ ->
+                                authorizeHomeRiskProvider(result)
+                            }
+                            .show()
+                    }
+                } finally {
+                    if (!isFinishing && !isDestroyed) {
+                        setBusy(false)
+                    }
+                }
+            }
+            return
+        }
+
+        val localDevices = provider.deviceTemplates.ifEmpty {
             listOf(
                 HomeRiskUmbrellaDeviceTemplate(
                     id = "${provider.id}_device",
@@ -4250,20 +4406,44 @@ class MainActivity : AppCompatActivity() {
                     deviceType = "device"
                 )
             )
+        }.map { template ->
+            HomeRiskLiveInventoryDevice(
+                deviceId = homeRiskTemplateDeviceId(provider, template),
+                label = template.label,
+                deviceType = template.deviceType,
+                source = "local_catalog"
+            )
+        }
+        showHomeRiskDeviceImportChooser(result, provider, localDevices)
+    }
+
+    private fun showHomeRiskDeviceImportChooser(
+        result: HomeRiskSetupResult,
+        provider: HomeRiskUmbrellaProvider,
+        devices: List<HomeRiskLiveInventoryDevice>
+    ) {
+        val availableDevices = devices.ifEmpty {
+            listOf(
+                HomeRiskLiveInventoryDevice(
+                    deviceId = "${provider.id}:${provider.id}_device",
+                    label = "${provider.label} device",
+                    deviceType = "device",
+                    source = if (result.liveInventorySupported) provider.inventoryMode else "local_catalog"
+                )
+            )
         }
         val selectedIds = result.importedDevices.map { it.deviceId }.toMutableSet()
-        val labels = templates.map { template ->
-            "${template.label} (${template.deviceType.replace('_', ' ')})"
+        val labels = availableDevices.map { device ->
+            "${device.label} (${device.deviceType.replace('_', ' ')})"
         }.toTypedArray()
-        val checks = templates.map { template ->
-            selectedIds.contains(homeRiskTemplateDeviceId(provider, template))
+        val checks = availableDevices.map { device ->
+            selectedIds.contains(device.deviceId)
         }.toBooleanArray()
 
         LionAlertDialogBuilder(this)
             .setTitle(R.string.home_risk_import_devices_title)
             .setMultiChoiceItems(labels, checks) { _, which, isChecked ->
-                val template = templates[which]
-                val deviceId = homeRiskTemplateDeviceId(provider, template)
+                val deviceId = availableDevices[which].deviceId
                 if (isChecked) {
                     selectedIds += deviceId
                 } else {
@@ -4271,21 +4451,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .setPositiveButton(R.string.home_risk_action_save_import) { _, _ ->
-                val chosenTemplates = templates.filter { template ->
-                    selectedIds.contains(homeRiskTemplateDeviceId(provider, template))
-                }
                 val imported = HomeRiskUmbrellaStore.replaceImportedDevices(
                     context = this,
                     ownerRole = result.ownerRole,
                     provider = provider,
-                    templates = chosenTemplates
+                    devices = availableDevices.filter { selectedIds.contains(it.deviceId) }
                 )
                 appendHomeRiskUmbrellaEvent(
                     eventType = "home_risk.devices.imported",
                     provider = provider,
                     ownerRole = result.ownerRole,
                     outcome = "success",
-                    details = "imported_count=${imported.size}"
+                    details = "imported_count=${imported.size};source=${if (result.liveInventorySupported) provider.inventoryMode else "local_catalog"}"
                 )
                 refreshUiState()
                 openHomeRiskSetupFlow()
@@ -4336,6 +4513,157 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun authorizeHomeRiskProvider(result: HomeRiskSetupResult) {
+        val provider = result.selectedProvider ?: return
+        if (!HomeRiskLiveProviderBroker.supportsLiveAuth(provider)) {
+            markHomeRiskProviderReady(result)
+            return
+        }
+
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, (8 * resources.displayMetrics.density).toInt(), padding, 0)
+        }
+        val instructions = TextView(this).apply {
+            text = buildString {
+                append("Enter the live provider credentials for ${provider.label}.")
+                if (result.supportNotice.isNotBlank()) {
+                    appendLine()
+                    appendLine()
+                    append(result.supportNotice)
+                }
+            }
+        }
+        container.addView(instructions)
+
+        val instanceInput = EditText(this).apply {
+            hint = getString(R.string.home_risk_live_instance_url_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(result.selectedCredential?.apiBaseUrl.orEmpty())
+        }
+        if (provider.requiresInstanceUrl) {
+            container.addView(instanceInput)
+        }
+
+        val tokenInput = EditText(this).apply {
+            hint = getString(R.string.home_risk_live_token_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            transformationMethod = PasswordTransformationMethod.getInstance()
+        }
+        container.addView(tokenInput)
+
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.home_risk_live_connection_title)
+            .setView(container)
+            .setPositiveButton(R.string.home_risk_action_save_connection) { _, _ ->
+                connectHomeRiskProviderWithToken(
+                    result = result,
+                    provider = provider,
+                    baseUrl = instanceInput.text?.toString().orEmpty(),
+                    token = tokenInput.text?.toString().orEmpty()
+                )
+            }
+            .setNeutralButton(R.string.home_risk_action_open_provider) { _, _ ->
+                launchHomeRiskProvider(provider, preferSetup = true)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun connectHomeRiskProviderWithToken(
+        result: HomeRiskSetupResult,
+        provider: HomeRiskUmbrellaProvider,
+        baseUrl: String,
+        token: String
+    ) {
+        if (homeIntroAnimating) {
+            return
+        }
+        setBusy(true, getString(R.string.home_risk_setup_loading))
+        lifecycleScope.launch {
+            try {
+                val connectionResult = withContext(Dispatchers.IO) {
+                    HomeRiskLiveProviderBroker.connectWithToken(
+                        context = this@MainActivity,
+                        ownerRole = result.ownerRole,
+                        provider = provider,
+                        rawBaseUrl = baseUrl,
+                        rawToken = token
+                    )
+                }
+                withContext(Dispatchers.Default) {
+                    val state = IntegrationMeshController.snapshot(this@MainActivity)
+                    if (provider.connectorId.equals(state.smartHomeConnectorId, ignoreCase = true)) {
+                        val connector = IntegrationMeshController.getActiveSmartHomeConnector(this@MainActivity)
+                        val activeConsent = IntegrationMeshAuditStore.latestActiveConsent(
+                            context = this@MainActivity,
+                            connectorId = state.smartHomeConnectorId,
+                            ownerId = state.ownerId
+                        )
+                        if (connector != null && activeConsent == null) {
+                            connector.ensureConsent(this@MainActivity, state.ownerRole)
+                        }
+                    }
+                    HomeRiskUmbrellaStore.markProviderAuthorized(
+                        context = this@MainActivity,
+                        ownerRole = result.ownerRole,
+                        provider = provider,
+                        authorizationMethod = provider.authMode.ifBlank { "token" }
+                    )
+                }
+                appendHomeRiskUmbrellaEvent(
+                    eventType = "home_risk.provider.authorized",
+                    provider = provider,
+                    ownerRole = result.ownerRole,
+                    outcome = "success",
+                    details = "method=${provider.authMode};devices=${connectionResult.devices.size}"
+                )
+                binding.subStatusLabel.text = connectionResult.message
+                refreshUiState()
+                if (!isFinishing && !isDestroyed) {
+                    showHomeRiskDeviceImportChooser(
+                        result = result.copy(
+                            selectedCredential = HomeRiskLiveProviderBroker.readCredential(
+                                this@MainActivity,
+                                result.ownerRole,
+                                provider
+                            ),
+                            liveInventorySupported = HomeRiskLiveProviderBroker.supportsLiveInventory(provider)
+                        ),
+                        provider = provider,
+                        devices = connectionResult.devices
+                    )
+                }
+            } catch (error: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    LionAlertDialogBuilder(this@MainActivity)
+                        .setTitle(R.string.home_risk_live_connection_title)
+                        .setMessage(
+                            buildString {
+                                append(getString(R.string.home_risk_live_connection_failed))
+                                val detail = error.message.orEmpty().trim()
+                                if (detail.isNotBlank()) {
+                                    appendLine()
+                                    appendLine()
+                                    append(detail)
+                                }
+                            }
+                        )
+                        .setPositiveButton(R.string.scan_results_action_back_home, null)
+                        .setNeutralButton(R.string.home_risk_action_open_provider) { _, _ ->
+                            launchHomeRiskProvider(provider, preferSetup = true)
+                        }
+                        .show()
+                }
+            } finally {
+                if (!isFinishing && !isDestroyed) {
+                    setBusy(false)
+                }
+            }
+        }
     }
 
     private fun markHomeRiskProviderReady(result: HomeRiskSetupResult) {
@@ -4579,16 +4907,27 @@ class MainActivity : AppCompatActivity() {
         appInstalled: Boolean,
         authorized: Boolean
     ): List<String> {
-        val findings = mutableListOf("connector_read_only_mode", "local_provider_snapshot")
+        val usesLiveInventory = importedDevices.any { it.source != "local_catalog" } ||
+            protectedDevices.any { it.source != "local_catalog" }
+        val findings = mutableListOf("connector_read_only_mode")
         if (appInstalled) {
             findings += "provider_app_detected"
         } else {
             findings += "provider_app_missing"
         }
         if (authorized) {
-            findings += "provider_authorized_locally"
+            findings += if (HomeRiskLiveProviderBroker.supportsLiveAuth(provider)) {
+                "provider_connected_live"
+            } else {
+                "provider_authorized_locally"
+            }
         } else {
             findings += "authorization_pending_provider"
+        }
+        findings += if (usesLiveInventory) {
+            "provider_live_inventory_synced"
+        } else {
+            "local_provider_snapshot"
         }
         if (provider.category.equals("smart_fob", ignoreCase = true)) {
             findings += "smart_fob_provider_selected"
@@ -4626,7 +4965,7 @@ class MainActivity : AppCompatActivity() {
             )
             appendLine()
             appendLine("What to do now")
-            appendLine("1. Tap Home Risk setup to finish the local smart-device umbrella flow.")
+            appendLine("1. Tap Home Risk setup to finish provider connection and device protection for Home Risk.")
             appendLine("2. Tap Back to home if you want to keep using regular scans for now.")
             val detail = result.errorMessage.trim()
             if (detail.isNotBlank()) {
@@ -4650,7 +4989,7 @@ class MainActivity : AppCompatActivity() {
             appendLine("- Wi-Fi posture: $wifiState")
             appendLine("- Threat alerts: high $high | medium $medium")
             appendLine("- Credential actions waiting: $pendingQueue")
-            append("- Use Home Risk setup to choose a provider, import devices, and select protection locally.")
+            append("- Use Home Risk setup to choose a provider, connect live inventory where supported, import devices, and select protection.")
         }
     }
 

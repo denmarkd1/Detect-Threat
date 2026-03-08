@@ -1,92 +1,92 @@
 {
-  "generated_at": "2026-03-08T04:28:39.835345Z",
+  "generated_at": "2026-03-08T05:46:05.833363Z",
   "tasks": [
     {
-      "created_at": "2026-03-08T04:28:39.835225Z",
+      "created_at": "2026-03-08T05:46:05.833269Z",
       "description": "Confirm the problem statement and scope",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_001",
+      "task_id": "DT_TASK_20260308_054605_001",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835267Z",
+      "created_at": "2026-03-08T05:46:05.833304Z",
       "description": "Reproduce the issue (or create minimal repro)",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_002",
+      "task_id": "DT_TASK_20260308_054605_002",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835285Z",
+      "created_at": "2026-03-08T05:46:05.833317Z",
       "description": "Identify the failing component(s) and root cause",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_003",
+      "task_id": "DT_TASK_20260308_054605_003",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835299Z",
+      "created_at": "2026-03-08T05:46:05.833327Z",
       "description": "Implement the smallest safe fix",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_004",
+      "task_id": "DT_TASK_20260308_054605_004",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835312Z",
+      "created_at": "2026-03-08T05:46:05.833336Z",
       "description": "Add or update tests that cover the fix",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_005",
+      "task_id": "DT_TASK_20260308_054605_005",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835326Z",
+      "created_at": "2026-03-08T05:46:05.833346Z",
       "description": "Run the relevant test suite(s) and capture results",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_006",
+      "task_id": "DT_TASK_20260308_054605_006",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"
       ]
     },
     {
-      "created_at": "2026-03-08T04:28:39.835337Z",
+      "created_at": "2026-03-08T05:46:05.833356Z",
       "description": "Update documentation/configuration if behavior changed",
       "execution_notes": null,
       "expected_outcome": "A verified change (or decision) that reduces uncertainty or fixes the issue.",
-      "priority": "low",
+      "priority": "medium",
       "status": "pending",
-      "task_id": "DT_TASK_20260308_042839_007",
+      "task_id": "DT_TASK_20260308_054605_007",
       "validation_criteria": [
         "The change is minimal and reversible",
         "The fix is covered by a test or a reproducible check"

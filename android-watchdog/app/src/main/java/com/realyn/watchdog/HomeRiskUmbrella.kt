@@ -27,7 +27,12 @@ data class HomeRiskUmbrellaProvider(
     val deepLinkUri: String,
     val fallbackUri: String,
     val setupUri: String,
-    val deviceTemplates: List<HomeRiskUmbrellaDeviceTemplate>
+    val deviceTemplates: List<HomeRiskUmbrellaDeviceTemplate>,
+    val authMode: String = "local_only",
+    val inventoryMode: String = "local_catalog",
+    val apiBaseUrl: String = "",
+    val requiresInstanceUrl: Boolean = false,
+    val supportNotice: String = ""
 )
 
 data class HomeRiskUmbrellaProviderCapability(
@@ -282,7 +287,12 @@ object HomeRiskUmbrellaRegistry {
                         label = template.label,
                         deviceType = template.deviceType
                     )
-                }
+                },
+                authMode = provider.authMode,
+                inventoryMode = provider.inventoryMode,
+                apiBaseUrl = provider.apiBaseUrl,
+                requiresInstanceUrl = provider.requiresInstanceUrl,
+                supportNotice = provider.supportNotice
             )
         }
         val smartFobProviders = (config.connectors.digitalKeys.walletSetupGuidance +
@@ -307,7 +317,12 @@ object HomeRiskUmbrellaRegistry {
                             },
                             deviceType = "smart_fob"
                         )
-                    )
+                    ),
+                    authMode = "local_only",
+                    inventoryMode = "local_only",
+                    apiBaseUrl = "",
+                    requiresInstanceUrl = false,
+                    supportNotice = "Digital-key and smart-fob providers do not expose a common public inventory API in this build, so Home Risk keeps them in local advisory mode."
                 )
             }
         return (smartHomeProviders + smartFobProviders)
@@ -531,11 +546,43 @@ object HomeRiskUmbrellaStore {
     }
 
     @Synchronized
-    fun replaceImportedDevices(
+    fun clearProviderAuthorization(
+        context: Context,
+        ownerRole: String,
+        provider: HomeRiskUmbrellaProvider
+    ) {
+        updateProviderState(context, ownerRole, provider) { current, _ ->
+            current.copy(
+                authorizedAtEpochMs = 0L,
+                authorizationMethod = ""
+            )
+        }
+    }
+
+    @Synchronized
+    fun replaceImportedTemplateDevices(
         context: Context,
         ownerRole: String,
         provider: HomeRiskUmbrellaProvider,
         templates: List<HomeRiskUmbrellaDeviceTemplate>
+    ): List<HomeRiskUmbrellaProtectedDevice> {
+        val discoveredDevices = templates.map { template ->
+            HomeRiskLiveInventoryDevice(
+                deviceId = buildDeviceId(provider.id, template.id),
+                label = template.label,
+                deviceType = template.deviceType,
+                source = "local_catalog"
+            )
+        }
+        return replaceImportedDevices(context, ownerRole, provider, discoveredDevices)
+    }
+
+    @Synchronized
+    fun replaceImportedDevices(
+        context: Context,
+        ownerRole: String,
+        provider: HomeRiskUmbrellaProvider,
+        devices: List<HomeRiskLiveInventoryDevice>
     ): List<HomeRiskUmbrellaProtectedDevice> {
         val normalizedOwner = normalizeOwner(ownerRole)
         val normalizedProviderId = normalizeProviderId(provider.id)
@@ -547,14 +594,14 @@ object HomeRiskUmbrellaStore {
                     normalizeProviderId(it.providerId) == normalizedProviderId
             }
             .associateBy { it.deviceId }
-        val nextDevices = templates.map { template ->
-            val deviceId = buildDeviceId(provider.id, template.id)
+        val nextDevices = devices.map { device ->
+            val deviceId = device.deviceId.trim().ifBlank { buildDeviceId(provider.id, device.label) }
             val existing = existingById[deviceId]
             if (existing != null) {
                 existing.copy(
-                    label = template.label,
-                    deviceType = template.deviceType,
-                    source = "local_catalog"
+                    label = device.label,
+                    deviceType = device.deviceType,
+                    source = device.source
                 )
             } else {
                 HomeRiskUmbrellaProtectedDevice(
@@ -562,12 +609,12 @@ object HomeRiskUmbrellaStore {
                     deviceId = deviceId,
                     providerId = normalizedProviderId,
                     providerCategory = provider.category,
-                    label = template.label,
-                    deviceType = template.deviceType,
+                    label = device.label,
+                    deviceType = device.deviceType,
                     protectionEnabled = false,
                     importedAtEpochMs = now,
                     lastScannedAtEpochMs = 0L,
-                    source = "local_catalog"
+                    source = device.source
                 )
             }
         }

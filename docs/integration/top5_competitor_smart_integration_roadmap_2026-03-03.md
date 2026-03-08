@@ -58,18 +58,18 @@ This addendum cross-checks the current workspace build against official competit
 | --- | --- | --- |
 | Phase 0 | PASS | Scope, legal boundaries, rollout framing, and non-invasive connector rules are documented. |
 | Phase 1 | PASS | `integration_mesh` config, interfaces, audit state, and staged rollout controls are implemented. |
-| Phase 2 | PARTIAL | `SmartThingsConnector.kt` is still local/simulated: local consent artifact, app-installed health check, and synthetic device-count estimate. Retail OAuth and live partner posture ingestion are not shipped. |
+| Phase 2 | PARTIAL | `SmartThingsConnector.kt` now validates stored provider credentials and reads live SmartThings inventory; `HomeRiskLiveProviderBroker.kt` adds live Home Assistant inventory as well. Google Home and smart-fob providers remain non-live/advisory, so partner coverage is still partial. |
 | Phase 3 | PASS | Retail-safe at broker scope: provider launch, status assertions, account-class policy gates, and disclosure copy are in place. |
 | Phase 4 | PASS | Retail-safe at advisory scope: wallet/manufacturer guidance, integrity/biometric gates, and guardian approval checks are implemented. |
 | Phase 5 | PARTIAL | Reporting, KPI, app-risk board, and exports are implemented, but connected-home anomaly uniqueness depends on Phase 2 becoming retail-grade. |
-| Phase 6 | BLOCKED | Hardening artifacts exist, but launch-readiness cannot claim retail connected-home parity until Phase 2 is retailized or launch messaging is narrowed to local SmartThings-first readiness. |
+| Phase 6 | PARTIAL | Hardening artifacts exist and launch messaging can be honest at the shipped mixed scope, but retail connected-home parity is still incomplete while Google Home and smart-fob providers remain non-live/advisory. |
 
 ### Corrective actions applied in this revalidation
 
-1. Removed `google_home` from the active smart-home rollout list until a real connector exists.
+1. Kept `google_home` out of the active smart-home rollout list until a real connector exists.
 2. Corrected Google Wallet digital car key setup guidance to the current official help URL.
-3. Narrowed tutorial and Home Risk UI wording to SmartThings-first local readiness.
-4. Tightened Lyra QA checks so simulation-backed smart-home coverage blocks retail-readiness claims.
+3. Updated tutorial and Home Risk UI wording to the shipped mixed scope: live inventory for SmartThings/Home Assistant, advisory/setup only for Google Home and smart-fob providers.
+4. Tightened Lyra QA checks so stale simulation wording or unsupported live-provider claims block release readiness.
 
 ## 3) Claim verification: smart-device integration in top five
 
@@ -137,7 +137,7 @@ User-controlled, non-invasive protection orchestration across:
 
 ## SmartThings and Google Home integration
 Feasible, but partner/OAuth onboarding is required and must follow each ecosystem’s authorization and certification requirements.
-Current workspace note (2026-03-07): only SmartThings-first local readiness is shipped. Google Home remains deferred and should not be marketed as active support in the current build.
+Current workspace note (2026-03-08): SmartThings and Home Assistant live inventory sync are shipped through locally stored provider tokens. Google Home remains deferred, and smart-fob providers remain advisory-only in the current build.
 
 ## Vehicle digital key / smart fob protection
 Feasible as a **risk guardrail layer** (device integrity, lock-state enforcement guidance, anomaly alerts, anti-social-engineering workflows).
@@ -334,13 +334,12 @@ The product is locked to **broker-first** for this roadmap.
 3. Add `Home Risk` dashboard card and remediation playbooks.
 4. Add guardian escalation hooks for child profiles.
 
-Implementation status (2026-03-07 revalidation):
-- Partially delivered in `android-watchdog`, but not retail-ready:
-  - `SmartThingsConnector.kt` issues local consent artifacts rather than partner OAuth tokens.
-  - Connector health is derived from whether SmartThings client apps are installed on-device.
-  - `collectPosture()` uses local app state plus a synthetic device-count estimate, not live partner inventory.
-  - `Home Risk` therefore represents a local smart-device umbrella with provider selection, local readiness confirmation, imported-device selection, and protected-device scans, not live SmartThings or Google Home cloud telemetry.
-- Additional provider entries such as `google_home` may exist in the local provider catalog, but they must remain local/on-device guidance until a real connector implementation exists behind that ID.
+Implementation status (2026-03-08 revalidation):
+- Partially delivered in `android-watchdog`, with mixed live/local scope:
+  - `SmartThingsConnector.kt` validates live provider credentials and reads live inventory through `HomeRiskLiveProviderBroker.kt`.
+  - `HomeRiskLiveProviderBroker.kt` also supports Home Assistant live inventory through base URL + long-lived access token.
+  - `Home Risk` now supports provider selection, live token-based connection where shipped, imported-device selection, protected-device scans, and posture snapshots.
+- Additional provider entries such as `google_home` or smart-fob guidance remain advisory/on-device only until a real connector implementation exists behind that ID.
 
 ## Phase 3 - VPN broker and service linking (1 to 2 weeks)
 1. Add provider registry and deep-link/open-app launcher.
@@ -393,11 +392,11 @@ Implementation status (2026-03-04):
   - MASVS sweep runbook: `docs/integration/phase6_masvs_verification_sweep_2026-03-04.md`
   - Embedded tutorial overlay package: `docs/integration/phase6_tutorial_overlay_2026-03-04.md`
   - Device-backed Lyra QA trainer: `scripts/ops/lyra_beta_trainer.py` + `docs/integration/phase6_lyra_qa_trainer_2026-03-04.md`
-- Launch gate (2026-03-07): BLOCKED for retail connected-home claims until Phase 2 is retailized or launch messaging is narrowed to the current local-readiness scope.
+- Launch gate (2026-03-08): PARTIAL. Honest launch messaging is possible at the shipped mixed scope, but retail connected-home parity claims remain blocked until provider coverage expands further.
 
 ## 10) Proposed acceptance criteria
 
-1. User can complete SmartThings-first Home Risk setup and see a local/read-only risk snapshot in-app.
+1. User can complete Home Risk setup, connect SmartThings or Home Assistant live inventory where supported, and see a posture snapshot in-app.
 2. User can connect at least one VPN provider via broker workflow and validate status.
 3. User gets digital-key risk guidance tied to device integrity and lock posture.
 4. Guardian timeline logs all connector and high-risk actions with timestamps.

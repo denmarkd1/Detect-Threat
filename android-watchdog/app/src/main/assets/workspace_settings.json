@@ -541,6 +541,11 @@
             ],
             "fallback_uri": "https://play.google.com/store/apps/details?id=com.samsung.android.oneconnect",
             "setup_uri": "https://www.samsung.com/us/support/owners/app/smartthings",
+            "auth_mode": "token",
+            "inventory_mode": "smartthings_rest",
+            "api_base_url": "https://api.smartthings.com/v1",
+            "requires_instance_url": false,
+            "support_notice": "Use a SmartThings personal access token for live inventory in this build. SmartThings Home API remains preview-gated and OAuth-In SmartApp flows require a hosted backend.",
             "device_templates": [
               {
                 "id": "samsung_tv",
@@ -576,6 +581,11 @@
             "deep_link_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
             "fallback_uri": "https://play.google.com/store/apps/details?id=com.google.android.apps.chromecast.app",
             "setup_uri": "https://support.google.com/googlenest/answer/7073477?hl=en",
+            "auth_mode": "sdk",
+            "inventory_mode": "google_home_sdk",
+            "api_base_url": "",
+            "requires_instance_url": false,
+            "support_notice": "Google Home live access requires the Google Home Android SDK, OAuth setup, and internal-user registration in Google Home Developer Console. That platform path is not bundled in this workspace build.",
             "device_templates": [
               {
                 "id": "google_tv",
@@ -609,6 +619,11 @@
             ],
             "fallback_uri": "https://play.google.com/store/apps/details?id=io.homeassistant.companion.android",
             "setup_uri": "https://www.home-assistant.io/integrations/mobile_app/",
+            "auth_mode": "token",
+            "inventory_mode": "home_assistant_rest",
+            "api_base_url": "",
+            "requires_instance_url": true,
+            "support_notice": "Use your Home Assistant base URL and a long-lived access token from the instance profile page for live inventory sync.",
             "device_templates": [
               {
                 "id": "ha_hub",

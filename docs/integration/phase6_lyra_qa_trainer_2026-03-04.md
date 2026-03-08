@@ -83,22 +83,23 @@ Exit code:
    - Use `Back to scan results` and confirm return path is clean.
 4. Manually verify Home Risk wording honesty:
    - Open Home Risk setup and Home Risk posture from the dashboard.
-   - Confirm the UI describes a local smart-device umbrella, local provider readiness, local snapshot, or read-only behavior.
-   - Confirm no screen claims live SmartThings cloud telemetry, live Google Home cloud telemetry, or direct smart-fob control.
+   - Confirm the UI describes live inventory sync for supported providers and local advisory/setup mode for unsupported providers.
+   - Confirm SmartThings and Home Assistant use token-linked/live-inventory wording, while Google Home and smart-fob providers do not.
+   - Confirm no screen claims live Google Home cloud telemetry or direct smart-fob control.
 5. Fix any failed checks and re-run until clean.
 6. Attach the latest markdown report to release evidence.
 
-## 2026-03-07 revalidation rule
+## 2026-03-08 revalidation rule
 
 Lyra now treats retail smart-home readiness as a release gate:
 
-- If `SmartThingsConnector.kt` is still simulation-backed (local consent artifact, installed-app health check, synthetic device count), Lyra requires the build to stay explicitly scoped to SmartThings-first local readiness. Retail/cloud claims, rollout drift, or stale disclosure copy will fail the check.
-- If local Home Risk copy drifts beyond provider selection, local readiness confirmation, imported-device selection, or read-only/local snapshot wording, Lyra will fail.
+- If `SmartThingsConnector.kt` falls back to the legacy simulation-backed pattern, Lyra will fail the build until Home Risk wording and release claims are re-scoped.
+- If Home Risk copy stops matching the shipped mixed scope, Lyra will fail. Supported providers must be described with live inventory wording; unsupported providers must stay clearly advisory/local.
 - If `google_home` appears in active connector rollout IDs or is presented as live cloud telemetry without a real connector implementation, Lyra will fail.
 - If Google Wallet setup guidance points to a stale/non-car-key support page, Lyra will fail.
 - If roadmap/audit docs overstate Phase 2 or Phase 5 as retail-pass, Lyra will fail.
 
-This is intentional. The release package should not pass while the connected-home phase is still below retail scope and presented as retail-connected telemetry.
+This is intentional. The release package should not pass while connected-home scope is misstated, even when some providers are already live.
 
 Lyra also treats family-role terminology as a compatibility gate:
 
