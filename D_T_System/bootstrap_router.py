@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 CONFIG_FILENAME = "satellite_config.json"
+POLICY_FILENAME = "integration_policy.json"
 INSTALL_MARKER = ".dt_satellite_installed"
 INSTALL_LOG = "bootstrap_install.log"
 AUTO_SYNC_ENV = "DT_BOOTSTRAP_SYNC"
@@ -24,6 +25,7 @@ AUTO_TRACKING_HOOKS_ENV = "DT_BOOTSTRAP_TRACKING_HOOKS"
 TRACKING_INSTALLER_REL = Path("D_T_System") / "scripts" / "install_dt_workspace_tracking_hooks.sh"
 TRACKING_SCRIPT_REL = Path("D_T_System") / "scripts" / "dt_workspace_change_track.sh"
 PROFILE_RUNTIME_REL = Path("D_T_System") / "profiles" / "manus_wide_research" / "runtime"
+PRESERVED_PACKAGE_FILENAMES = (CONFIG_FILENAME, POLICY_FILENAME)
 
 LOGGER = logging.getLogger("DTSatelliteBootstrap")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
@@ -243,9 +245,32 @@ def _sync_workspace_with_hub(hub_root: Path, workspace_root: Path, config_path: 
     os.environ["DT_SKIP_HUB_SYNC"] = "1"
 
 
+def _snapshot_package_files(destination: Path) -> Dict[str, bytes]:
+    preserved: Dict[str, bytes] = {}
+    for filename in PRESERVED_PACKAGE_FILENAMES:
+        target = destination / filename
+        if target.exists():
+            preserved[filename] = target.read_bytes()
+    return preserved
+
+
+def _restore_package_files(destination: Path, preserved: Dict[str, bytes]) -> None:
+    for filename, payload in preserved.items():
+        target = destination / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+
+
 def _copy_full_package(source: Path, destination: Path) -> None:
     LOGGER.info("Copying full satellite package from %s", source)
+    preserved = _snapshot_package_files(destination)
     shutil.copytree(source, destination, dirs_exist_ok=True)
+    if preserved:
+        _restore_package_files(destination, preserved)
+        LOGGER.info(
+            "Preserved workspace-local satellite files during package sync: %s",
+            ", ".join(sorted(preserved)),
+        )
 
 
 def _sync_monitoring_dashboard(hub_root: Path, workspace_root: Path) -> None:
