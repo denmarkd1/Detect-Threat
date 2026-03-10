@@ -88,7 +88,8 @@ Exit code:
    - Confirm `Scan breaches` drives setup in this order: identity, linked email, autofill/passkey foundation, then sweep.
    - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
    - If overlay permission is off, confirm the app asks for `display over other apps`; after granting it, confirm the dialog returns and lets the tester tap `Open with overlay guide` again.
-   - On MIUI/Xiaomi, confirm autofill guidance warns that search can dead-end on `Accounts & sync` / `Android Auto` and routes the user through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path treated as legacy fallback only.
+   - On MIUI/Xiaomi, confirm autofill guidance warns that search can dead-end on `Accounts & sync` / `Android Auto`, routes first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services uses `Google Password Manager` or `Autofill with Google` as the fallback route.
+   - Confirm the final autofill return step tells the user to come back and tap `Recheck now`, not `Scan breaches`.
    - Confirm returning from Settings triggers a recheck prompt.
    - Confirm service actions stay locked behind Scan breaches until the first linked sweep finishes.
    - Confirm a sweep with no matching linked records offers a direct path to save the first credential.

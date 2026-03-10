@@ -90,11 +90,6 @@ class CredentialDefenseActivity : AppCompatActivity() {
         }
     }
 
-    private enum class FoundationGuideTarget {
-        AUTOFILL,
-        PASSKEY
-    }
-
     private data class GuidedBreachOutcome(
         val matchedRecordCount: Int,
         val compromisedRecordCount: Int,
@@ -527,74 +522,15 @@ class CredentialDefenseActivity : AppCompatActivity() {
         target: FoundationGuideTarget,
         oemPack: AutofillPasskeyFoundation.OemPack
     ): List<String> {
-        val searchTermRes = foundationGuideSearchTermRes(target, oemPack)
-        val confirmationRes = when (target) {
-            FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_step_select_provider
-            FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_step_confirm_passkey
-        }
+        val plan = FoundationGuidePlanner.plan(target = target, oemPack = oemPack)
         val steps = mutableListOf(
             getString(
                 R.string.autofill_guide_step_search_template,
-                getString(searchTermRes)
+                getString(plan.searchTermRes)
             )
         )
-        when (target) {
-            FoundationGuideTarget.AUTOFILL -> when (oemPack) {
-                AutofillPasskeyFoundation.OemPack.MIUI -> {
-                    steps += getString(R.string.autofill_guide_step_miui_search_dead_end)
-                    steps += getString(R.string.autofill_guide_autofill_path_miui)
-                    steps += getString(R.string.autofill_guide_autofill_path_miui_legacy)
-                }
-                AutofillPasskeyFoundation.OemPack.SAMSUNG -> {
-                    steps += getString(R.string.autofill_guide_autofill_path_samsung)
-                }
-                AutofillPasskeyFoundation.OemPack.PIXEL -> {
-                    steps += getString(R.string.autofill_guide_autofill_path_pixel)
-                }
-                AutofillPasskeyFoundation.OemPack.GENERIC -> {
-                    steps += getString(R.string.autofill_guide_autofill_path_generic)
-                }
-            }
-
-            FoundationGuideTarget.PASSKEY -> when (oemPack) {
-                AutofillPasskeyFoundation.OemPack.MIUI -> {
-                    steps += getString(R.string.autofill_guide_step_miui_passkey_google_hub)
-                    steps += getString(R.string.autofill_guide_passkey_path_miui)
-                }
-                AutofillPasskeyFoundation.OemPack.SAMSUNG -> {
-                    steps += getString(R.string.autofill_guide_passkey_path_samsung)
-                }
-                AutofillPasskeyFoundation.OemPack.PIXEL -> {
-                    steps += getString(R.string.autofill_guide_passkey_path_pixel)
-                }
-                AutofillPasskeyFoundation.OemPack.GENERIC -> {
-                    steps += getString(R.string.autofill_guide_passkey_path_generic)
-                }
-            }
-        }
-        steps += getString(confirmationRes)
-        steps += getString(R.string.autofill_guide_step_return)
+        steps += plan.stepResIds.map(::getString)
         return steps
-    }
-
-    private fun foundationGuideSearchTermRes(
-        target: FoundationGuideTarget,
-        oemPack: AutofillPasskeyFoundation.OemPack
-    ): Int {
-        return when (target) {
-            FoundationGuideTarget.AUTOFILL -> when (oemPack) {
-                AutofillPasskeyFoundation.OemPack.MIUI -> R.string.autofill_guide_search_autofill_term_miui
-                AutofillPasskeyFoundation.OemPack.SAMSUNG,
-                AutofillPasskeyFoundation.OemPack.PIXEL,
-                AutofillPasskeyFoundation.OemPack.GENERIC -> R.string.autofill_guide_search_autofill_term
-            }
-            FoundationGuideTarget.PASSKEY -> when (oemPack) {
-                AutofillPasskeyFoundation.OemPack.MIUI -> R.string.autofill_guide_search_passkey_term_miui
-                AutofillPasskeyFoundation.OemPack.SAMSUNG,
-                AutofillPasskeyFoundation.OemPack.PIXEL,
-                AutofillPasskeyFoundation.OemPack.GENERIC -> R.string.autofill_guide_search_passkey_term
-            }
-        }
     }
 
     private fun foundationOverlayVisibilityCaveat(

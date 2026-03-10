@@ -174,7 +174,8 @@ Credential Defense Center tutorial copy now matches the current retail flow:
    - The app now presents OEM-aware path guidance first, then opens root device Settings for the user.
    - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings, then collapse the card with `Hide` until `Show` is needed again.
    - When the user returns, the app asks for a recheck instead of silently leaving them at a dead end.
-   - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto` and instead route the user through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path kept only as a legacy fallback note.
+   - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto`, route first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services fall back to `Google Password Manager` or `Autofill with Google`.
+   - The final autofill step must send the user back to `Recheck now`, not `Scan breaches`.
 
 3. Service-action gating behavior
    - Before the first linked sweep finishes, service-action entry should clearly say the user must start with Scan breaches.
@@ -188,7 +189,8 @@ Credential Defense Center tutorial copy now matches the current retail flow:
    - Confirm tapping `Scan breaches` before autofill/passkey foundation is ready opens the guided foundation dialog.
    - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
    - On MIUI/Xiaomi devices, confirm autofill/passkey actions warn about the `Accounts & sync` / `Android Auto` dead-end search results and route toward `Google > All services`.
-   - On MIUI/Xiaomi devices, confirm autofill guidance uses `Google > All services > Autofill with Google` as the current path and only mentions `Additional settings > Languages and input > Autofill service` as a legacy fallback.
+   - On MIUI/Xiaomi devices, confirm autofill guidance uses `Passwords & accounts > Autofill service > Google` as the primary path, with `Google Password Manager` or `Autofill with Google` only as the fallback when Xiaomi redirects into Google services.
+   - Confirm the final autofill step tells the user to return for `Recheck now` instead of `Scan breaches`.
    - Confirm returning from Settings triggers a recheck prompt.
    - Confirm service-action CTA text changes to a breach-first message before the first linked sweep completes.
    - Confirm a no-record sweep offers a direct path into saving the first linked credential.
