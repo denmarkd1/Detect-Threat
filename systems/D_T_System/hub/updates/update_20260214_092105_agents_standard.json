@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-02-14T09:21:05.891398Z",
+  "protocol": "AGENTS_STANDARD",
+  "workspace": "/home/danicous/Dark_Coder",
+  "action": "created",
+  "agents_path": "/home/danicous/Dark_Coder/AGENTS.md",
+  "update_id": "agents_standard_c59c1e6f70",
+  "distribution": {
+    "scope": "global",
+    "target_tags": [],
+    "target_workspaces": [],
+    "auto_apply": true,
+    "exclude_source_workspace": true
+  },
+  "source_workspace": "/home/danicous/Dark_Coder"
+}

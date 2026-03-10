@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-03-07T12:00:00Z",
+  "protocol": "D_T_DUAL_MEMORY_OFFICIAL_UPDATE",
+  "protocol_version": "dark_coder_dual_memory_v1",
+  "workspace": "/home/danicous/Dark_Coder",
+  "official_update_id": "dark_coder_dt_dual_memory_official_update_2026_03_07",
+  "summary": "Dark Coder D_T protocol now requires MCP-first lookup, dual local-memory synchronization, and workspace-change checkpoints across D_T core, backend handoff contracts, and Lyra sweeps.",
+  "memory_nodes": [
+    "/home/danicous/Dark_Coder/systems/D_T_System/data/mcp_memory.jsonl",
+    "/home/danicous/Dark_Coder/local-ai-coding-assistant/.mcp/memory.jsonl",
+    "/home/danicous/Dark_Coder/surface_dt_system/memory.json"
+  ],
+  "requirements": {
+    "check_mcp_memory_first": true,
+    "check_local_memory_nodes": true,
+    "update_both_local_memory_logs_after_workspace_changes": true,
+    "refresh_surface_memory_context": true,
+    "workspace_change_checkpoint_required": true
+  },
+  "affected_components": [
+    "AGENTS.md",
+    "D_T_System/agents_standard.py",
+    "D_T_System/src/dt_system_core.py",
+    "systems/D_T_System/src/dt_closure_sync.py",
+    "local-ai-coding-assistant/backend/src/dt_integration/backend_dt_system_core.py",
+    "local-ai-coding-assistant/backend/src/dt_integration/dt_bridge.py",
+    "local-ai-coding-assistant/backend/main.py",
+    "local-ai-coding-assistant/scripts/lions_den_lyra_trainer.py"
+  ],
+  "update_id": "d_t_dual_memory_official_update_dark_coder_dual_memory_v1",
+  "distribution": {
+    "scope": "global",
+    "target_tags": [],
+    "target_workspaces": [],
+    "auto_apply": true,
+    "exclude_source_workspace": true
+  },
+  "source_workspace": "/home/danicous/Dark_Coder"
+}

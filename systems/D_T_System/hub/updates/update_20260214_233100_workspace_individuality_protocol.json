@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-02-14T23:31:00Z",
+  "protocol": "WORKSPACE_INDIVIDUALITY",
+  "protocol_version": "workspace_individuality_v1",
+  "workspace": "/home/danicous/Dark_Coder",
+  "action": "standardized",
+  "details": {
+    "trading2_path": "/home/danicous/trading2",
+    "trading2_orchestrator": "dt-orchestrator",
+    "default_route": "dynamic_per_workspace",
+    "workspace_specific_orchestrators": {
+      "/home/danicous/Cyberpunk": "dt-orchestrator-cyberpunk"
+    }
+  },
+  "update_id": "workspace_individuality_workspace_individuality_v1",
+  "distribution": {
+    "scope": "global",
+    "target_tags": [],
+    "target_workspaces": [],
+    "auto_apply": true,
+    "exclude_source_workspace": true
+  },
+  "source_workspace": "/home/danicous/Dark_Coder"
+}
