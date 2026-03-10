@@ -227,7 +227,13 @@ Ensure Zen MCP code-review threading is available (starts local Redis dependency
 bash scripts/ops/ensure_zen_redis.sh
 ```
 
-Run resilient precommit checks (fallback workflow when `zen precommit` times out):
+Install the blocking local pre-commit hook for this workspace:
+
+```bash
+bash scripts/ops/install_precommit_hook.sh
+```
+
+Run resilient precommit checks manually:
 
 ```bash
 bash scripts/ops/precommit_guard.sh
@@ -238,6 +244,8 @@ Include unstaged changes as well:
 ```bash
 bash scripts/ops/precommit_guard.sh --include-unstaged
 ```
+
+`zen/precommit` can still be used as an advisory review path, but the enforced commit gate is local because the current MCP transport deadline can time out before `zen/precommit` returns.
 
 Run Phase 6 MASVS hardening sweep and generate a timestamped report:
 

@@ -49,4 +49,10 @@
 - `python3 watchdog/watchdog.py --help`
 - `bash scripts/setup/install_platform_tools.sh`
 - `bash scripts/ops/check_adb_connection.sh`
+- `bash scripts/ops/install_precommit_hook.sh`
 - `bash scripts/ops/precommit_guard.sh`
+
+## Commit validation policy
+- The blocking commit gate for this workspace is the local git `pre-commit` hook installed by `bash scripts/ops/install_precommit_hook.sh`.
+- That hook runs `bash scripts/ops/precommit_guard.sh` against staged changes.
+- `zen/precommit` is advisory only in this workspace until the upstream MCP transport timeout is fixed.

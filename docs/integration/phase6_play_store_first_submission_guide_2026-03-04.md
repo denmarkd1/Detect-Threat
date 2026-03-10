@@ -20,10 +20,15 @@ Run and archive these checks:
 python3 -m pip install -e .
 credential-defense --help
 python3 watchdog/watchdog.py --help
+bash scripts/ops/install_precommit_hook.sh
 bash scripts/ops/precommit_guard.sh --include-unstaged
 bash scripts/ops/phase6_masvs_sweep.sh
 python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>
 ```
+
+Commit-validation note:
+- The enforced commit gate in this workspace is the local `pre-commit` hook installed by `bash scripts/ops/install_precommit_hook.sh`.
+- `zen/precommit` can still be used for advisory review, but release readiness must not depend on it because the current transport path can time out before a result is returned.
 
 Required pass artifacts:
 - `logs/phase6/masvs_sweep_<UTC_TIMESTAMP>.md`

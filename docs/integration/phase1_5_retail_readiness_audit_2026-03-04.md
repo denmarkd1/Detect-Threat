@@ -14,8 +14,13 @@ The following required workspace checks were executed successfully:
 - `python3 watchdog/watchdog.py --help`
 - `bash scripts/setup/install_platform_tools.sh`
 - `bash scripts/ops/check_adb_connection.sh` (authorized device detected)
+- `bash scripts/ops/install_precommit_hook.sh`
 - `bash scripts/ops/precommit_guard.sh`
 - `cd android-watchdog && ./gradlew lintDebug testDebugUnitTest`
+
+Workspace note:
+- This audit treats the local git `pre-commit` hook backed by `scripts/ops/precommit_guard.sh` as the blocking commit gate.
+- `zen/precommit` is not a blocking release gate in this workspace because the current MCP transport path can time out before completion.
 
 ## Phase-by-phase evidence
 

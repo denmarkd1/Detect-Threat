@@ -49,6 +49,7 @@ Trigger rollback immediately when any condition is met:
 4. Apply minimal corrective patch.
 5. Bump `versionCode` and `versionName` in `android-watchdog/app/build.gradle.kts`.
 6. Re-run Phase 6 gate:
+   - `bash scripts/ops/install_precommit_hook.sh`
    - `bash scripts/ops/phase6_masvs_sweep.sh`
    - `python3 scripts/ops/lyra_beta_trainer.py --serial <DEVICE_SERIAL>`
    - `bash scripts/ops/precommit_guard.sh --include-unstaged`
@@ -56,6 +57,10 @@ Trigger rollback immediately when any condition is met:
 7. Build signed artifacts:
    - `bash scripts/ops/build_play_release.sh`
 8. Upload hotfix to Internal, then Closed, then staged Production.
+
+Commit-validation note:
+- The blocking commit gate is the local git `pre-commit` hook wired to `scripts/ops/precommit_guard.sh`.
+- `zen/precommit` is optional advisory review only until the upstream timeout behavior is corrected.
 
 ## Hotfix communication template (internal)
 

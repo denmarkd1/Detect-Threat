@@ -15,7 +15,10 @@ usage() {
   cat <<'EOF'
 Usage: precommit_guard.sh [options]
 
-Deterministic pre-commit fallback checks for this workspace when zen precommit is unavailable/timing out.
+Deterministic local pre-commit checks for this workspace.
+This script is the blocking git pre-commit gate when installed via:
+  bash scripts/ops/install_precommit_hook.sh
+`zen/precommit` remains advisory in this workspace until the upstream transport timeout is fixed.
 
 Options:
   --repo <path>             Git repository root (default: workspace root)

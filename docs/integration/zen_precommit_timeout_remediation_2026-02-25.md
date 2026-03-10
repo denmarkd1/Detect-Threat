@@ -18,6 +18,9 @@
 ## Implemented fix
 - Added deterministic local fallback script:
   - `scripts/ops/precommit_guard.sh`
+- Added tracked git hook installer so commits do not depend on manual fallback:
+  - `D_T_System/scripts/install_dt_workspace_tracking_hooks.sh`
+  - `scripts/ops/install_precommit_hook.sh`
 - Added workspace policy metadata:
   - `D_T_System/integration_policy.json` (`precommit_review` section)
 - Added workspace references:
@@ -25,12 +28,12 @@
   - `AGENTS.md` verification command list
 
 ## Fallback workflow
-1. Run baseline dependency health check:
-   - `bash scripts/ops/ensure_zen_redis.sh`
-2. Run fallback precommit checks:
-   - `bash scripts/ops/precommit_guard.sh`
-3. If needed, include unstaged changes:
+1. Install the tracked hook once per clone:
+   - `bash scripts/ops/install_precommit_hook.sh`
+2. `git commit` now runs `scripts/ops/precommit_guard.sh` automatically on staged changes.
+3. If you need the same checks before staging or against unstaged work:
    - `bash scripts/ops/precommit_guard.sh --include-unstaged`
+4. `zen/precommit` remains optional/advisory until the upstream transport timeout is raised.
 
 ## What `precommit_guard.sh` validates
 - Secret-assignment safety scan for changed text files (token names only, no values printed).

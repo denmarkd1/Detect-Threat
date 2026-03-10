@@ -91,8 +91,10 @@
     "primary_timeout_seconds": 60,
     "fallback_required_on_timeout": true,
     "fallback_script": "scripts/ops/precommit_guard.sh",
+    "blocking_git_hook_installer": "scripts/ops/install_precommit_hook.sh",
+    "blocking_git_hook_scope": "staged_only",
     "default_scope": "staged_only",
-    "notes": "Use deterministic local fallback checks when zen precommit exceeds transport timeout."
+    "notes": "Use deterministic local fallback checks when zen precommit exceeds transport timeout. The blocking git pre-commit hook is scripts/ops/precommit_guard.sh; zen.precommit remains advisory until transport deadlines are raised upstream."
   },
   "security_constraints": {
     "defensive_only": true,
