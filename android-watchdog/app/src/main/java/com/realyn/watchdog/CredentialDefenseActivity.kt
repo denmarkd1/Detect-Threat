@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
 import android.text.InputType
+import android.text.format.DateUtils
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
@@ -236,7 +237,12 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 pendingFoundationGuideTarget?.let { target ->
                     pendingFoundationGuideTarget = null
                     stopFoundationGuideOverlay()
-                    showFoundationReturnPrompt(target)
+                    val sessionSnapshot = foundationGuideSessionSnapshot(target)
+                    if (sessionSnapshot == null) {
+                        showFoundationReturnPrompt(target)
+                    } else {
+                        showFoundationReturnPrompt(target, sessionSnapshot)
+                    }
                 }
             },
             onDenied = {
@@ -360,6 +366,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
     private fun showFoundationGuideDialog(target: FoundationGuideTarget) {
         val oemPack = AutofillPasskeyFoundation.resolveOemPack()
         val canDrawOverlay = Settings.canDrawOverlays(this)
+        val sessionSnapshot = foundationGuideSessionSnapshot(target)
         val titleRes = when (target) {
             FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
             FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
@@ -386,22 +393,47 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     }
                 )
             )
+            sessionSnapshot?.let { snapshot ->
+                appendLine()
+                appendLine()
+                appendLine(getString(R.string.adaptive_guide_resume_available))
+                appendLine(buildFoundationGuideSessionSummary(snapshot))
+            }
             foundationOverlayVisibilityCaveat(oemPack)?.let { caveat ->
                 appendLine()
                 appendLine(caveat)
             }
         }.trim()
-        LionAlertDialogBuilder(this)
+        val dialogBuilder = LionAlertDialogBuilder(this)
             .setTitle(titleRes)
             .setMessage(message)
-            .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
-                startFoundationGuideOverlayFlow(target)
-            }
-            .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
-                launchFoundationGuide(target, useOverlayGuide = false)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        if (sessionSnapshot != null) {
+            dialogBuilder
+                .setPositiveButton(R.string.adaptive_guide_resume_with_overlay) { _, _ ->
+                    AdaptiveGuideAuditLog.append(
+                        context = this,
+                        event = "adaptive_guide_session_resume",
+                        detail = "flow_id=${sessionSnapshot.record.flowId} origin=foundation_dialog"
+                    )
+                    startFoundationGuideOverlayFlow(target)
+                }
+                .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                    launchFoundationGuide(target, useOverlayGuide = false)
+                }
+                .setNegativeButton(R.string.adaptive_guide_restart_guided_route) { _, _ ->
+                    restartFoundationGuideRoute(target, origin = "foundation_dialog")
+                }
+        } else {
+            dialogBuilder
+                .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
+                    startFoundationGuideOverlayFlow(target)
+                }
+                .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                    launchFoundationGuide(target, useOverlayGuide = false)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+        }
+        dialogBuilder.show()
     }
 
     private fun startFoundationGuideOverlayFlow(target: FoundationGuideTarget) {
@@ -513,7 +545,58 @@ class CredentialDefenseActivity : AppCompatActivity() {
         )
     }
 
-    private fun showFoundationReturnPrompt(target: FoundationGuideTarget) {
+    private fun showFoundationReturnPrompt(
+        target: FoundationGuideTarget,
+        sessionSnapshot: AdaptiveGuideSessionSnapshot? = null
+    ) {
+        if (sessionSnapshot != null) {
+            val status = AutofillPasskeyFoundation.evaluate(this)
+            if (isFoundationTargetReady(target, status)) {
+                clearFoundationGuideSession(
+                    target = target,
+                    reason = "foundation_complete",
+                    origin = "return_prompt"
+                )
+                refreshAutofillPasskeyPanel()
+                refreshGuidedActionState()
+                Toast.makeText(
+                    this,
+                    R.string.autofill_guide_return_ready,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            LionAlertDialogBuilder(this)
+                .setTitle(
+                    when (target) {
+                        FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+                        FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+                    }
+                )
+                .setMessage(
+                    buildString {
+                        appendLine(getString(R.string.adaptive_guide_return_prompt_resume_message))
+                        appendLine()
+                        append(buildFoundationGuideSessionSummary(sessionSnapshot))
+                    }.trim()
+                )
+                .setPositiveButton(R.string.adaptive_guide_resume_last_step) { _, _ ->
+                    AdaptiveGuideAuditLog.append(
+                        context = this,
+                        event = "adaptive_guide_session_resume",
+                        detail = "flow_id=${sessionSnapshot.record.flowId} origin=return_prompt"
+                    )
+                    startFoundationGuideOverlayFlow(target)
+                }
+                .setNeutralButton(R.string.adaptive_guide_restart_guided_route) { _, _ ->
+                    restartFoundationGuideRoute(target, origin = "return_prompt")
+                }
+                .setNegativeButton(R.string.adaptive_guide_open_settings_again) { _, _ ->
+                    launchFoundationGuide(target, useOverlayGuide = false)
+                }
+                .show()
+            return
+        }
         LionAlertDialogBuilder(this)
             .setTitle(
                 when (target) {
@@ -604,6 +687,95 @@ class CredentialDefenseActivity : AppCompatActivity() {
             AutofillPasskeyFoundation.OemPack.GENERIC -> "generic"
         }
         return "${prefix}_$suffix"
+    }
+
+    private fun foundationGuideSessionSnapshot(target: FoundationGuideTarget): AdaptiveGuideSessionSnapshot? {
+        val oemPack = AutofillPasskeyFoundation.resolveOemPack()
+        val flowId = foundationAdaptiveFlowId(target, oemPack)
+        val pack = AdaptiveGuideRulePackStore.load(this)
+        return AdaptiveGuideSessionStore.read(
+            context = this,
+            pack = pack,
+            flowId = flowId
+        )
+    }
+
+    private fun restartFoundationGuideRoute(target: FoundationGuideTarget, origin: String) {
+        AdaptiveGuideAuditLog.append(
+            context = this,
+            event = "adaptive_guide_session_restart",
+            detail = "flow_id=${foundationAdaptiveFlowId(target, AutofillPasskeyFoundation.resolveOemPack())} origin=$origin"
+        )
+        clearFoundationGuideSession(target = target, reason = "restart", origin = origin)
+        startFoundationGuideOverlayFlow(target)
+    }
+
+    private fun clearFoundationGuideSession(
+        target: FoundationGuideTarget,
+        reason: String,
+        origin: String
+    ) {
+        val flowId = foundationAdaptiveFlowId(target, AutofillPasskeyFoundation.resolveOemPack())
+        AdaptiveGuideSessionStore.clear(this)
+        AdaptiveGuideAuditLog.append(
+            context = this,
+            event = "adaptive_guide_session_cleared",
+            detail = "flow_id=$flowId reason=$reason origin=$origin"
+        )
+    }
+
+    private fun buildFoundationGuideSessionSummary(sessionSnapshot: AdaptiveGuideSessionSnapshot): String {
+        val lines = mutableListOf(
+            getString(
+                R.string.adaptive_guide_last_guided_step_template,
+                sessionSnapshot.currentState.currentTarget
+            )
+        )
+        val summaryLabel = sessionSnapshot.record.summaryLabel
+        if (summaryLabel.isNotBlank()) {
+            when (sessionSnapshot.record.source) {
+                AdaptiveGuideSessionSource.MANUAL -> {
+                    lines += getString(
+                        R.string.adaptive_guide_last_confirmed_template,
+                        summaryLabel
+                    )
+                }
+
+                AdaptiveGuideSessionSource.OCR -> {
+                    lines += getString(
+                        R.string.adaptive_guide_last_detected_template,
+                        summaryLabel,
+                        adaptiveGuideConfidenceLabel(sessionSnapshot.record.confidence)
+                    )
+                }
+
+                null -> {
+                    lines += getString(
+                        R.string.adaptive_guide_last_confirmed_template,
+                        summaryLabel
+                    )
+                }
+            }
+        }
+        val relativeUpdatedAt = DateUtils.getRelativeTimeSpanString(
+            sessionSnapshot.record.updatedAtEpochMs,
+            System.currentTimeMillis(),
+            DateUtils.MINUTE_IN_MILLIS
+        ).toString()
+        lines += getString(
+            R.string.adaptive_guide_updated_template,
+            relativeUpdatedAt
+        )
+        return lines.joinToString(separator = "\n")
+    }
+
+    private fun adaptiveGuideConfidenceLabel(confidence: AdaptiveGuideAnalysisConfidence?): String {
+        return when (confidence) {
+            AdaptiveGuideAnalysisConfidence.EXACT -> getString(R.string.adaptive_guide_confidence_exact)
+            AdaptiveGuideAnalysisConfidence.AMBIGUOUS -> getString(R.string.adaptive_guide_confidence_suggested)
+            AdaptiveGuideAnalysisConfidence.NONE,
+            null -> getString(R.string.adaptive_guide_confidence_local)
+        }
     }
 
     private fun isFoundationTargetReady(

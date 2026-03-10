@@ -59,7 +59,12 @@ class AdaptiveGuideOverlayService : Service() {
             .trim()
         val pack = AdaptiveGuideRulePackStore.load(this)
         val invalidFlowIds = AdaptiveGuideRulePackValidator.invalidFlowIds(pack)
-        val initialState = AdaptiveGuideEngine.start(pack, flowId)
+        val sessionSnapshot = AdaptiveGuideSessionStore.read(
+            context = this,
+            pack = pack,
+            flowId = flowId
+        )
+        val initialState = sessionSnapshot?.currentState ?: AdaptiveGuideEngine.start(pack, flowId)
         if (flowId.isBlank() || initialState == null || invalidFlowIds.contains(flowId)) {
             AdaptiveGuideAuditLog.append(
                 context = this,
@@ -80,8 +85,15 @@ class AdaptiveGuideOverlayService : Service() {
         showOverlay(
             pack = pack,
             flowId = flowId,
-            initialState = initialState
+            initialState = initialState,
+            sessionSnapshot = sessionSnapshot
         )
+        if (sessionSnapshot == null) {
+            AdaptiveGuideSessionStore.start(
+                context = this,
+                initialState = initialState
+            )
+        }
         AdaptiveGuideAuditLog.append(
             context = this,
             event = "adaptive_guide_started",
@@ -101,11 +113,12 @@ class AdaptiveGuideOverlayService : Service() {
     private fun showOverlay(
         pack: AdaptiveGuideRulePack,
         flowId: String,
-        initialState: AdaptiveGuideResolvedState
+        initialState: AdaptiveGuideResolvedState,
+        sessionSnapshot: AdaptiveGuideSessionSnapshot?
     ) {
         removeOverlay()
 
-        val history = mutableListOf(initialState.stateId)
+        val history = restoredHistory(initialState, sessionSnapshot)
         var currentState = initialState
         var isCollapsed = false
         var analysisInProgress = false
@@ -253,12 +266,18 @@ class AdaptiveGuideOverlayService : Service() {
         }
 
         val applyAnalysisCandidate = fun(candidate: AdaptiveGuideAnalysisCandidate) {
+            val confirmedState = AdaptiveGuideEngine.resolve(
+                pack = pack,
+                flowId = flowId,
+                stateId = candidate.stateId
+            ) ?: currentState
             val next = AdaptiveGuideEngine.transition(
                 pack = pack,
                 flowId = flowId,
                 stateId = candidate.stateId,
                 anchorId = candidate.anchorId
             ) ?: return
+            val appliedConfidence = analysisResult?.confidence ?: AdaptiveGuideAnalysisConfidence.AMBIGUOUS
             AdaptiveGuideAuditLog.append(
                 context = this@AdaptiveGuideOverlayService,
                 event = "adaptive_guide_analysis_applied",
@@ -277,6 +296,13 @@ class AdaptiveGuideOverlayService : Service() {
                 history += candidate.stateId
                 history += next.stateId
             }
+            AdaptiveGuideSessionStore.recordAnalysisTransition(
+                context = this@AdaptiveGuideOverlayService,
+                confirmedState = confirmedState,
+                candidate = candidate,
+                nextState = next,
+                confidence = appliedConfidence
+            )
             currentState = next
             clearAnalysisState()
             renderState()
@@ -433,6 +459,12 @@ class AdaptiveGuideOverlayService : Service() {
                             event = "adaptive_guide_anchor_selected",
                             detail = "flow_id=$flowId state_id=${currentState.stateId} anchor_id=${anchor.id} next_state_id=${next.stateId}"
                         )
+                        AdaptiveGuideSessionStore.recordManualTransition(
+                            context = this@AdaptiveGuideOverlayService,
+                            confirmedState = currentState,
+                            anchor = anchor,
+                            nextState = next
+                        )
                         clearAnalysisState()
                         history += next.stateId
                         currentState = next
@@ -488,10 +520,20 @@ class AdaptiveGuideOverlayService : Service() {
                 event = "adaptive_guide_previous",
                 detail = "flow_id=$flowId state_id=${currentState.stateId}"
             )
+            AdaptiveGuideSessionStore.recordState(
+                context = this,
+                currentState = currentState
+            )
             clearAnalysisState()
             renderState.invoke()
         }
         resetButton.setOnClickListener {
+            AdaptiveGuideSessionStore.clear(this)
+            AdaptiveGuideAuditLog.append(
+                context = this,
+                event = "adaptive_guide_session_cleared",
+                detail = "flow_id=$flowId reason=reset origin=overlay"
+            )
             currentState = AdaptiveGuideEngine.start(pack, flowId) ?: return@setOnClickListener
             history.clear()
             history += currentState.stateId
@@ -499,6 +541,10 @@ class AdaptiveGuideOverlayService : Service() {
                 context = this,
                 event = "adaptive_guide_reset",
                 detail = "flow_id=$flowId state_id=${currentState.stateId}"
+            )
+            AdaptiveGuideSessionStore.start(
+                context = this,
+                initialState = currentState
             )
             clearAnalysisState()
             renderState.invoke()
@@ -649,6 +695,22 @@ class AdaptiveGuideOverlayService : Service() {
             horizontalPadding,
             verticalPadding
         )
+    }
+
+    private fun restoredHistory(
+        initialState: AdaptiveGuideResolvedState,
+        sessionSnapshot: AdaptiveGuideSessionSnapshot?
+    ): MutableList<String> {
+        if (sessionSnapshot == null) {
+            return mutableListOf(initialState.stateId)
+        }
+        return linkedSetOf<String>().apply {
+            val lastConfirmedStateId = sessionSnapshot.lastConfirmedState?.stateId.orEmpty()
+            if (lastConfirmedStateId.isNotBlank() && lastConfirmedStateId != initialState.stateId) {
+                add(lastConfirmedStateId)
+            }
+            add(initialState.stateId)
+        }.toMutableList()
     }
 
     private fun updatePinnedGuideNotification(

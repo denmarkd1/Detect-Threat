@@ -88,14 +88,16 @@ Exit code:
    - Confirm `Scan breaches` drives setup in this order: identity, linked email, autofill/passkey foundation, then sweep.
    - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
    - If overlay permission is off, confirm the app asks for `display over other apps`; after granting it, confirm the dialog returns and lets the tester tap `Open with overlay guide` again.
-   - Confirm the adaptive foundation overlay stays retail-safe in this phase: deterministic local rule packs remain the controller, manual anchor confirmation remains available, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
-   - Confirm the overlay asks `What do you see?`, exposes anchor buttons for the visible screen, and only updates after the tester chooses a matching anchor.
-   - Confirm `Analyze current screen` hides the overlay, requests screen-capture consent, and returns either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping manual anchor buttons available.
-   - Confirm `Reset route` returns the adaptive overlay to the first state for the current OEM flow.
-   - On MIUI/Xiaomi, confirm autofill guidance warns that search can dead-end on `Accounts & sync` / `Android Auto`, routes first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services uses `Google Password Manager` or `Autofill with Google` as the fallback route.
-   - Confirm the final autofill return step tells the user to come back and tap `Recheck now`, not `Scan breaches`.
-   - Confirm returning from Settings triggers a recheck prompt.
-   - Confirm service actions stay locked behind Scan breaches until the first linked sweep finishes.
+  - Confirm the adaptive foundation overlay stays retail-safe in this phase: deterministic local rule packs remain the controller, manual anchor confirmation remains available, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
+  - Confirm the overlay asks `What do you see?`, exposes anchor buttons for the visible screen, and only updates after the tester chooses a matching anchor.
+  - Confirm `Analyze current screen` hides the overlay, requests screen-capture consent, and returns either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping manual anchor buttons available.
+  - Confirm `Reset route` returns the adaptive overlay to the first state for the current OEM flow.
+  - Confirm returning from Settings with saved adaptive progress shows the last guided step context and offers `Resume last guided step`, `Restart guided route`, and `Open Settings again`.
+  - Confirm `Restart guided route` clears the saved adaptive session before reopening the flow.
+  - Confirm successful foundation completion clears the saved adaptive session instead of leaving stale resume data behind.
+  - On MIUI/Xiaomi, confirm autofill guidance warns that search can dead-end on `Accounts & sync` / `Android Auto`, routes first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services uses `Google Password Manager` or `Autofill with Google` as the fallback route.
+  - Confirm the final autofill return step tells the user to come back and tap `Recheck now`, not `Scan breaches`.
+  - Confirm service actions stay locked behind Scan breaches until the first linked sweep finishes.
    - Confirm a sweep with no matching linked records offers a direct path to save the first credential.
    - Confirm a sweep with compromised linked records offers a direct path into the highest-priority service action.
 5. Manually verify Home Risk wording honesty:
