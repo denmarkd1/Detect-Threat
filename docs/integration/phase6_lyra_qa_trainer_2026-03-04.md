@@ -78,6 +78,7 @@ Exit code:
      `Files/Media`) in the manual guidance.
    - On Samsung/MIUI devices, confirm manual dialog warns that some native security/settings surfaces may hide overlays
      temporarily and verify manual exact-tap fallback remains usable.
+   - On Samsung/MIUI devices, confirm `Open with overlay guide` keeps an ongoing guide notification active while the guide is open and survives the handoff into Settings.
    - Confirm compact overlay mode displays one current target at a time, supports an in-place `Hide` link that collapses the card while keeping the tap target readable, and uses `Show` to restore:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
@@ -92,6 +93,7 @@ Exit code:
   - Confirm the overlay asks `What do you see?`, exposes anchor buttons for the visible screen, and only updates after the tester chooses a matching anchor.
   - Confirm `Analyze current screen` hides the overlay, requests screen-capture consent, and returns either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping manual anchor buttons available.
   - Confirm `Reset route` returns the adaptive overlay to the first state for the current OEM flow.
+  - On Samsung/MIUI, confirm the adaptive guide keeps an ongoing guide notification active while the guide is open and survives the handoff into Settings.
   - Confirm returning from Settings with saved adaptive progress shows the last guided step context and offers `Resume last guided step`, `Restart guided route`, and `Open Settings again`.
   - Confirm `Restart guided route` clears the saved adaptive session before reopening the flow.
   - Confirm successful foundation completion clears the saved adaptive session instead of leaving stale resume data behind.

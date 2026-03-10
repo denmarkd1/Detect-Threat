@@ -441,7 +441,7 @@
     <string name="incident_assistant_recommended_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep instructions visible in Android Settings.</string>
     <string name="incident_assistant_recommended_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">Overlay guide permission was not granted. Opening settings without overlay guidance.</string>
-    <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. If the overlay disappears, follow the listed tap target manually and reopen the overlay guide when you return.</string>
+    <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. DT Guardian keeps an ongoing guide notification active while this guide is open so you can reopen the current step if the overlay disappears.</string>
     <string name="incident_assistant_samsung_overlay_warning_title">Samsung overlay warning</string>
     <string name="incident_assistant_samsung_overlay_warning_message">Samsung One UI often hides the floating guide on App info and Permissions screens. If that happens, keep following the exact tap list manually. The app will also keep the current tap target in an ongoing notification when Android allows notifications.\n\nNext tap target:\n%1$s</string>
     <string name="incident_assistant_samsung_overlay_warning_continue">Continue with guide</string>
@@ -1112,7 +1112,7 @@
     <string name="autofill_guide_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep the adaptive helper visible in Android Settings.</string>
     <string name="autofill_guide_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="autofill_guide_overlay_permission_denied">Overlay permission was not granted. You can still open Settings without the floating guide.</string>
-    <string name="autofill_guide_overlay_visibility_caveat">Note: Some %1$s settings screens temporarily hide overlays. If the overlay disappears, follow the listed tap target manually and reopen the overlay guide when you return.</string>
+    <string name="autofill_guide_overlay_visibility_caveat">Note: Some %1$s settings screens temporarily hide overlays. DT Guardian keeps an ongoing guide notification active while this guide is open so you can reopen the current step if the overlay disappears.</string>
     <string name="autofill_guide_overlay_started">Settings overlay guide started.</string>
     <string name="adaptive_guide_match_label">What do you see?</string>
     <string name="adaptive_guide_hint_default">Tap the button that matches what you see on screen. The guide only changes after your confirmation.</string>

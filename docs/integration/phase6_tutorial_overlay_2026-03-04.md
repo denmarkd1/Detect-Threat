@@ -127,8 +127,8 @@ Tutorial guidance is now aligned to the latest remediation UX:
      the app re-opens manual dialog so user can tap `Open with overlay guide` again.
    - On Samsung/MIUI, confirm manual dialog warns that some native security/settings screens can temporarily hide overlays.
      Validate user can still continue via exact tap targets even when overlay is hidden.
-   - On Samsung One UI, confirm `Open with overlay guide` now shows an extra warning before launch and that the
-     current tap target is pinned in an ongoing notification while the guide is active (when notifications are allowed).
+   - On Samsung/MIUI, confirm `Open with overlay guide` keeps an ongoing guide notification active while the guide is open
+     and survives the handoff into Settings so the current tap target stays recoverable if the overlay is hidden.
    - On Samsung One UI, confirm the tutorial begins with a dedicated note about the overlay limitation and
      notification fallback before the standard walkthrough steps.
    - Confirm compact overlay guide shows one current target at a time, includes an in-place `Hide` link that collapses the card while keeping the current tap target readable, and uses `Show` to restore:
@@ -172,10 +172,12 @@ Credential Defense Center tutorial copy now matches the current retail flow:
 2. Autofill/passkey guidance behavior
    - `Open autofill settings` and `Open passkey settings` should no longer feel like blind jumps.
    - The app now presents OEM-aware path guidance first, then opens root device Settings for the user.
-   - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings, then collapse the card with `Hide` until `Show` is needed again.
+  - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings, then collapse the card with `Hide` until `Show` is needed again.
   - Phase 3 of the adaptive foundation guide must stay retail-safe: deterministic local rule packs remain the controller, manual anchor confirmation remains available, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
   - The adaptive overlay should ask `What do you see?`, show anchor buttons such as `Passwords & accounts`, `Autofill service`, `Google Password Manager`, or `Preferences`, and update the next instruction only after the user confirms a visible anchor.
   - `Analyze current screen` should briefly hide the overlay, request screen-capture consent, run one-time on-device OCR, then return with either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping the manual anchor buttons available.
+  - On Samsung/MIUI, the adaptive guide should keep an ongoing guide notification active while the guide is open so the
+    Settings handoff does not tear down the guide context and the user still has a fallback if the overlay is hidden.
   - When the user returns from Settings and a valid adaptive session exists, the app should surface the last known guided step, last detected or confirmed label, and updated time, then offer `Resume last guided step`, `Restart guided route`, or `Open Settings again`.
   - Adaptive-guide session persistence must stay limited to structured metadata only: flow ID, state IDs, last anchor ID, summary label, confidence, source, and timestamp. Do not persist screenshot bytes or full OCR text.
   - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto`, route first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services fall back to `Google Password Manager` or `Autofill with Google`.
@@ -196,6 +198,7 @@ Credential Defense Center tutorial copy now matches the current retail flow:
   - Confirm the overlay shows `What do you see?` and anchor buttons that match the visible screen, then only updates after the tester taps a matching anchor.
   - Confirm `Analyze current screen` hides the overlay for capture, asks for screen-capture consent, returns one of `Detected: ...`, `Possible matches: ...`, or `No reliable match found`, and still keeps manual anchor buttons available.
   - Confirm `Reset route` returns the overlay to the first state for the active OEM flow.
+  - On Samsung/MIUI, confirm the adaptive guide keeps an ongoing guide notification active while the guide is open and survives the handoff into Settings.
   - On MIUI/Xiaomi devices, confirm autofill/passkey actions warn about the `Accounts & sync` / `Android Auto` dead-end search results and route back toward `Passwords & accounts > Autofill service > Google`, using Google services only as the fallback path.
   - On MIUI/Xiaomi devices, confirm autofill guidance uses `Passwords & accounts > Autofill service > Google` as the primary path, with `Google Password Manager` or `Autofill with Google` only as the fallback when Xiaomi redirects into Google services.
   - Confirm the final autofill step tells the user to return for `Recheck now` instead of `Scan breaches`.

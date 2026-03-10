@@ -1,6 +1,7 @@
 package com.realyn.watchdog
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -36,6 +37,7 @@ class AdaptiveGuideOverlayService : Service() {
     private var overlayReturnActivityClassName: String? = null
     private var analysisEventReceiver: BroadcastReceiver? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var guideForegroundActive: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -104,6 +106,7 @@ class AdaptiveGuideOverlayService : Service() {
 
     override fun onDestroy() {
         removeOverlay()
+        stopGuideForeground()
         cancelPinnedGuideNotification()
         super.onDestroy()
     }
@@ -717,9 +720,32 @@ class AdaptiveGuideOverlayService : Service() {
         stepLabel: String,
         currentTarget: String
     ) {
-        if (!shouldPinGuideNotification() || !canPostGuideNotifications()) {
+        if (!shouldPinGuideNotification()) {
             return
         }
+        val notification = buildGuideNotification(stepLabel = stepLabel, currentTarget = currentTarget)
+        if (shouldRunGuideAsForegroundService()) {
+            startForeground(WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID, notification)
+            guideForegroundActive = true
+            return
+        }
+        if (!canPostGuideNotifications()) {
+            return
+        }
+        try {
+            NotificationManagerCompat.from(this).notify(
+                WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
+                notification
+            )
+        } catch (_: SecurityException) {
+            // Ignore if notifications are denied.
+        }
+    }
+
+    private fun buildGuideNotification(
+        stepLabel: String,
+        currentTarget: String
+    ): Notification {
         val detail = buildString {
             appendLine(stepLabel)
             appendLine()
@@ -728,7 +754,7 @@ class AdaptiveGuideOverlayService : Service() {
             append(getString(R.string.incident_overlay_notification_hint))
         }
         val title = overlayTitle.ifBlank { getString(R.string.incident_overlay_title) }
-        val notification = NotificationCompat.Builder(this, WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID)
+        return NotificationCompat.Builder(this, WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(currentTarget)
@@ -738,14 +764,6 @@ class AdaptiveGuideOverlayService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(buildGuidePendingIntent())
             .build()
-        try {
-            NotificationManagerCompat.from(this).notify(
-                WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
-                notification
-            )
-        } catch (_: SecurityException) {
-            // Ignore if notifications are denied.
-        }
     }
 
     private fun buildGuidePendingIntent(): PendingIntent {
@@ -798,6 +816,10 @@ class AdaptiveGuideOverlayService : Service() {
             brand.contains("xiaomi") ||
             brand.contains("redmi") ||
             brand.contains("poco")
+    }
+
+    private fun shouldRunGuideAsForegroundService(): Boolean {
+        return shouldPinGuideNotification()
     }
 
     private fun createGuideChannel() {
@@ -858,6 +880,14 @@ class AdaptiveGuideOverlayService : Service() {
         } catch (_: SecurityException) {
             // Ignore if notifications are denied.
         }
+    }
+
+    private fun stopGuideForeground() {
+        if (!guideForegroundActive) {
+            return
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        guideForegroundActive = false
     }
 
     private fun dpToPx(dp: Int): Int {
