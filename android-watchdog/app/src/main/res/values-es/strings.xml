@@ -157,6 +157,10 @@
     <string name="incident_overlay_hide">Ocultar</string>
     <string name="incident_overlay_show">Mostrar</string>
     <string name="incident_overlay_focus_label">Objetivo de toque actual</string>
+    <string name="adaptive_guide_match_label">¿Qué ves?</string>
+    <string name="adaptive_guide_hint_default">Toca el botón que coincida con lo que ves en pantalla. La guía solo cambia después de tu confirmación.</string>
+    <string name="adaptive_guide_reset_route">Reiniciar ruta</string>
+    <string name="adaptive_guide_unavailable">Las reglas de la guía adaptable no están disponibles. Vuelve a abrir la guía estándar.</string>
     <string name="incident_overlay_complete_step">Paso completado</string>
     <string name="incident_overlay_finish">Finalizar guia</string>
     <string name="incident_overlay_done">Listo</string>

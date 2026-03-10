@@ -1,0 +1,620 @@
+{
+  "version": 1,
+  "disclosure": "Retail-safe deterministic guide rules. Phase 1 does not use screenshots, accessibility capture, or autonomous taps.",
+  "flows": [
+    {
+      "id": "foundation_autofill_miui",
+      "title": "Set up autofill first",
+      "total_steps": 5,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Password Manager or Autofill service.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "passwords_accounts",
+              "label": "Passwords & accounts",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["Passwords & accounts"]
+            },
+            {
+              "id": "accounts_sync_android_auto",
+              "label": "Accounts & sync / Android Auto",
+              "next_state_id": "dead_end_warning",
+              "match_any": ["Accounts & sync", "Android Auto"]
+            },
+            {
+              "id": "google_password_manager",
+              "label": "Google Password Manager",
+              "next_state_id": "google_password_manager",
+              "match_any": ["Google Password Manager", "Password Manager"]
+            },
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "dead_end_warning",
+          "step_number": 2,
+          "current_target": "Back out. Open Passwords & accounts > Autofill service > Google.",
+          "assistant_hint": "Do not continue through Accounts & sync or Android Auto on current Xiaomi builds.",
+          "anchors": [
+            {
+              "id": "passwords_accounts",
+              "label": "Passwords & accounts",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["Passwords & accounts"]
+            },
+            {
+              "id": "google_password_manager",
+              "label": "Google Password Manager",
+              "next_state_id": "google_password_manager",
+              "match_any": ["Google Password Manager", "Password Manager"]
+            }
+          ]
+        },
+        {
+          "id": "open_autofill_service",
+          "step_number": 3,
+          "current_target": "Open Passwords & accounts > Autofill service > Google.",
+          "assistant_hint": "If Xiaomi redirects into Google, use the Google fallback route below.",
+          "anchors": [
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            },
+            {
+              "id": "google_password_manager",
+              "label": "Google Password Manager",
+              "next_state_id": "google_password_manager",
+              "match_any": ["Google Password Manager", "Password Manager"]
+            }
+          ]
+        },
+        {
+          "id": "google_password_manager",
+          "step_number": 4,
+          "current_target": "Open Google Password Manager or Autofill with Google, then look for the autofill provider/service setting.",
+          "assistant_hint": "If you only see Preferences, open it and keep looking for Autofill service or the default password manager setting.",
+          "anchors": [
+            {
+              "id": "preferences",
+              "label": "Preferences",
+              "next_state_id": "preferences",
+              "match_any": ["Preferences"]
+            },
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "preferences",
+          "step_number": 4,
+          "current_target": "In Preferences, open Autofill service or the default password manager/provider setting.",
+          "assistant_hint": "Use the entry that controls the active autofill provider.",
+          "anchors": [
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "pick_provider",
+          "step_number": 5,
+          "current_target": "Select Google or your chosen password manager as the Autofill service/provider.",
+          "assistant_hint": "Only confirm after the provider stays selected.",
+          "anchors": [
+            {
+              "id": "provider_selected",
+              "label": "Provider selected",
+              "next_state_id": "return_recheck",
+              "match_any": ["Provider selected"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 5,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup instead of restarting Scan breaches.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_autofill_samsung",
+      "title": "Set up autofill first",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Autofill service.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "passwords_passkeys_autofill",
+              "label": "Passwords, passkeys, and autofill",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["Passwords, passkeys, and autofill"]
+            },
+            {
+              "id": "general_management",
+              "label": "General management",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["General management"]
+            },
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "open_autofill_service",
+          "step_number": 2,
+          "current_target": "Open General management > Passwords, passkeys, and autofill > Autofill service.",
+          "assistant_hint": "Stay on the Samsung settings path until Autofill service is visible.",
+          "anchors": [
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "pick_provider",
+          "step_number": 3,
+          "current_target": "Choose your password manager or autofill provider and keep it enabled.",
+          "assistant_hint": "Only confirm after the provider stays selected.",
+          "anchors": [
+            {
+              "id": "provider_selected",
+              "label": "Provider selected",
+              "next_state_id": "return_recheck",
+              "match_any": ["Provider selected"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_autofill_pixel",
+      "title": "Set up autofill first",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Autofill service.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "system",
+              "label": "System",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["System"]
+            },
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "open_autofill_service",
+          "step_number": 2,
+          "current_target": "Open System > Languages > Autofill service.",
+          "assistant_hint": "Stay on the Pixel settings path until Autofill service is visible.",
+          "anchors": [
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "pick_provider",
+          "step_number": 3,
+          "current_target": "Choose your password manager or autofill provider and keep it enabled.",
+          "assistant_hint": "Only confirm after the provider stays selected.",
+          "anchors": [
+            {
+              "id": "provider_selected",
+              "label": "Provider selected",
+              "next_state_id": "return_recheck",
+              "match_any": ["Provider selected"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_autofill_generic",
+      "title": "Set up autofill first",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Autofill service.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "system",
+              "label": "System",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["System"]
+            },
+            {
+              "id": "general_management",
+              "label": "General management",
+              "next_state_id": "open_autofill_service",
+              "match_any": ["General management"]
+            },
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "open_autofill_service",
+          "step_number": 2,
+          "current_target": "Open System or General management and look for Autofill service.",
+          "assistant_hint": "Stay on the Android settings path until Autofill service is visible.",
+          "anchors": [
+            {
+              "id": "autofill_service",
+              "label": "Autofill service",
+              "next_state_id": "pick_provider",
+              "match_any": ["Autofill service"]
+            }
+          ]
+        },
+        {
+          "id": "pick_provider",
+          "step_number": 3,
+          "current_target": "Choose your password manager or autofill provider and keep it enabled.",
+          "assistant_hint": "Only confirm after the provider stays selected.",
+          "anchors": [
+            {
+              "id": "provider_selected",
+              "label": "Provider selected",
+              "next_state_id": "return_recheck",
+              "match_any": ["Provider selected"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_passkey_miui",
+      "title": "Set up passkey foundation",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Password Manager or Passkey-linked devices.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "google_password_manager",
+              "label": "Google Password Manager",
+              "next_state_id": "google_password_manager",
+              "match_any": ["Google Password Manager", "Password Manager"]
+            },
+            {
+              "id": "passkey_linked_devices",
+              "label": "Passkey-linked devices",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Passkey-linked devices"]
+            },
+            {
+              "id": "preferences",
+              "label": "Preferences",
+              "next_state_id": "google_password_manager",
+              "match_any": ["Preferences"]
+            }
+          ]
+        },
+        {
+          "id": "google_password_manager",
+          "step_number": 2,
+          "current_target": "Open Google Password Manager, Passkey-linked devices, or Autofill with Google, whichever appears on this Xiaomi build.",
+          "assistant_hint": "Use the screen that shows passkeys, devices, or the active credential provider.",
+          "anchors": [
+            {
+              "id": "passkey_linked_devices",
+              "label": "Passkey-linked devices",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Passkey-linked devices"]
+            },
+            {
+              "id": "preferences",
+              "label": "Preferences",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Preferences"]
+            }
+          ]
+        },
+        {
+          "id": "confirm_passkey",
+          "step_number": 3,
+          "current_target": "Confirm your credential provider is active, device screen lock stays enabled, and passwords or passkeys remain available.",
+          "assistant_hint": "Only confirm after the credential provider stays active.",
+          "anchors": [
+            {
+              "id": "passkey_ready",
+              "label": "Passkey foundation ready",
+              "next_state_id": "return_recheck",
+              "match_any": ["Passkey foundation ready"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_passkey_samsung",
+      "title": "Set up passkey foundation",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Passwords, passkeys, and autofill.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "passwords_passkeys_autofill",
+              "label": "Passwords, passkeys, and autofill",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Passwords, passkeys, and autofill"]
+            },
+            {
+              "id": "general_management",
+              "label": "General management",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["General management"]
+            }
+          ]
+        },
+        {
+          "id": "open_passkey_hub",
+          "step_number": 2,
+          "current_target": "Open General management > Passwords, passkeys, and autofill, then keep going until your password manager or passkey controls are visible.",
+          "assistant_hint": "Stay on the Samsung settings path until the active credential provider and passkey controls are visible.",
+          "anchors": [
+            {
+              "id": "passkey_controls",
+              "label": "Password manager or passkey controls",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Passwords, passkeys, and autofill", "Password Manager", "Passkeys"]
+            }
+          ]
+        },
+        {
+          "id": "confirm_passkey",
+          "step_number": 3,
+          "current_target": "Confirm your credential provider is active, device screen lock stays enabled, and passwords or passkeys remain available.",
+          "assistant_hint": "Only confirm after the credential provider stays active.",
+          "anchors": [
+            {
+              "id": "passkey_ready",
+              "label": "Passkey foundation ready",
+              "next_state_id": "return_recheck",
+              "match_any": ["Passkey foundation ready"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_passkey_pixel",
+      "title": "Set up passkey foundation",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Password Manager or passkeys.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "password_manager",
+              "label": "Password Manager",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Password Manager"]
+            },
+            {
+              "id": "google",
+              "label": "Google",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Google"]
+            }
+          ]
+        },
+        {
+          "id": "open_passkey_hub",
+          "step_number": 2,
+          "current_target": "Open Password Manager or Google settings until the passkey and credential controls are visible.",
+          "assistant_hint": "Stay on the Pixel path until your active credential provider and passkey controls are visible.",
+          "anchors": [
+            {
+              "id": "passkey_controls",
+              "label": "Password Manager or passkey controls",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Password Manager", "Passkeys", "Google"]
+            }
+          ]
+        },
+        {
+          "id": "confirm_passkey",
+          "step_number": 3,
+          "current_target": "Confirm your credential provider is active, device screen lock stays enabled, and passwords or passkeys remain available.",
+          "assistant_hint": "Only confirm after the credential provider stays active.",
+          "anchors": [
+            {
+              "id": "passkey_ready",
+              "label": "Passkey foundation ready",
+              "next_state_id": "return_recheck",
+              "match_any": ["Passkey foundation ready"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    },
+    {
+      "id": "foundation_passkey_generic",
+      "title": "Set up passkey foundation",
+      "total_steps": 4,
+      "initial_state_id": "search",
+      "states": [
+        {
+          "id": "search",
+          "step_number": 1,
+          "current_target": "Open Settings and search for Password Manager, passkeys, or credential manager.",
+          "assistant_hint": "Tap the button that matches what you see. This guide only changes after your confirmation.",
+          "anchors": [
+            {
+              "id": "password_manager",
+              "label": "Password Manager",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Password Manager"]
+            },
+            {
+              "id": "google",
+              "label": "Google",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Google"]
+            },
+            {
+              "id": "credential_manager",
+              "label": "Credential Manager",
+              "next_state_id": "open_passkey_hub",
+              "match_any": ["Credential Manager"]
+            }
+          ]
+        },
+        {
+          "id": "open_passkey_hub",
+          "step_number": 2,
+          "current_target": "Open Password Manager, Google, or Credential Manager until the active credential provider and passkey controls are visible.",
+          "assistant_hint": "Use the provider screen that actually controls saved passwords, passkeys, or the active credential manager on this device.",
+          "anchors": [
+            {
+              "id": "passkey_controls",
+              "label": "Password Manager, passkeys, or Credential Manager",
+              "next_state_id": "confirm_passkey",
+              "match_any": ["Password Manager", "Passkeys", "Credential Manager", "Google"]
+            }
+          ]
+        },
+        {
+          "id": "confirm_passkey",
+          "step_number": 3,
+          "current_target": "Confirm your credential provider is active, device screen lock stays enabled, and passwords or passkeys remain available.",
+          "assistant_hint": "Only confirm after the credential provider stays active.",
+          "anchors": [
+            {
+              "id": "passkey_ready",
+              "label": "Passkey foundation ready",
+              "next_state_id": "return_recheck",
+              "match_any": ["Passkey foundation ready"]
+            }
+          ]
+        },
+        {
+          "id": "return_recheck",
+          "step_number": 4,
+          "current_target": "Return to DT Guardian and tap Recheck now.",
+          "assistant_hint": "Use Recheck now to verify the setup.",
+          "complete": true,
+          "anchors": []
+        }
+      ]
+    }
+  ]
+}

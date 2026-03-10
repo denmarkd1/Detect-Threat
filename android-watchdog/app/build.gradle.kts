@@ -14,6 +14,7 @@ val hasReleaseSigning = !releaseKeystorePath.isNullOrBlank() &&
 
 val workspaceSettingsSource = rootProject.layout.projectDirectory.file("../config/workspace_settings.json")
 val siteProfilesSource = rootProject.layout.projectDirectory.file("../config/site_profiles.json")
+val androidGuideRulesSource = rootProject.layout.projectDirectory.file("../config/android_guide_rules.json")
 val workspaceSettingsDestination = layout.projectDirectory.dir("src/main/assets")
 
 tasks.register<Copy>("syncWorkspaceSettingsAsset") {
@@ -30,9 +31,17 @@ tasks.register<Copy>("syncSiteProfilesAsset") {
     onlyIf { siteProfilesSource.asFile.exists() }
 }
 
+tasks.register<Copy>("syncAndroidGuideRulesAsset") {
+    from(androidGuideRulesSource.asFile)
+    into(workspaceSettingsDestination)
+    rename { "android_guide_rules.json" }
+    onlyIf { androidGuideRulesSource.asFile.exists() }
+}
+
 tasks.named("preBuild") {
     dependsOn("syncWorkspaceSettingsAsset")
     dependsOn("syncSiteProfilesAsset")
+    dependsOn("syncAndroidGuideRulesAsset")
 }
 
 android {

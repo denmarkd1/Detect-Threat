@@ -448,31 +448,64 @@ class CredentialDefenseActivity : AppCompatActivity() {
             FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
             FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
         }
-        startService(
-            Intent(this, IncidentGuideOverlayService::class.java).apply {
-                action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
-                putExtra(
-                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
-                    getString(titleRes)
-                )
-                putExtra(
-                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
-                    true
-                )
-                putExtra(
-                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY,
-                    CredentialDefenseActivity::class.java.name
-                )
-                putStringArrayListExtra(
-                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
-                    ArrayList(foundationGuideSteps(target, oemPack))
-                )
-            }
-        )
+        val adaptiveFlowId = foundationAdaptiveFlowId(target, oemPack)
+        val pack = AdaptiveGuideRulePackStore.load(this)
+        val invalidFlowIds = AdaptiveGuideRulePackValidator.invalidFlowIds(pack)
+        stopFoundationGuideOverlay()
+        if (
+            adaptiveFlowId.isNotBlank() &&
+            pack.flows.containsKey(adaptiveFlowId) &&
+            !invalidFlowIds.contains(adaptiveFlowId)
+        ) {
+            startService(
+                Intent(this, AdaptiveGuideOverlayService::class.java).apply {
+                    action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
+                        getString(titleRes)
+                    )
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY,
+                        CredentialDefenseActivity::class.java.name
+                    )
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID,
+                        adaptiveFlowId
+                    )
+                }
+            )
+        } else {
+            startService(
+                Intent(this, IncidentGuideOverlayService::class.java).apply {
+                    action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
+                        getString(titleRes)
+                    )
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
+                        true
+                    )
+                    putExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY,
+                        CredentialDefenseActivity::class.java.name
+                    )
+                    putStringArrayListExtra(
+                        WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
+                        ArrayList(foundationGuideSteps(target, oemPack))
+                    )
+                }
+            )
+        }
         Toast.makeText(this, R.string.autofill_guide_overlay_started, Toast.LENGTH_SHORT).show()
     }
 
     private fun stopFoundationGuideOverlay() {
+        startService(
+            Intent(this, AdaptiveGuideOverlayService::class.java).apply {
+                action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
+            }
+        )
         startService(
             Intent(this, IncidentGuideOverlayService::class.java).apply {
                 action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
@@ -554,6 +587,23 @@ class CredentialDefenseActivity : AppCompatActivity() {
             AutofillPasskeyFoundation.OemPack.PIXEL -> "Google Pixel"
             AutofillPasskeyFoundation.OemPack.GENERIC -> "Generic Android"
         }
+    }
+
+    private fun foundationAdaptiveFlowId(
+        target: FoundationGuideTarget,
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ): String {
+        val prefix = when (target) {
+            FoundationGuideTarget.AUTOFILL -> "foundation_autofill"
+            FoundationGuideTarget.PASSKEY -> "foundation_passkey"
+        }
+        val suffix = when (oemPack) {
+            AutofillPasskeyFoundation.OemPack.MIUI -> "miui"
+            AutofillPasskeyFoundation.OemPack.SAMSUNG -> "samsung"
+            AutofillPasskeyFoundation.OemPack.PIXEL -> "pixel"
+            AutofillPasskeyFoundation.OemPack.GENERIC -> "generic"
+        }
+        return "${prefix}_$suffix"
     }
 
     private fun isFoundationTargetReady(

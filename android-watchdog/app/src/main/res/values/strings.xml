@@ -953,7 +953,7 @@
     <string name="home_tutorial_step_credentials_hint">Priority order remains email, banking, social, developer, then other.</string>
     <string name="home_tutorial_step_credentials_window_title">Credential Defense window</string>
     <string name="home_tutorial_step_credentials_window_body">Credentials opens Credential Defense Center for guided breach-first setup: save identity, link the device email, finish autofill/passkey foundation, run Scan breaches, then move into service actions and queue work.</string>
-    <string name="home_tutorial_step_credentials_window_hint">Use Scan breaches as the primary driver. Service actions stay locked behind the guided setup until the first linked sweep finishes.</string>
+    <string name="home_tutorial_step_credentials_window_hint">Use Scan breaches as the primary driver. The foundation overlay now stays retail-safe in phase 1 by updating only after you confirm visible anchors like Passwords &amp; accounts, Autofill service, Google Password Manager, or Preferences. Service actions stay locked behind the guided setup until the first linked sweep finishes.</string>
     <string name="home_tutorial_step_services_title">Services widget</string>
     <string name="home_tutorial_step_services_body">Services routes into the Security Details summary window for score, urgent actions, and risk details.</string>
     <string name="home_tutorial_step_services_hint">Use this when you need diagnostics or escalation context.</string>
@@ -1108,12 +1108,16 @@
     <string name="autofill_guide_passkey_path_samsung">If search misses it, open General management > Passwords, passkeys, and autofill.</string>
     <string name="autofill_guide_passkey_path_pixel">If search misses it, open Password Manager or Google settings and confirm passkey support is enabled.</string>
     <string name="autofill_guide_passkey_path_generic">If search misses it, open Google or password-manager settings and confirm passkeys are enabled there.</string>
-    <string name="autofill_guide_overlay_hint_ready">Tip: Use Open with overlay guide for floating, step-by-step instructions while you are in Android Settings.</string>
-    <string name="autofill_guide_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep instructions visible in Android Settings.</string>
+    <string name="autofill_guide_overlay_hint_ready">Tip: Use Open with overlay guide for a floating adaptive helper. Tap the anchor that matches what you see, and the guide updates only after your confirmation.</string>
+    <string name="autofill_guide_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep the adaptive helper visible in Android Settings.</string>
     <string name="autofill_guide_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="autofill_guide_overlay_permission_denied">Overlay permission was not granted. You can still open Settings without the floating guide.</string>
     <string name="autofill_guide_overlay_visibility_caveat">Note: Some %1$s settings screens temporarily hide overlays. If the overlay disappears, follow the listed tap target manually and reopen the overlay guide when you return.</string>
     <string name="autofill_guide_overlay_started">Settings overlay guide started.</string>
+    <string name="adaptive_guide_match_label">What do you see?</string>
+    <string name="adaptive_guide_hint_default">Tap the button that matches what you see on screen. The guide only changes after your confirmation.</string>
+    <string name="adaptive_guide_reset_route">Reset route</string>
+    <string name="adaptive_guide_unavailable">Adaptive guide rules are unavailable. Reopen the standard overlay guide.</string>
     <string name="detected_owner_template">Detected owner: %1$s</string>
     <string name="detected_category_template">Detected category: %1$s</string>
     <string name="priority_order_template">Priority order: %1$s</string>

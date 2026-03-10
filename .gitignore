@@ -29,6 +29,7 @@ logs/*.log
 android-watchdog/.gradle/
 android-watchdog/app/build/
 android-watchdog/local.properties
+android-watchdog/app/src/main/assets/android_guide_rules.json
 
 # Local support runtime state/logs (contains user feedback/ticket records)
 state/support/*.json

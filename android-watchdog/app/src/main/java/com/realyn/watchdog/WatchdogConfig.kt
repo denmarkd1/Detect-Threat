@@ -16,6 +16,7 @@ object WatchdogConfig {
     const val INCIDENT_STATE_FILE = "dt_incident_state.json"
     const val INCIDENT_EVENT_LOG_FILE = "dt_incident_events.log"
     const val COPILOT_AUDIT_LOG_FILE = "dt_copilot_audit.log"
+    const val ADAPTIVE_GUIDE_AUDIT_LOG_FILE = "dt_adaptive_guide_audit.log"
     const val FAMILY_CONTROL_AUDIT_FILE = "dt_family_control_audit.log"
     const val WIFI_POSTURE_HISTORY_FILE = "dt_wifi_posture_history.log"
     const val PHISHING_TRIAGE_HISTORY_FILE = "dt_phishing_triage.log"
@@ -40,6 +41,7 @@ object WatchdogConfig {
     const val EXTRA_INCIDENT_OVERLAY_STEPS = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_STEPS"
     const val EXTRA_INCIDENT_OVERLAY_COMPACT_MODE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_COMPACT_MODE"
     const val EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_RETURN_ACTIVITY"
+    const val EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID"
 
     const val FOREGROUND_CHANNEL_ID = "dt_scanner_foreground"
     const val ALERT_CHANNEL_ID = "dt_scanner_alerts"

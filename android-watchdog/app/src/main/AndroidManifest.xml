@@ -85,6 +85,10 @@
             android:name=".IncidentGuideOverlayService"
             android:exported="false" />
 
+        <service
+            android:name=".AdaptiveGuideOverlayService"
+            android:exported="false" />
+
         <receiver
             android:name=".BootCompletedReceiver"
             android:enabled="true"

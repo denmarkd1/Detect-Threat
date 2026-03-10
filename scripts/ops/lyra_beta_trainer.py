@@ -84,6 +84,7 @@ MAIN_ACTIVITY_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "re
 STRINGS_PATH = ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml"
 TUTORIAL_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay_2026-03-04.md"
 LYRA_TRAINER_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_lyra_qa_trainer_2026-03-04.md"
+ANDROID_GUIDE_RULES_PATH = ROOT_DIR / "config" / "android_guide_rules.json"
 POLICY_DISCLOSURE_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_policy_play_disclosure_review_2026-03-04.md"
 PRICING_PACKAGING_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_pricing_packaging_update_2026-03-04.md"
 ZEN_WORKSPACE_ROOT = ROOT_DIR.parent / "D_T_Zen_MCP_Workspace"
@@ -999,11 +1000,15 @@ class QaRunner:
                 "startFoundationGuideOverlay(",
                 "stopFoundationGuideOverlay()",
                 "showFoundationReturnPrompt(",
+                "AdaptiveGuideOverlayService::class.java",
+                "AdaptiveGuideRulePackValidator.invalidFlowIds(",
+                "foundationAdaptiveFlowId(",
                 "recordPrimarySweepState(",
                 "showNoRecordsSeedPrompt(",
                 "showBreachFollowUpPrompt(",
                 "incident_assistant_recommended_open_with_overlay",
                 "EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY",
+                "EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID",
             ],
             layout_path: [
                 "autofillPasskeyCard",
@@ -1018,6 +1023,10 @@ class QaRunner:
                 "autofill_guide_step_select_provider_miui",
                 "autofill_guide_step_return",
                 "autofill_guide_overlay_started",
+                "adaptive_guide_match_label",
+                "adaptive_guide_hint_default",
+                "adaptive_guide_reset_route",
+                "adaptive_guide_unavailable",
                 "breach_scan_seed_prompt_title",
                 "home_tutorial_step_credentials_window_body",
             ],
@@ -1028,9 +1037,35 @@ class QaRunner:
                 "autofill_guide_step_select_provider_miui",
                 "autofill_guide_step_return",
             ],
+            ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "AdaptiveGuideOverlayService.kt": [
+                "class AdaptiveGuideOverlayService",
+                "AdaptiveGuideRulePackValidator.invalidFlowIds",
+                "adaptive_guide_match_label",
+                "adaptive_guide_reset_route",
+                "applyAdaptiveLayoutState",
+            ],
+            ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "AdaptiveGuideRules.kt": [
+                "ADAPTIVE_GUIDE_RULES_FILE",
+                "object AdaptiveGuideRulePackStore",
+                "object AdaptiveGuideRulePackParser",
+                "object AdaptiveGuideRulePackValidator",
+                "missing_step:",
+                "ADAPTIVE_GUIDE_AUDIT_LOG_FILE",
+            ],
+            ANDROID_GUIDE_RULES_PATH: [
+                "\"disclosure\": \"Retail-safe deterministic guide rules. Phase 1 does not use screenshots, accessibility capture, or autonomous taps.\"",
+                "\"id\": \"foundation_autofill_miui\"",
+                "\"id\": \"foundation_passkey_samsung\"",
+                "\"id\": \"open_passkey_hub\"",
+                "\"current_target\": \"Return to DT Guardian and tap Recheck now.\"",
+            ],
             ANDROID_DIR / "app" / "src" / "test" / "java" / "com" / "realyn" / "watchdog" / "FoundationGuidePlannerTest.kt": [
                 "miui autofill plan uses resolvable provider path and recheck return",
                 "generic autofill plan keeps direct path and recheck return",
+            ],
+            ANDROID_DIR / "app" / "src" / "test" / "java" / "com" / "realyn" / "watchdog" / "AdaptiveGuideEngineTest.kt": [
+                "validator accepts shipped adaptive guide rule pack",
+                "AdaptiveGuideRulePackValidator.validate",
             ],
             TUTORIAL_DOC_PATH: [
                 "Credential Defense breach-first flow",
@@ -1040,6 +1075,9 @@ class QaRunner:
                 "Google Password Manager",
                 "Recheck now",
                 "`Hide`",
+                "`What do you see?`",
+                "`Reset route`",
+                "no screenshots",
                 "returning from Settings triggers a recheck prompt",
             ],
             LYRA_TRAINER_DOC_PATH: [
@@ -1050,6 +1088,9 @@ class QaRunner:
                 "Passwords & accounts > Autofill service > Google",
                 "Google Password Manager",
                 "Recheck now",
+                "`What do you see?`",
+                "`Reset route`",
+                "no screenshots",
                 "Confirm service actions stay locked behind Scan breaches",
             ],
         }
