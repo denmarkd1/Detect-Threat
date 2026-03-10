@@ -6,6 +6,7 @@ import android.os.Build
 import android.provider.Settings
 import android.view.autofill.AutofillManager
 import androidx.credentials.CredentialManager
+import java.util.Locale
 
 data class AutofillPasskeyStatus(
     val autofillSupported: Boolean,
@@ -13,6 +14,10 @@ data class AutofillPasskeyStatus(
     val credentialManagerReady: Boolean,
     val passkeyReady: Boolean
 ) {
+    fun foundationReady(): Boolean {
+        return !autofillSupported || (autofillEnabled && credentialManagerReady && passkeyReady)
+    }
+
     fun summary(): String {
         val autofillState = if (!autofillSupported) {
             "unsupported"
@@ -28,6 +33,13 @@ data class AutofillPasskeyStatus(
 }
 
 object AutofillPasskeyFoundation {
+
+    enum class OemPack {
+        MIUI,
+        SAMSUNG,
+        PIXEL,
+        GENERIC
+    }
 
     fun evaluate(activity: Activity): AutofillPasskeyStatus {
         val manager = activity.getSystemService(AutofillManager::class.java)
@@ -49,24 +61,24 @@ object AutofillPasskeyFoundation {
         )
     }
 
-    fun openAutofillSettings(activity: Activity): Boolean {
-        val candidates = listOf(
-            Intent("android.settings.AUTOFILL_SETTINGS"),
-            Intent(Settings.ACTION_PRIVACY_SETTINGS),
-            Intent(Settings.ACTION_SETTINGS)
-        )
-        return launchFirstAvailable(activity, candidates)
+    fun resolveOemPack(): OemPack {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
+        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
+        return when {
+            manufacturer.contains("xiaomi") ||
+                manufacturer.contains("redmi") ||
+                manufacturer.contains("poco") ||
+                brand.contains("xiaomi") ||
+                brand.contains("redmi") ||
+                brand.contains("poco") -> OemPack.MIUI
+            manufacturer.contains("samsung") || brand.contains("samsung") -> OemPack.SAMSUNG
+            manufacturer.contains("google") || brand.contains("google") -> OemPack.PIXEL
+            else -> OemPack.GENERIC
+        }
     }
 
-    fun openPasskeyProviderSettings(activity: Activity): Boolean {
-        val candidates = mutableListOf<Intent>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            candidates += Intent("android.settings.CREDENTIAL_PROVIDER")
-        }
-        candidates += Intent("android.settings.PASSWORDS_SETTINGS")
-        candidates += Intent("android.settings.AUTOFILL_SETTINGS")
-        candidates += Intent(Settings.ACTION_SETTINGS)
-        return launchFirstAvailable(activity, candidates)
+    fun openDeviceSettingsRoot(activity: Activity): Boolean {
+        return launchFirstAvailable(activity, listOf(Intent(Settings.ACTION_SETTINGS)))
     }
 
     private fun launchFirstAvailable(activity: Activity, candidates: List<Intent>): Boolean {

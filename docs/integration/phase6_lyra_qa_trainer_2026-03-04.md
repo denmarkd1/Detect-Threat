@@ -1,7 +1,7 @@
 # Phase 6 - Lyra QA Trainer (Device-Backed)
 
 Date: 2026-03-04
-Last updated: 2026-03-07
+Last updated: 2026-03-10
 
 ## Purpose
 
@@ -15,6 +15,7 @@ It validates:
 - roadmap and audit coverage for phases 0 to 6,
 - smart-home retail-readiness honesty checks (simulation-backed connector detection, rollout/config drift, current Wallet setup guidance),
 - family-role canonicalization (`parent`/`child`) with `son` preserved only as a legacy alias for compatibility,
+- Credential Defense guided breach-first flow markers (identity/link/foundation gating, service-action lock wording, tutorial/doc sync),
 - phase hardening artifact presence (MASVS, policy/play, rollout, pricing, tutorial, trainer docs),
 - memory-derived regression markers for key fixes (false-positive tuning, scan routing, incident assistant flow, vault hardening, startup hydration ordering),
 - incident-assistant dedicated-screen split from scan-results surface,
@@ -81,13 +82,24 @@ Exit code:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
    - Use `Back to scan results` and confirm return path is clean.
-4. Manually verify Home Risk wording honesty:
+4. Manually verify Credential Defense breach-first UX:
+   - Open Credential Defense Center on a device using gesture navigation and three-button navigation if available.
+   - Confirm the autofill/passkey card and lower controls stay above the system nav area.
+   - Confirm `Scan breaches` drives setup in this order: identity, linked email, autofill/passkey foundation, then sweep.
+   - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
+   - If overlay permission is off, confirm the app asks for `display over other apps`; after granting it, confirm the dialog returns and lets the tester tap `Open with overlay guide` again.
+   - On MIUI/Xiaomi, confirm autofill guidance warns that search can dead-end on `Accounts & sync` / `Android Auto` and routes the user through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path treated as legacy fallback only.
+   - Confirm returning from Settings triggers a recheck prompt.
+   - Confirm service actions stay locked behind Scan breaches until the first linked sweep finishes.
+   - Confirm a sweep with no matching linked records offers a direct path to save the first credential.
+   - Confirm a sweep with compromised linked records offers a direct path into the highest-priority service action.
+5. Manually verify Home Risk wording honesty:
    - Open Home Risk setup and Home Risk posture from the dashboard.
    - Confirm the UI describes live inventory sync for supported providers and local advisory/setup mode for unsupported providers.
    - Confirm SmartThings and Home Assistant use token-linked/live-inventory wording, while Google Home and smart-fob providers do not.
    - Confirm no screen claims live Google Home cloud telemetry or direct smart-fob control.
-5. Fix any failed checks and re-run until clean.
-6. Attach the latest markdown report to release evidence.
+6. Fix any failed checks and re-run until clean.
+7. Attach the latest markdown report to release evidence.
 
 ## 2026-03-08 revalidation rule
 

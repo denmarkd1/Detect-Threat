@@ -23,3 +23,6 @@ Manual verification focus for this adjustment:
 16. In Incident assistant, tap `Skip for now` and confirm it advances to the next unresolved incident when available.
 17. Verify `Work on this now` uses the same app identity standard for high/medium/low incidents:
     compact app icon + bold common app name (when package metadata is present).
+18. Open Credential Defense Center and confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
+19. On Xiaomi/MIUI, confirm autofill guidance explicitly warns that search can dead-end on `Accounts & sync` / `Android Auto` and instead routes through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path shown only as a legacy fallback.
+20. Confirm returning from Credential Defense settings shows a recheck prompt instead of leaving the tester at a dead end.

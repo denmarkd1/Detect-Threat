@@ -1,7 +1,7 @@
 # Phase 6 - Embedded Tutorial Overlay
 
 Date: 2026-03-05
-Last updated: 2026-03-07
+Last updated: 2026-03-10
 APK surface: `android-watchdog` home dashboard (`MainActivity`) + scan-results remediation flow (`ScanResultsActivity`)
 
 ## Goal
@@ -159,6 +159,40 @@ Tutorial guidance now reflects the current Home Risk implementation scope:
    - Confirm Home Risk tutorial copy says `live inventory sync for supported providers`, `snapshot`, or equivalent mixed-scope wording.
    - Confirm Home Risk dialogs refer to choosing a provider, connecting a provider token where supported, importing devices, selecting protection, or running a scan.
    - Confirm no tutorial surface claims live Google Home cloud telemetry or direct smart-fob control.
+
+## 2026-03-10 update: Credential Defense breach-first flow
+
+Credential Defense Center tutorial copy now matches the current retail flow:
+
+1. Guided breach-first sequence
+   - `Scan breaches` is the primary driver for the screen.
+   - The guided path should move in this order:
+     identity, device-email link, autofill/passkey foundation, breach sweep, then service actions.
+
+2. Autofill/passkey guidance behavior
+   - `Open autofill settings` and `Open passkey settings` should no longer feel like blind jumps.
+   - The app now presents OEM-aware path guidance first, then opens root device Settings for the user.
+   - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings.
+   - When the user returns, the app asks for a recheck instead of silently leaving them at a dead end.
+   - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto` and instead route the user through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path kept only as a legacy fallback note.
+
+3. Service-action gating behavior
+   - Before the first linked sweep finishes, service-action entry should clearly say the user must start with Scan breaches.
+   - After a sweep with zero matched linked records, service actions should unlock so the user can save the first credential.
+   - After a sweep with compromised linked records, the next prompt should route into the highest-priority service action instead of leaving the user with a blank choice.
+
+4. QA checks for this flow
+   - Confirm Credential Defense Center content is not obscured by system nav buttons on gesture and three-button navigation.
+   - Confirm tapping `Scan breaches` with no primary email opens identity setup instead of only showing a toast.
+   - Confirm tapping `Scan breaches` with an unlinked email opens the link-primary-email flow.
+   - Confirm tapping `Scan breaches` before autofill/passkey foundation is ready opens the guided foundation dialog.
+   - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
+   - On MIUI/Xiaomi devices, confirm autofill/passkey actions warn about the `Accounts & sync` / `Android Auto` dead-end search results and route toward `Google > All services`.
+   - On MIUI/Xiaomi devices, confirm autofill guidance uses `Google > All services > Autofill with Google` as the current path and only mentions `Additional settings > Languages and input > Autofill service` as a legacy fallback.
+   - Confirm returning from Settings triggers a recheck prompt.
+   - Confirm service-action CTA text changes to a breach-first message before the first linked sweep completes.
+   - Confirm a no-record sweep offers a direct path into saving the first linked credential.
+   - Confirm a compromised sweep offers a direct path into the highest-priority service action.
 
 ## 2026-03-07 update: Canonical family-role language
 

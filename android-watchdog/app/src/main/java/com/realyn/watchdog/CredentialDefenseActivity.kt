@@ -20,10 +20,13 @@ import android.view.animation.LinearInterpolator
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
@@ -53,6 +56,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
         private const val LION_PROCESSING_COMPLETE_ANIM_MS = 420L
         private const val LION_MIN_BUSY_VISUAL_MS = 1800L
         private const val LION_SCAN_COMPLETE_HOLD_MS = 2800L
+        private const val KEY_PRIMARY_SWEEP_EMAIL = "credential_primary_sweep_email"
+        private const val KEY_PRIMARY_SWEEP_AT = "credential_primary_sweep_at"
+        private const val KEY_PRIMARY_SWEEP_MATCHED = "credential_primary_sweep_matched"
+        private const val KEY_PRIMARY_SWEEP_COMPROMISED = "credential_primary_sweep_compromised"
     }
 
     private data class AuthenticatorAppCandidate(
@@ -83,10 +90,25 @@ class CredentialDefenseActivity : AppCompatActivity() {
         }
     }
 
+    private enum class FoundationGuideTarget {
+        AUTOFILL,
+        PASSKEY
+    }
+
+    private data class GuidedBreachOutcome(
+        val matchedRecordCount: Int,
+        val compromisedRecordCount: Int,
+        val totalPwnedHits: Int,
+        val errorCount: Int,
+        val highestPriorityCompromisedRecord: StoredCredential?
+    )
+
     private lateinit var binding: ActivityCredentialDefenseBinding
     private lateinit var policy: WorkspacePolicy
 
     private var pendingEmailLink: String? = null
+    private var pendingFoundationGuideTarget: FoundationGuideTarget? = null
+    private var pendingFoundationOverlayTarget: FoundationGuideTarget? = null
     private var serviceDraft = ServiceDraft()
     private var accessGateBootstrapped: Boolean = false
     private var queueFilter: QueueFilter = QueueFilter.ALL
@@ -98,6 +120,25 @@ class CredentialDefenseActivity : AppCompatActivity() {
     private var lionIdleResetRunnable: Runnable? = null
     private var lionBusyStartedAtMs: Long = 0L
     private var lionAnimationSessionId: Int = 0
+    private val foundationOverlayPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val target = pendingFoundationOverlayTarget ?: return@registerForActivityResult
+            pendingFoundationOverlayTarget = null
+            if (Settings.canDrawOverlays(this)) {
+                Toast.makeText(
+                    this,
+                    R.string.autofill_guide_overlay_permission_granted,
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(
+                    this,
+                    R.string.autofill_guide_overlay_permission_denied,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            showFoundationGuideDialog(target)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,16 +146,18 @@ class CredentialDefenseActivity : AppCompatActivity() {
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
         )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityCredentialDefenseBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySystemBarInsets()
 
         policy = CredentialPolicy.loadPolicy(this)
 
         binding.toolbar.setNavigationOnClickListener { finish() }
         binding.editIdentityButton.setOnClickListener { showIdentityDialog(isOnboarding = false) }
         binding.linkEmailButton.setOnClickListener { startEmailLinkFlow() }
-        binding.runPrimaryBreachScanButton.setOnClickListener { runPrimaryBreachScan() }
-        binding.openServiceActionButton.setOnClickListener { openServiceActionDialog() }
+        binding.runPrimaryBreachScanButton.setOnClickListener { startGuidedPrimaryBreachFlow() }
+        binding.openServiceActionButton.setOnClickListener { handleServiceActionEntry() }
         binding.refreshQueueButton.setOnClickListener { renderQueue() }
         binding.queueFilterButton.setOnClickListener {
             queueFilter = queueFilter.next()
@@ -134,18 +177,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
             true
         }
         binding.openAutofillSettingsButton.setOnClickListener {
-            val opened = AutofillPasskeyFoundation.openAutofillSettings(this)
-            if (!opened) {
-                Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
-            }
-            refreshAutofillPasskeyPanel()
+            showFoundationGuideDialog(FoundationGuideTarget.AUTOFILL)
         }
         binding.openPasskeySettingsButton.setOnClickListener {
-            val opened = AutofillPasskeyFoundation.openPasskeyProviderSettings(this)
-            if (!opened) {
-                Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
-            }
-            refreshAutofillPasskeyPanel()
+            showFoundationGuideDialog(FoundationGuideTarget.PASSKEY)
         }
         binding.lionModeToggleButton.setOnClickListener {
             startActivity(Intent(this, GuardianSettingsActivity::class.java))
@@ -197,16 +232,450 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 renderQueue()
                 renderVaultSummaryForCurrentDraft()
                 refreshAutofillPasskeyPanel()
+                refreshGuidedActionState()
                 maybeShowIdentityOnboarding()
                 pendingEmailLink?.let { email ->
                     pendingEmailLink = null
                     showEmailLinkCompletionPrompt(email)
+                }
+                pendingFoundationGuideTarget?.let { target ->
+                    pendingFoundationGuideTarget = null
+                    stopFoundationGuideOverlay()
+                    showFoundationReturnPrompt(target)
                 }
             },
             onDenied = {
                 finish()
             }
         )
+    }
+
+    private fun applySystemBarInsets() {
+        val baseRootStart = binding.root.paddingStart
+        val baseRootTop = binding.root.paddingTop
+        val baseRootEnd = binding.root.paddingEnd
+        val baseRootBottom = binding.root.paddingBottom
+        val baseScrollStart = binding.credentialControlsScroll.paddingStart
+        val baseScrollTop = binding.credentialControlsScroll.paddingTop
+        val baseScrollEnd = binding.credentialControlsScroll.paddingEnd
+        val baseScrollBottom = binding.credentialControlsScroll.paddingBottom
+        val extraBottomSpacing = resources.getDimensionPixelSize(
+            R.dimen.scan_results_bottom_inset_extra_padding
+        )
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            binding.root.setPaddingRelative(
+                baseRootStart + systemBars.left,
+                baseRootTop + systemBars.top,
+                baseRootEnd + systemBars.right,
+                baseRootBottom
+            )
+            binding.credentialControlsScroll.setPaddingRelative(
+                baseScrollStart,
+                baseScrollTop,
+                baseScrollEnd,
+                baseScrollBottom + systemBars.bottom + extraBottomSpacing
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
+    }
+
+    private fun currentFlowPlan(
+        profile: IdentityProfile = PrimaryIdentityStore.readProfile(this),
+        status: AutofillPasskeyStatus = AutofillPasskeyFoundation.evaluate(this)
+    ): CredentialDefenseFlowPlan {
+        val sweepState = readPrimarySweepState(profile.primaryEmail)
+        return CredentialDefenseFlowPlanner.plan(
+            primaryEmail = profile.primaryEmail,
+            emailLinked = profile.emailLinkedAtEpochMs > 0L,
+            foundationComplete = status.foundationReady(),
+            sweepState = sweepState
+        )
+    }
+
+    private fun refreshGuidedActionState() {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val status = AutofillPasskeyFoundation.evaluate(this)
+        val plan = currentFlowPlan(profile, status)
+        binding.openServiceActionButton.text = getString(
+            if (plan.serviceActionUnlocked) {
+                R.string.action_open_service_action
+            } else {
+                R.string.action_start_guided_breach_flow
+            }
+        )
+        binding.serviceActionSubtitleLabel.text = getString(
+            when (plan.nextStage) {
+                CredentialDefenseNextStage.COMPLETE_IDENTITY -> R.string.service_action_subtitle_identity_locked
+                CredentialDefenseNextStage.LINK_PRIMARY_EMAIL -> R.string.service_action_subtitle_link_locked
+                CredentialDefenseNextStage.COMPLETE_FOUNDATION -> R.string.service_action_subtitle_foundation_locked
+                CredentialDefenseNextStage.RUN_BREACH_SCAN -> R.string.service_action_subtitle_scan_locked
+                CredentialDefenseNextStage.SAVE_FIRST_CREDENTIAL -> R.string.service_action_subtitle_seed_ready
+                CredentialDefenseNextStage.SERVICE_ACTIONS_READY -> R.string.service_action_subtitle_ready
+            }
+        )
+    }
+
+    private fun handleServiceActionEntry() {
+        val plan = currentFlowPlan()
+        if (plan.serviceActionUnlocked) {
+            openServiceActionDialog()
+            return
+        }
+        startGuidedPrimaryBreachFlow()
+    }
+
+    private fun startGuidedPrimaryBreachFlow() {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        val status = AutofillPasskeyFoundation.evaluate(this)
+        val plan = currentFlowPlan(profile, status)
+        when (plan.nextStage) {
+            CredentialDefenseNextStage.COMPLETE_IDENTITY -> {
+                showIdentityDialog(isOnboarding = false)
+            }
+
+            CredentialDefenseNextStage.LINK_PRIMARY_EMAIL -> {
+                startEmailLinkFlow(profile.primaryEmail)
+            }
+
+            CredentialDefenseNextStage.COMPLETE_FOUNDATION -> {
+                val target = if (status.autofillSupported && !status.autofillEnabled) {
+                    FoundationGuideTarget.AUTOFILL
+                } else {
+                    FoundationGuideTarget.PASSKEY
+                }
+                showFoundationGuideDialog(target)
+            }
+
+            CredentialDefenseNextStage.SAVE_FIRST_CREDENTIAL -> {
+                showNoRecordsSeedPrompt()
+            }
+
+            CredentialDefenseNextStage.RUN_BREACH_SCAN,
+            CredentialDefenseNextStage.SERVICE_ACTIONS_READY -> {
+                runPrimaryBreachScan()
+            }
+        }
+    }
+
+    private fun showFoundationGuideDialog(target: FoundationGuideTarget) {
+        val oemPack = AutofillPasskeyFoundation.resolveOemPack()
+        val canDrawOverlay = Settings.canDrawOverlays(this)
+        val titleRes = when (target) {
+            FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+            FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+        }
+        val message = buildString {
+            appendLine(
+                getString(
+                    R.string.autofill_guide_intro_template,
+                    getString(titleRes),
+                    foundationOemPackLabel(oemPack)
+                )
+            )
+            appendLine()
+            foundationGuideSteps(target, oemPack).forEachIndexed { index, step ->
+                appendLine("${index + 1}. $step")
+            }
+            appendLine()
+            appendLine(
+                getString(
+                    if (canDrawOverlay) {
+                        R.string.autofill_guide_overlay_hint_ready
+                    } else {
+                        R.string.autofill_guide_overlay_hint_permission
+                    }
+                )
+            )
+            foundationOverlayVisibilityCaveat(oemPack)?.let { caveat ->
+                appendLine()
+                appendLine(caveat)
+            }
+        }.trim()
+        LionAlertDialogBuilder(this)
+            .setTitle(titleRes)
+            .setMessage(message)
+            .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
+                startFoundationGuideOverlayFlow(target)
+            }
+            .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                launchFoundationGuide(target, useOverlayGuide = false)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startFoundationGuideOverlayFlow(target: FoundationGuideTarget) {
+        if (Settings.canDrawOverlays(this)) {
+            launchFoundationGuide(target, useOverlayGuide = true)
+            return
+        }
+        pendingFoundationOverlayTarget = target
+        foundationOverlayPermissionLauncher.launch(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+        )
+    }
+
+    private fun launchFoundationGuide(target: FoundationGuideTarget, useOverlayGuide: Boolean) {
+        val oemPack = AutofillPasskeyFoundation.resolveOemPack()
+        if (useOverlayGuide) {
+            startFoundationGuideOverlay(target, oemPack)
+        } else {
+            stopFoundationGuideOverlay()
+        }
+        val opened = AutofillPasskeyFoundation.openDeviceSettingsRoot(this)
+        if (!opened) {
+            if (useOverlayGuide) {
+                stopFoundationGuideOverlay()
+            }
+            Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingFoundationGuideTarget = target
+    }
+
+    private fun startFoundationGuideOverlay(
+        target: FoundationGuideTarget,
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ) {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, R.string.incident_overlay_permission_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val titleRes = when (target) {
+            FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+            FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+        }
+        startService(
+            Intent(this, IncidentGuideOverlayService::class.java).apply {
+                action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
+                putExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
+                    getString(titleRes)
+                )
+                putExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
+                    true
+                )
+                putExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY,
+                    CredentialDefenseActivity::class.java.name
+                )
+                putStringArrayListExtra(
+                    WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
+                    ArrayList(foundationGuideSteps(target, oemPack))
+                )
+            }
+        )
+        Toast.makeText(this, R.string.autofill_guide_overlay_started, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopFoundationGuideOverlay() {
+        startService(
+            Intent(this, IncidentGuideOverlayService::class.java).apply {
+                action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
+            }
+        )
+    }
+
+    private fun showFoundationReturnPrompt(target: FoundationGuideTarget) {
+        LionAlertDialogBuilder(this)
+            .setTitle(
+                when (target) {
+                    FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+                    FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+                }
+            )
+            .setMessage(
+                getString(
+                    R.string.autofill_guide_return_prompt_template,
+                    when (target) {
+                        FoundationGuideTarget.AUTOFILL -> getString(R.string.action_open_autofill_settings)
+                        FoundationGuideTarget.PASSKEY -> getString(R.string.action_open_passkey_settings)
+                    }
+                )
+            )
+            .setPositiveButton(R.string.autofill_guide_recheck) { _, _ ->
+                val status = AutofillPasskeyFoundation.evaluate(this)
+                refreshAutofillPasskeyPanel()
+                refreshGuidedActionState()
+                Toast.makeText(
+                    this,
+                    if (isFoundationTargetReady(target, status)) {
+                        R.string.autofill_guide_return_ready
+                    } else {
+                        R.string.autofill_guide_return_not_ready
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            .setNeutralButton(R.string.autofill_guide_open_settings) { _, _ ->
+                showFoundationGuideDialog(target)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun foundationGuideSteps(
+        target: FoundationGuideTarget,
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ): List<String> {
+        val searchTermRes = foundationGuideSearchTermRes(target, oemPack)
+        val confirmationRes = when (target) {
+            FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_step_select_provider
+            FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_step_confirm_passkey
+        }
+        val steps = mutableListOf(
+            getString(
+                R.string.autofill_guide_step_search_template,
+                getString(searchTermRes)
+            )
+        )
+        when (target) {
+            FoundationGuideTarget.AUTOFILL -> when (oemPack) {
+                AutofillPasskeyFoundation.OemPack.MIUI -> {
+                    steps += getString(R.string.autofill_guide_step_miui_search_dead_end)
+                    steps += getString(R.string.autofill_guide_autofill_path_miui)
+                    steps += getString(R.string.autofill_guide_autofill_path_miui_legacy)
+                }
+                AutofillPasskeyFoundation.OemPack.SAMSUNG -> {
+                    steps += getString(R.string.autofill_guide_autofill_path_samsung)
+                }
+                AutofillPasskeyFoundation.OemPack.PIXEL -> {
+                    steps += getString(R.string.autofill_guide_autofill_path_pixel)
+                }
+                AutofillPasskeyFoundation.OemPack.GENERIC -> {
+                    steps += getString(R.string.autofill_guide_autofill_path_generic)
+                }
+            }
+
+            FoundationGuideTarget.PASSKEY -> when (oemPack) {
+                AutofillPasskeyFoundation.OemPack.MIUI -> {
+                    steps += getString(R.string.autofill_guide_step_miui_passkey_google_hub)
+                    steps += getString(R.string.autofill_guide_passkey_path_miui)
+                }
+                AutofillPasskeyFoundation.OemPack.SAMSUNG -> {
+                    steps += getString(R.string.autofill_guide_passkey_path_samsung)
+                }
+                AutofillPasskeyFoundation.OemPack.PIXEL -> {
+                    steps += getString(R.string.autofill_guide_passkey_path_pixel)
+                }
+                AutofillPasskeyFoundation.OemPack.GENERIC -> {
+                    steps += getString(R.string.autofill_guide_passkey_path_generic)
+                }
+            }
+        }
+        steps += getString(confirmationRes)
+        steps += getString(R.string.autofill_guide_step_return)
+        return steps
+    }
+
+    private fun foundationGuideSearchTermRes(
+        target: FoundationGuideTarget,
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ): Int {
+        return when (target) {
+            FoundationGuideTarget.AUTOFILL -> when (oemPack) {
+                AutofillPasskeyFoundation.OemPack.MIUI -> R.string.autofill_guide_search_autofill_term_miui
+                AutofillPasskeyFoundation.OemPack.SAMSUNG,
+                AutofillPasskeyFoundation.OemPack.PIXEL,
+                AutofillPasskeyFoundation.OemPack.GENERIC -> R.string.autofill_guide_search_autofill_term
+            }
+            FoundationGuideTarget.PASSKEY -> when (oemPack) {
+                AutofillPasskeyFoundation.OemPack.MIUI -> R.string.autofill_guide_search_passkey_term_miui
+                AutofillPasskeyFoundation.OemPack.SAMSUNG,
+                AutofillPasskeyFoundation.OemPack.PIXEL,
+                AutofillPasskeyFoundation.OemPack.GENERIC -> R.string.autofill_guide_search_passkey_term
+            }
+        }
+    }
+
+    private fun foundationOverlayVisibilityCaveat(
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ): String? {
+        return when (oemPack) {
+            AutofillPasskeyFoundation.OemPack.MIUI,
+            AutofillPasskeyFoundation.OemPack.SAMSUNG -> getString(
+                R.string.autofill_guide_overlay_visibility_caveat,
+                foundationOemPackLabel(oemPack)
+            )
+            AutofillPasskeyFoundation.OemPack.PIXEL,
+            AutofillPasskeyFoundation.OemPack.GENERIC -> null
+        }
+    }
+
+    private fun foundationOemPackLabel(oemPack: AutofillPasskeyFoundation.OemPack): String {
+        return when (oemPack) {
+            AutofillPasskeyFoundation.OemPack.MIUI -> "MIUI (Xiaomi/Redmi/POCO)"
+            AutofillPasskeyFoundation.OemPack.SAMSUNG -> "Samsung One UI"
+            AutofillPasskeyFoundation.OemPack.PIXEL -> "Google Pixel"
+            AutofillPasskeyFoundation.OemPack.GENERIC -> "Generic Android"
+        }
+    }
+
+    private fun isFoundationTargetReady(
+        target: FoundationGuideTarget,
+        status: AutofillPasskeyStatus
+    ): Boolean {
+        return when (target) {
+            FoundationGuideTarget.AUTOFILL -> !status.autofillSupported || status.autofillEnabled
+            FoundationGuideTarget.PASSKEY -> status.foundationReady()
+        }
+    }
+
+    private fun readPrimarySweepState(primaryEmail: String): CredentialDefenseSweepState {
+        if (primaryEmail.isBlank()) {
+            return CredentialDefenseSweepState(
+                ranForCurrentEmail = false,
+                matchedRecordCount = 0,
+                compromisedRecordCount = 0
+            )
+        }
+        val prefs = getSharedPreferences(WatchdogConfig.PREFS_FILE, MODE_PRIVATE)
+        val storedEmail = prefs.getString(KEY_PRIMARY_SWEEP_EMAIL, "")?.trim().orEmpty()
+        if (!storedEmail.equals(primaryEmail, ignoreCase = true)) {
+            return CredentialDefenseSweepState(
+                ranForCurrentEmail = false,
+                matchedRecordCount = 0,
+                compromisedRecordCount = 0
+            )
+        }
+        return CredentialDefenseSweepState(
+            ranForCurrentEmail = prefs.getLong(KEY_PRIMARY_SWEEP_AT, 0L) > 0L,
+            matchedRecordCount = prefs.getInt(KEY_PRIMARY_SWEEP_MATCHED, 0).coerceAtLeast(0),
+            compromisedRecordCount = prefs.getInt(KEY_PRIMARY_SWEEP_COMPROMISED, 0).coerceAtLeast(0)
+        )
+    }
+
+    private fun recordPrimarySweepState(
+        primaryEmail: String,
+        matchedRecordCount: Int,
+        compromisedRecordCount: Int
+    ) {
+        getSharedPreferences(WatchdogConfig.PREFS_FILE, MODE_PRIVATE)
+            .edit()
+            .putString(KEY_PRIMARY_SWEEP_EMAIL, primaryEmail.trim().lowercase(Locale.US))
+            .putLong(KEY_PRIMARY_SWEEP_AT, System.currentTimeMillis())
+            .putInt(KEY_PRIMARY_SWEEP_MATCHED, matchedRecordCount.coerceAtLeast(0))
+            .putInt(KEY_PRIMARY_SWEEP_COMPROMISED, compromisedRecordCount.coerceAtLeast(0))
+            .apply()
+    }
+
+    private fun clearPrimarySweepState() {
+        getSharedPreferences(WatchdogConfig.PREFS_FILE, MODE_PRIVATE)
+            .edit()
+            .remove(KEY_PRIMARY_SWEEP_EMAIL)
+            .remove(KEY_PRIMARY_SWEEP_AT)
+            .remove(KEY_PRIMARY_SWEEP_MATCHED)
+            .remove(KEY_PRIMARY_SWEEP_COMPROMISED)
+            .apply()
     }
 
     private fun maybeShowIdentityOnboarding() {
@@ -463,9 +932,11 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 )
                 if (emailChanged) {
                     PrimaryIdentityStore.clearEmailLinkedAt(this)
+                    clearPrimarySweepState()
                 }
 
                 refreshIdentityCard()
+                refreshGuidedActionState()
                 Toast.makeText(this, R.string.identity_saved, Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
 
@@ -722,6 +1193,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
             .setPositiveButton(R.string.action_mark_linked) { _, _ ->
                 PrimaryIdentityStore.markEmailLinkedNow(this, email)
                 refreshIdentityCard()
+                refreshGuidedActionState()
                 binding.identityStatusLabel.text = getString(
                     R.string.identity_status_linked_template,
                     formatDateTime(System.currentTimeMillis())
@@ -729,7 +1201,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 LionAlertDialogBuilder(this)
                     .setTitle(R.string.breach_scan_prompt_title)
                     .setMessage(R.string.breach_scan_prompt_message)
-                    .setPositiveButton(R.string.action_run_primary_breach_scan) { _, _ -> runPrimaryBreachScan() }
+                    .setPositiveButton(R.string.action_run_primary_breach_scan) { _, _ -> startGuidedPrimaryBreachFlow() }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
             }
@@ -777,11 +1249,21 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
         val profile = PrimaryIdentityStore.readProfile(this)
         if (profile.primaryEmail.isBlank()) {
-            Toast.makeText(this, R.string.breach_scan_requires_primary_email, Toast.LENGTH_SHORT).show()
+            showIdentityDialog(isOnboarding = false)
             return
         }
         if (profile.emailLinkedAtEpochMs <= 0L) {
-            Toast.makeText(this, R.string.identity_status_link_required, Toast.LENGTH_SHORT).show()
+            startEmailLinkFlow(profile.primaryEmail)
+            return
+        }
+        val status = AutofillPasskeyFoundation.evaluate(this)
+        if (!status.foundationReady()) {
+            val target = if (status.autofillSupported && !status.autofillEnabled) {
+                FoundationGuideTarget.AUTOFILL
+            } else {
+                FoundationGuideTarget.PASSKEY
+            }
+            showFoundationGuideDialog(target)
             return
         }
 
@@ -797,8 +1279,15 @@ class CredentialDefenseActivity : AppCompatActivity() {
             updateLionProcessingCheckpoint(0.42f)
 
             if (records.isEmpty()) {
+                recordPrimarySweepState(
+                    primaryEmail = profile.primaryEmail,
+                    matchedRecordCount = 0,
+                    compromisedRecordCount = 0
+                )
                 binding.breachSummaryLabel.text = getString(R.string.breach_scan_no_records_for_primary)
+                refreshGuidedActionState()
                 setCredentialBusy(false)
+                showNoRecordsSeedPrompt()
                 return@launch
             }
 
@@ -825,6 +1314,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
             val compromised = results.count { it.error == null && it.pwnedCount > 0 }
             val totalPwnedHits = results.sumOf { if (it.error == null) it.pwnedCount else 0 }
             val errors = results.count { it.error != null }
+            val outcome = GuidedBreachOutcome(
+                matchedRecordCount = results.size,
+                compromisedRecordCount = compromised,
+                totalPwnedHits = totalPwnedHits,
+                errorCount = errors,
+                highestPriorityCompromisedRecord = highestPriorityCompromisedRecord(records, results)
+            )
 
             binding.breachSummaryLabel.text = getString(
                 R.string.breach_summary_template,
@@ -835,10 +1331,81 @@ class CredentialDefenseActivity : AppCompatActivity() {
             )
             updateLionProcessingCheckpoint(LION_PROCESSING_TARGET_PROGRESS)
 
+            recordPrimarySweepState(
+                primaryEmail = profile.primaryEmail,
+                matchedRecordCount = outcome.matchedRecordCount,
+                compromisedRecordCount = outcome.compromisedRecordCount
+            )
             PricingPolicy.recordBreachScanUsage(this@CredentialDefenseActivity)
+            refreshGuidedActionState()
             setCredentialBusy(false)
             Toast.makeText(this@CredentialDefenseActivity, R.string.breach_scan_completed, Toast.LENGTH_SHORT).show()
+            if (outcome.compromisedRecordCount > 0) {
+                showBreachFollowUpPrompt(outcome)
+            }
         }
+    }
+
+    private fun highestPriorityCompromisedRecord(
+        records: List<StoredCredential>,
+        results: List<BreachCheckResult>
+    ): StoredCredential? {
+        val breachCountsByRecordId = results
+            .filter { it.error == null && it.pwnedCount > 0 }
+            .associate { it.recordId to it.pwnedCount }
+        return records
+            .asSequence()
+            .filter { breachCountsByRecordId.containsKey(it.recordId) }
+            .sortedWith(
+                compareBy<StoredCredential> { CredentialPolicy.categorySortKey(it.category, policy) }
+                    .thenByDescending { breachCountsByRecordId[it.recordId] ?: 0 }
+                    .thenBy { it.service.lowercase(Locale.US) }
+            )
+            .firstOrNull()
+    }
+
+    private fun showNoRecordsSeedPrompt() {
+        val profile = PrimaryIdentityStore.readProfile(this)
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.breach_scan_seed_prompt_title)
+            .setMessage(R.string.breach_scan_seed_prompt_message)
+            .setPositiveButton(R.string.action_open_service_action) { _, _ ->
+                serviceDraft = ServiceDraft(
+                    username = profile.primaryEmail
+                )
+                renderVaultSummaryForCurrentDraft()
+                openServiceActionDialog()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showBreachFollowUpPrompt(outcome: GuidedBreachOutcome) {
+        val targetRecord = outcome.highestPriorityCompromisedRecord ?: return
+        LionAlertDialogBuilder(this)
+            .setTitle(R.string.breach_scan_compromised_prompt_title)
+            .setMessage(
+                getString(
+                    R.string.breach_scan_compromised_prompt_message_template,
+                    targetRecord.service,
+                    outcome.compromisedRecordCount
+                )
+            )
+            .setPositiveButton(R.string.action_open_service_action) { _, _ ->
+                prefillServiceDraftFromRecord(targetRecord)
+                openServiceActionDialog()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun prefillServiceDraftFromRecord(record: StoredCredential) {
+        serviceDraft = ServiceDraft(
+            service = record.service,
+            username = record.username,
+            url = record.url
+        )
+        renderVaultSummaryForCurrentDraft()
     }
 
     private fun openServiceActionDialog() {
@@ -1517,7 +2084,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
 
     private fun refreshAutofillPasskeyPanel() {
         val status = AutofillPasskeyFoundation.evaluate(this)
-        val recommendation = if (status.passkeyReady) {
+        val recommendation = if (status.foundationReady()) {
             getString(R.string.autofill_passkey_reco_ready)
         } else {
             getString(R.string.autofill_passkey_reco_setup)

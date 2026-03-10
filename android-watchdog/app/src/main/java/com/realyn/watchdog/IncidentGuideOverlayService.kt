@@ -26,6 +26,8 @@ class IncidentGuideOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var overlayTitle: String = ""
+    private var overlayReturnActivityClassName: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -48,6 +50,10 @@ class IncidentGuideOverlayService : Service() {
         val title = intent?.getStringExtra(WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE)
             .orEmpty()
             .ifBlank { getString(R.string.incident_overlay_title) }
+        overlayTitle = title
+        overlayReturnActivityClassName = intent?.getStringExtra(
+            WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY
+        )
         val instructions = intent
             ?.getStringArrayListExtra(WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS)
             ?.map { it.trim() }
@@ -359,13 +365,16 @@ class IncidentGuideOverlayService : Service() {
             .trim()
             .ifBlank { getString(R.string.incident_overlay_default_step) }
         val detail = buildString {
+            appendLine(stepLabel)
+            appendLine()
             appendLine(currentTarget)
             appendLine()
             append(getString(R.string.incident_overlay_notification_hint))
         }
+        val title = overlayTitle.ifBlank { getString(R.string.incident_overlay_title) }
         val notification = NotificationCompat.Builder(this, WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(getString(R.string.incident_overlay_notification_title, stepLabel))
+            .setContentTitle(title)
             .setContentText(currentTarget)
             .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
             .setOngoing(true)
@@ -384,14 +393,24 @@ class IncidentGuideOverlayService : Service() {
     }
 
     private fun buildGuidePendingIntent(): PendingIntent {
-        val openIntent = Intent(this, ScanResultsActivity::class.java).apply {
+        val targetActivity = overlayReturnActivityClassName
+            ?.takeIf { it.isNotBlank() }
+            ?.let { className ->
+                runCatching {
+                    Class.forName(className).asSubclass(android.app.Activity::class.java)
+                }.getOrNull()
+            }
+            ?: ScanResultsActivity::class.java
+        val openIntent = Intent(this, targetActivity).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(
-                ScanResultsActivity.EXTRA_SCREEN_MODE,
-                ScanResultsActivity.SCREEN_MODE_INCIDENT_ASSISTANT
-            )
+            if (targetActivity == ScanResultsActivity::class.java) {
+                putExtra(
+                    ScanResultsActivity.EXTRA_SCREEN_MODE,
+                    ScanResultsActivity.SCREEN_MODE_INCIDENT_ASSISTANT
+                )
+            }
         }
         return PendingIntent.getActivity(
             this,
@@ -415,7 +434,14 @@ class IncidentGuideOverlayService : Service() {
     private fun shouldPinGuideNotification(): Boolean {
         val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
         val brand = Build.BRAND.orEmpty().lowercase()
-        return manufacturer.contains("samsung") || brand.contains("samsung")
+        return manufacturer.contains("samsung") ||
+            brand.contains("samsung") ||
+            manufacturer.contains("xiaomi") ||
+            manufacturer.contains("redmi") ||
+            manufacturer.contains("poco") ||
+            brand.contains("xiaomi") ||
+            brand.contains("redmi") ||
+            brand.contains("poco")
     }
 
     private fun createGuideChannel() {

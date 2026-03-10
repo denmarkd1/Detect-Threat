@@ -39,6 +39,7 @@ object WatchdogConfig {
     const val EXTRA_INCIDENT_OVERLAY_TITLE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_TITLE"
     const val EXTRA_INCIDENT_OVERLAY_STEPS = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_STEPS"
     const val EXTRA_INCIDENT_OVERLAY_COMPACT_MODE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_COMPACT_MODE"
+    const val EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_RETURN_ACTIVITY"
 
     const val FOREGROUND_CHANNEL_ID = "dt_scanner_foreground"
     const val ALERT_CHANNEL_ID = "dt_scanner_alerts"

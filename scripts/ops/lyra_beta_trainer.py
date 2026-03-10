@@ -86,6 +86,11 @@ TUTORIAL_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay
 LYRA_TRAINER_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_lyra_qa_trainer_2026-03-04.md"
 POLICY_DISCLOSURE_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_policy_play_disclosure_review_2026-03-04.md"
 PRICING_PACKAGING_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_pricing_packaging_update_2026-03-04.md"
+ZEN_WORKSPACE_ROOT = ROOT_DIR.parent / "D_T_Zen_MCP_Workspace"
+ZEN_CODEX_PROVIDER_PATH = ZEN_WORKSPACE_ROOT / "providers" / "codex_cli.py"
+ZEN_PUTER_BRIDGE_PROVIDER_PATH = ZEN_WORKSPACE_ROOT / "providers" / "puter_bridge.py"
+ZEN_PUTER_PROVEN_PROVIDER_PATH = ZEN_WORKSPACE_ROOT / "providers" / "puter_proven.py"
+ZEN_RUNNER_PATH = ROOT_DIR / "scripts" / "ops" / "run_zen_mcp_with_dt_hub.sh"
 EXPECTED_WALLET_SETUP_URI = "https://support.google.com/wallet/answer/12060041?hl=en"
 HUB_WORKSPACE_ROOT = ROOT_DIR.parent / "Danicous_Troubleshooter"
 DARK_CODER_ROOT = ROOT_DIR.parent / "Dark_Coder"
@@ -952,6 +957,192 @@ class QaRunner:
             output_excerpt=output or "No output.",
         )
 
+    def _run_credential_defense_breach_first_flow(self) -> None:
+        check_name = "credential_defense_breach_first_flow"
+        notes: List[str] = []
+        errors: List[str] = []
+
+        activity_path = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "CredentialDefenseActivity.kt"
+        layout_path = ANDROID_DIR / "app" / "src" / "main" / "res" / "layout" / "activity_credential_defense.xml"
+
+        source_rules = {
+            activity_path: [
+                "applySystemBarInsets()",
+                "startGuidedPrimaryBreachFlow()",
+                "refreshGuidedActionState()",
+                "showFoundationGuideDialog(",
+                "startFoundationGuideOverlayFlow(",
+                "startFoundationGuideOverlay(",
+                "stopFoundationGuideOverlay()",
+                "showFoundationReturnPrompt(",
+                "recordPrimarySweepState(",
+                "showNoRecordsSeedPrompt(",
+                "showBreachFollowUpPrompt(",
+                "incident_assistant_recommended_open_with_overlay",
+                "EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY",
+            ],
+            layout_path: [
+                "autofillPasskeyCard",
+                "serviceActionSubtitleLabel",
+                "openServiceActionButton",
+            ],
+            STRINGS_PATH: [
+                "action_start_guided_breach_flow",
+                "service_action_subtitle_scan_locked",
+                "autofill_guide_autofill_title",
+                "autofill_guide_step_miui_search_dead_end",
+                "autofill_guide_overlay_started",
+                "breach_scan_seed_prompt_title",
+                "home_tutorial_step_credentials_window_body",
+            ],
+            TUTORIAL_DOC_PATH: [
+                "Credential Defense breach-first flow",
+                "service actions stay locked behind Scan breaches",
+                "Accounts & sync",
+                "Google > All services > Autofill with Google",
+                "returning from Settings triggers a recheck prompt",
+            ],
+            LYRA_TRAINER_DOC_PATH: [
+                "Credential Defense breach-first UX",
+                "Confirm `Scan breaches` drives setup",
+                "Open with overlay guide",
+                "Google > All services > Autofill with Google",
+                "Confirm service actions stay locked behind Scan breaches",
+            ],
+        }
+
+        for path, required_tokens in source_rules.items():
+            if not path.exists():
+                errors.append(f"Missing credential-defense validation path: {path}")
+                continue
+            payload = _safe_read_text(path)
+            for token in required_tokens:
+                if token not in payload:
+                    errors.append(f"Required credential-defense token missing from {path}: {token}")
+
+        if layout_path.exists():
+            layout_payload = _safe_read_text(layout_path)
+            autofill_index = layout_payload.find("autofillPasskeyCard")
+            service_index = layout_payload.find("serviceActionSubtitleLabel")
+            if autofill_index == -1 or service_index == -1:
+                errors.append("Credential Defense layout is missing autofill/service markers needed for order validation.")
+            elif autofill_index > service_index:
+                errors.append("Credential Defense layout still places service actions before autofill/passkey foundation.")
+            else:
+                notes.append("Credential Defense layout places autofill/passkey guidance ahead of service actions.")
+
+        notes.append("Validated breach-first Credential Defense markers across source, layout, strings, tutorial, and Lyra docs.")
+
+        output_lines = notes
+        if errors:
+            output_lines += ["", "Validation errors:"] + [f"- {line}" for line in errors]
+        output = "\n".join(output_lines).strip()
+        if len(output) > OUTPUT_EXCERPT_LIMIT:
+            output = output[:OUTPUT_EXCERPT_LIMIT] + "\n...[truncated]"
+
+        self._record_supplemental_result(
+            name=check_name,
+            command="credential defense breach-first flow validation",
+            status="PASS" if not errors else "FAIL",
+            return_code=0 if not errors else 7,
+            output_excerpt=output or "No output.",
+        )
+
+    def _run_zen_codex_fallback_transport(self) -> None:
+        check_name = "zen_codex_fallback_transport"
+        notes: List[str] = []
+        errors: List[str] = []
+
+        source_rules = {
+            ZEN_RUNNER_PATH: [
+                'ZEN_CODEX_FALLBACK_ENABLED="${ZEN_CODEX_FALLBACK_ENABLED:-1}"',
+                'ZEN_CODEX_WORKDIR="${ZEN_CODEX_WORKDIR:-${WORKSPACE_ROOT}}"',
+            ],
+            ZEN_CODEX_PROVIDER_PATH: [
+                'command.append("-")',
+                "input=prompt_text",
+            ],
+            ZEN_PUTER_BRIDGE_PROVIDER_PATH: [
+                "fallback_kwargs: Optional[dict[str, Any]] = None",
+                "**(fallback_kwargs or {})",
+                "fallback_kwargs=kwargs",
+            ],
+            ZEN_PUTER_PROVEN_PROVIDER_PATH: [
+                "fallback_kwargs: Optional[dict[str, Any]] = None",
+                "**(fallback_kwargs or {})",
+                "fallback_kwargs=kwargs",
+            ],
+        }
+
+        for path, required_tokens in source_rules.items():
+            if not path.exists():
+                errors.append(f"Missing Zen Codex fallback validation path: {path}")
+                continue
+            payload = _safe_read_text(path)
+            for token in required_tokens:
+                if token not in payload:
+                    errors.append(f"Required Zen Codex fallback token missing from {path}: {token}")
+
+        if not errors:
+            notes.append("Validated Zen launcher exports Codex fallback env and provider streams prompts via stdin.")
+
+        output_lines = notes
+        if errors:
+            output_lines += ["", "Validation errors:"] + [f"- {line}" for line in errors]
+        output = "\n".join(output_lines).strip()
+        if len(output) > OUTPUT_EXCERPT_LIMIT:
+            output = output[:OUTPUT_EXCERPT_LIMIT] + "\n...[truncated]"
+
+        self._record_supplemental_result(
+            name=check_name,
+            command="zen codex fallback transport validation",
+            status="PASS" if not errors else "FAIL",
+            return_code=0 if not errors else 8,
+            output_excerpt=output or "No output.",
+        )
+
+        probe_code = textwrap.dedent(
+            f"""
+            import json
+            import sys
+
+            sys.path.insert(0, {str(ZEN_WORKSPACE_ROOT)!r})
+            from providers.codex_cli import CodexCLIProvider
+
+            provider = CodexCLIProvider()
+            response = provider.generate_content(
+                prompt="Reply with exactly fallback-ok",
+                model_name="codex-cli",
+                system_prompt="You are a terse test harness.",
+                workdir={str(ROOT_DIR)!r},
+            )
+            result = {{
+                "content": response.content.strip(),
+                "engine": response.metadata.get("execution_engine"),
+                "workdir": response.metadata.get("workdir"),
+            }}
+            assert result["content"] == "fallback-ok", result
+            assert result["engine"] == "codex-cli", result
+            assert result["workdir"] == {str(ROOT_DIR)!r}, result
+            print(json.dumps(result, indent=2))
+            """
+        ).strip()
+
+        zen_python = HUB_WORKSPACE_ROOT / ".venv" / "bin" / "python"
+        if zen_python.exists():
+            self._run(
+                "zen_codex_fallback_smoke",
+                [str(zen_python), "-c", probe_code],
+                cwd=ZEN_WORKSPACE_ROOT,
+                timeout=300,
+            )
+        else:
+            self._skip(
+                "zen_codex_fallback_smoke",
+                f"{zen_python} -c '<probe>'",
+                f"Skipped because Zen runtime interpreter is missing: {zen_python}",
+            )
+
     def _run_dt_scope_confidence_ladder(self) -> None:
         scoped_review_query = (
             "Perform read-only review of modules (systems, D_T_System, scripts, analysis, tests, gui) "
@@ -1218,6 +1409,8 @@ class QaRunner:
         self._run_memory_phase_fix_coverage()
         self._run_integration_mesh_retail_readiness()
         self._run_family_role_canonicalization()
+        self._run_credential_defense_breach_first_flow()
+        self._run_zen_codex_fallback_transport()
         self._run_dt_scope_confidence_ladder()
         self._run("precommit_guard", ["bash", "scripts/ops/precommit_guard.sh", "--include-unstaged"], cwd=ROOT_DIR)
         self._run("gradle_lint_unit", ["./gradlew", "lintDebug", "testDebugUnitTest"], cwd=ANDROID_DIR, timeout=1800)
