@@ -173,8 +173,9 @@ Credential Defense Center tutorial copy now matches the current retail flow:
    - `Open autofill settings` and `Open passkey settings` should no longer feel like blind jumps.
    - The app now presents OEM-aware path guidance first, then opens root device Settings for the user.
    - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings, then collapse the card with `Hide` until `Show` is needed again.
-   - Phase 1 of the adaptive foundation guide must stay retail-safe: deterministic local rule packs only, manual anchor confirmation only, no screenshots, no Accessibility capture, and no autonomous taps.
+   - Phase 2 of the adaptive foundation guide must stay retail-safe: deterministic local rule packs remain the controller, manual anchor confirmation remains available, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
    - The adaptive overlay should ask `What do you see?`, show anchor buttons such as `Passwords & accounts`, `Autofill service`, `Google Password Manager`, or `Preferences`, and update the next instruction only after the user confirms a visible anchor.
+   - `Analyze current screen` should briefly hide the overlay, request screen-capture consent, run one-time on-device OCR, then return with either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping the manual anchor buttons available.
    - When the user returns, the app asks for a recheck instead of silently leaving them at a dead end.
    - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto`, route first through `Passwords & accounts > Autofill service > Google`, and if Xiaomi redirects into Google services fall back to `Google Password Manager` or `Autofill with Google`.
    - The final autofill step must send the user back to `Recheck now`, not `Scan breaches`.
@@ -190,8 +191,9 @@ Credential Defense Center tutorial copy now matches the current retail flow:
    - Confirm tapping `Scan breaches` with an unlinked email opens the link-primary-email flow.
    - Confirm tapping `Scan breaches` before autofill/passkey foundation is ready opens the guided foundation dialog.
    - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
-   - Confirm the adaptive foundation overlay is deterministic and manual-only in this phase: no screenshot capture, no Accessibility capture, no autonomous taps.
+   - Confirm the adaptive foundation overlay stays deterministic in this phase: the guide still routes through local rule packs, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
    - Confirm the overlay shows `What do you see?` and anchor buttons that match the visible screen, then only updates after the tester taps a matching anchor.
+   - Confirm `Analyze current screen` hides the overlay for capture, asks for screen-capture consent, returns one of `Detected: ...`, `Possible matches: ...`, or `No reliable match found`, and still keeps manual anchor buttons available.
    - Confirm `Reset route` returns the overlay to the first state for the active OEM flow.
    - On MIUI/Xiaomi devices, confirm autofill/passkey actions warn about the `Accounts & sync` / `Android Auto` dead-end search results and route back toward `Passwords & accounts > Autofill service > Google`, using Google services only as the fallback path.
    - On MIUI/Xiaomi devices, confirm autofill guidance uses `Passwords & accounts > Autofill service > Google` as the primary path, with `Google Password Manager` or `Autofill with Google` only as the fallback when Xiaomi redirects into Google services.

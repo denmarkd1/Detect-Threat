@@ -5,12 +5,16 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.graphics.Paint
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
@@ -22,6 +26,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 
 class AdaptiveGuideOverlayService : Service() {
 
@@ -29,6 +34,8 @@ class AdaptiveGuideOverlayService : Service() {
     private var overlayView: View? = null
     private var overlayTitle: String = ""
     private var overlayReturnActivityClassName: String? = null
+    private var analysisEventReceiver: BroadcastReceiver? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
@@ -101,6 +108,9 @@ class AdaptiveGuideOverlayService : Service() {
         val history = mutableListOf(initialState.stateId)
         var currentState = initialState
         var isCollapsed = false
+        var analysisInProgress = false
+        var analysisResult: AdaptiveGuideAnalysisResult? = null
+        var analysisStatusMessage: String? = null
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -162,11 +172,23 @@ class AdaptiveGuideOverlayService : Service() {
             textSize = 12f
             setLineSpacing(3f, 1f)
         }
+        val analysisStatusView = TextView(this).apply {
+            setTextColor(0xFFF7E1BE.toInt())
+            textSize = 12f
+            setLineSpacing(3f, 1f)
+        }
+        val analysisCandidates = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         val anchorButtons = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+        }
+        val analyzeButton = Button(this).apply {
+            text = getString(R.string.adaptive_guide_analyze_current_screen)
+            isAllCaps = false
         }
         val primaryControls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -198,6 +220,13 @@ class AdaptiveGuideOverlayService : Service() {
                 1f
             )
         )
+        controls.addView(
+            analyzeButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
         controls.addView(primaryControls)
         controls.addView(
             doneButton,
@@ -209,7 +238,164 @@ class AdaptiveGuideOverlayService : Service() {
             }
         )
 
-        fun renderState() {
+        lateinit var renderState: () -> Unit
+
+        val clearAnalysisState = {
+            analysisInProgress = false
+            analysisResult = null
+            analysisStatusMessage = null
+        }
+
+        val restoreOverlayAfterAnalysisEvent = {
+            mainHandler.post {
+                overlayView?.visibility = View.VISIBLE
+            }
+        }
+
+        val applyAnalysisCandidate = fun(candidate: AdaptiveGuideAnalysisCandidate) {
+            val next = AdaptiveGuideEngine.transition(
+                pack = pack,
+                flowId = flowId,
+                stateId = candidate.stateId,
+                anchorId = candidate.anchorId
+            ) ?: return
+            AdaptiveGuideAuditLog.append(
+                context = this@AdaptiveGuideOverlayService,
+                event = "adaptive_guide_analysis_applied",
+                detail = buildString {
+                    append("flow_id=").append(flowId)
+                    append(" current_state_id=").append(currentState.stateId)
+                    append(" detected_state_id=").append(candidate.stateId)
+                    append(" anchor_id=").append(candidate.anchorId)
+                    append(" next_state_id=").append(next.stateId)
+                }
+            )
+            if (candidate.stateId == currentState.stateId) {
+                history += next.stateId
+            } else {
+                history.clear()
+                history += candidate.stateId
+                history += next.stateId
+            }
+            currentState = next
+            clearAnalysisState()
+            renderState()
+        }
+
+        val renderAnalysis = {
+            analyzeButton.isEnabled = !analysisInProgress
+            analysisCandidates.removeAllViews()
+            val result = analysisResult
+            when {
+                analysisInProgress -> {
+                    analysisStatusView.text = getString(R.string.adaptive_guide_analysis_running)
+                }
+                result == null -> {
+                    analysisStatusView.text = analysisStatusMessage
+                        ?.takeIf { it.isNotBlank() }
+                        ?: getString(R.string.adaptive_guide_analysis_hint)
+                }
+                result.confidence == AdaptiveGuideAnalysisConfidence.EXACT -> {
+                    analysisStatusView.text = getString(
+                        R.string.adaptive_guide_analysis_detected_template,
+                        result.summaryLabel
+                    )
+                    result.primaryCandidate?.let { candidate ->
+                        val button = Button(this).apply {
+                            isAllCaps = false
+                            text = getString(
+                                R.string.adaptive_guide_analysis_use_match_template,
+                                candidate.anchorLabel
+                            )
+                            setOnClickListener {
+                                applyAnalysisCandidate(candidate)
+                            }
+                        }
+                        analysisCandidates.addView(button)
+                    }
+                }
+                result.confidence == AdaptiveGuideAnalysisConfidence.AMBIGUOUS -> {
+                    analysisStatusView.text = getString(
+                        R.string.adaptive_guide_analysis_possible_template,
+                        result.summaryLabel
+                    )
+                    val candidateButtons = buildList {
+                        result.primaryCandidate?.let(::add)
+                        addAll(result.alternateCandidates)
+                    }.take(3)
+                    candidateButtons.forEachIndexed { index, candidate ->
+                        val button = Button(this).apply {
+                            isAllCaps = false
+                            text = getString(
+                                R.string.adaptive_guide_analysis_use_match_template,
+                                candidate.anchorLabel
+                            )
+                            setOnClickListener {
+                                applyAnalysisCandidate(candidate)
+                            }
+                        }
+                        analysisCandidates.addView(
+                            button,
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                if (index > 0) {
+                                    topMargin = dpToPx(6)
+                                }
+                            }
+                        )
+                    }
+                }
+                else -> {
+                    analysisStatusView.text = getString(R.string.adaptive_guide_analysis_none)
+                }
+            }
+            analysisStatusView.visibility = if (analysisStatusView.text.isNullOrBlank()) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
+            analysisCandidates.visibility = if (analysisCandidates.childCount > 0) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        }
+
+        val launchAnalysisCapture = fun() {
+            if (analysisInProgress) {
+                return
+            }
+            clearAnalysisState()
+            analysisInProgress = true
+            renderState()
+            overlayView?.visibility = View.INVISIBLE
+            AdaptiveGuideAuditLog.append(
+                context = this@AdaptiveGuideOverlayService,
+                event = "adaptive_guide_analysis_requested",
+                detail = "flow_id=$flowId state_id=${currentState.stateId}"
+            )
+            val captureIntent = Intent(this, AdaptiveGuideCaptureActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                )
+                putExtra(WatchdogConfig.EXTRA_ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID, flowId)
+                putExtra(WatchdogConfig.EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATE_ID, currentState.stateId)
+            }
+            try {
+                startActivity(captureIntent)
+            } catch (_: Exception) {
+                analysisInProgress = false
+                analysisStatusMessage = getString(R.string.adaptive_guide_analysis_open_failed)
+                restoreOverlayAfterAnalysisEvent()
+                renderState()
+            }
+        }
+
+        renderState = {
             val hasAnchors = currentState.anchors.isNotEmpty()
             counterView.text = getString(
                 R.string.incident_overlay_step_template,
@@ -247,9 +433,10 @@ class AdaptiveGuideOverlayService : Service() {
                             event = "adaptive_guide_anchor_selected",
                             detail = "flow_id=$flowId state_id=${currentState.stateId} anchor_id=${anchor.id} next_state_id=${next.stateId}"
                         )
+                        clearAnalysisState()
                         history += next.stateId
                         currentState = next
-                        renderState()
+                        renderState.invoke()
                     }
                 }
                 anchorButtons.addView(
@@ -264,6 +451,7 @@ class AdaptiveGuideOverlayService : Service() {
                     }
                 )
             }
+            renderAnalysis()
             applyAdaptiveLayoutState(
                 isCollapsed = isCollapsed,
                 hasAnchors = hasAnchors,
@@ -272,6 +460,8 @@ class AdaptiveGuideOverlayService : Service() {
                 targetButton = targetButton,
                 matchLabel = matchLabel,
                 hintView = hintView,
+                analysisStatusView = analysisStatusView,
+                analysisCandidates = analysisCandidates,
                 anchorButtons = anchorButtons,
                 controls = controls
             )
@@ -298,7 +488,8 @@ class AdaptiveGuideOverlayService : Service() {
                 event = "adaptive_guide_previous",
                 detail = "flow_id=$flowId state_id=${currentState.stateId}"
             )
-            renderState()
+            clearAnalysisState()
+            renderState.invoke()
         }
         resetButton.setOnClickListener {
             currentState = AdaptiveGuideEngine.start(pack, flowId) ?: return@setOnClickListener
@@ -309,7 +500,8 @@ class AdaptiveGuideOverlayService : Service() {
                 event = "adaptive_guide_reset",
                 detail = "flow_id=$flowId state_id=${currentState.stateId}"
             )
-            renderState()
+            clearAnalysisState()
+            renderState.invoke()
         }
         toggleLink.setOnClickListener {
             isCollapsed = !isCollapsed
@@ -321,16 +513,37 @@ class AdaptiveGuideOverlayService : Service() {
                 targetButton = targetButton,
                 matchLabel = matchLabel,
                 hintView = hintView,
+                analysisStatusView = analysisStatusView,
+                analysisCandidates = analysisCandidates,
                 anchorButtons = anchorButtons,
                 controls = controls
             )
         }
+        analyzeButton.setOnClickListener { launchAnalysisCapture() }
 
         container.addView(headerRow)
         container.addView(focusLabel)
         container.addView(targetButton)
         container.addView(matchLabel)
         container.addView(hintView)
+        container.addView(
+            analysisStatusView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dpToPx(6)
+            }
+        )
+        container.addView(
+            analysisCandidates,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dpToPx(6)
+            }
+        )
         container.addView(
             anchorButtons,
             LinearLayout.LayoutParams(
@@ -350,7 +563,50 @@ class AdaptiveGuideOverlayService : Service() {
             }
         )
 
-        renderState()
+        unregisterAnalysisReceiver()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: Intent?) {
+                if (intent?.action != WatchdogConfig.ACTION_ADAPTIVE_GUIDE_ANALYSIS_EVENT) {
+                    return
+                }
+                val eventFlowId = intent.getStringExtra(WatchdogConfig.EXTRA_ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID)
+                    .orEmpty()
+                    .trim()
+                if (eventFlowId != flowId) {
+                    return
+                }
+                val status = intent.getStringExtra(WatchdogConfig.EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATUS)
+                    .orEmpty()
+                    .trim()
+                analysisInProgress = false
+                restoreOverlayAfterAnalysisEvent()
+                when (status) {
+                    AdaptiveGuideAnalysisBroadcasts.STATUS_RESULT -> {
+                        analysisResult = AdaptiveGuideAnalysisStore.get(flowId)
+                        analysisStatusMessage = null
+                    }
+                    AdaptiveGuideAnalysisBroadcasts.STATUS_CANCELLED -> {
+                        analysisResult = null
+                        analysisStatusMessage = getString(R.string.adaptive_guide_analysis_cancelled)
+                    }
+                    AdaptiveGuideAnalysisBroadcasts.STATUS_FAILED -> {
+                        analysisResult = null
+                        analysisStatusMessage = getString(R.string.adaptive_guide_analysis_failed)
+                    }
+                }
+                renderState.invoke()
+            }
+        }
+        val filter = IntentFilter(WatchdogConfig.ACTION_ADAPTIVE_GUIDE_ANALYSIS_EVENT)
+        ContextCompat.registerReceiver(
+            this,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        analysisEventReceiver = receiver
+
+        renderState.invoke()
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         windowManager?.addView(container, createOverlayParams())
@@ -365,6 +621,8 @@ class AdaptiveGuideOverlayService : Service() {
         targetButton: Button,
         matchLabel: View,
         hintView: View,
+        analysisStatusView: View,
+        analysisCandidates: View,
         anchorButtons: View,
         controls: View
     ) {
@@ -376,6 +634,10 @@ class AdaptiveGuideOverlayService : Service() {
         focusLabel.visibility = state.focusLabelVisibility
         matchLabel.visibility = state.matchLabelVisibility
         hintView.visibility = state.hintVisibility
+        if (isCollapsed) {
+            analysisStatusView.visibility = View.GONE
+            analysisCandidates.visibility = View.GONE
+        }
         anchorButtons.visibility = state.anchorButtonsVisibility
         controls.visibility = state.controlsVisibility
         targetButton.maxLines = state.targetMaxLines
@@ -516,9 +778,16 @@ class AdaptiveGuideOverlayService : Service() {
     }
 
     private fun removeOverlay() {
+        unregisterAnalysisReceiver()
         val view = overlayView ?: return
         runCatching { windowManager?.removeView(view) }
         overlayView = null
+    }
+
+    private fun unregisterAnalysisReceiver() {
+        val receiver = analysisEventReceiver ?: return
+        runCatching { unregisterReceiver(receiver) }
+        analysisEventReceiver = null
     }
 
     private fun cancelPinnedGuideNotification() {

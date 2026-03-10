@@ -37,19 +37,28 @@ object WatchdogConfig {
     const val EXTRA_OVERLAY_TARGET_URL = "com.realyn.watchdog.extra.OVERLAY_TARGET_URL"
     const val ACTION_SHOW_INCIDENT_OVERLAY = "com.realyn.watchdog.action.SHOW_INCIDENT_OVERLAY"
     const val ACTION_HIDE_INCIDENT_OVERLAY = "com.realyn.watchdog.action.HIDE_INCIDENT_OVERLAY"
+    const val ACTION_ADAPTIVE_GUIDE_ANALYSIS_EVENT = "com.realyn.watchdog.action.ADAPTIVE_GUIDE_ANALYSIS_EVENT"
     const val EXTRA_INCIDENT_OVERLAY_TITLE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_TITLE"
     const val EXTRA_INCIDENT_OVERLAY_STEPS = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_STEPS"
     const val EXTRA_INCIDENT_OVERLAY_COMPACT_MODE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_COMPACT_MODE"
     const val EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_RETURN_ACTIVITY"
     const val EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID"
+    const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID"
+    const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATE_ID = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_STATE_ID"
+    const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATUS = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_STATUS"
+    const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_DETAIL = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_DETAIL"
+    const val EXTRA_ADAPTIVE_GUIDE_CAPTURE_RESULT_CODE = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_CAPTURE_RESULT_CODE"
+    const val EXTRA_ADAPTIVE_GUIDE_CAPTURE_DATA_INTENT = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_CAPTURE_DATA_INTENT"
 
     const val FOREGROUND_CHANNEL_ID = "dt_scanner_foreground"
     const val ALERT_CHANNEL_ID = "dt_scanner_alerts"
     const val INCIDENT_GUIDE_CHANNEL_ID = "dt_incident_guide"
+    const val ADAPTIVE_GUIDE_CAPTURE_CHANNEL_ID = "dt_adaptive_guide_capture"
 
     const val FOREGROUND_NOTIFICATION_ID = 4101
     const val ALERT_NOTIFICATION_ID = 4102
     const val INCIDENT_GUIDE_NOTIFICATION_ID = 4103
+    const val ADAPTIVE_GUIDE_CAPTURE_NOTIFICATION_ID = 4104
 
     const val SCAN_INTERVAL_MS = 5 * 60 * 1000L
 }
