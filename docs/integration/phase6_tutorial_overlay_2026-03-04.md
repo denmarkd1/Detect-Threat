@@ -131,7 +131,7 @@ Tutorial guidance is now aligned to the latest remediation UX:
      current tap target is pinned in an ongoing notification while the guide is active (when notifications are allowed).
    - On Samsung One UI, confirm the tutorial begins with a dedicated note about the overlay limitation and
      notification fallback before the standard walkthrough steps.
-   - Confirm compact overlay guide shows one current target at a time with:
+   - Confirm compact overlay guide shows one current target at a time, includes an in-place `Hide` link that collapses the card while keeping the current tap target readable, and uses `Show` to restore:
      `Previous`, `Done this step`, and `Finish guide`.
    - Confirm compact overlay advances step-by-step and closes cleanly at completion.
    - Confirm uninstall remains available as a containment action in the automatic flow for high-risk findings.
@@ -172,7 +172,7 @@ Credential Defense Center tutorial copy now matches the current retail flow:
 2. Autofill/passkey guidance behavior
    - `Open autofill settings` and `Open passkey settings` should no longer feel like blind jumps.
    - The app now presents OEM-aware path guidance first, then opens root device Settings for the user.
-   - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings.
+   - The manual dialog now offers `Open with overlay guide` so the user can keep one current tap target visible while moving through Settings, then collapse the card with `Hide` until `Show` is needed again.
    - When the user returns, the app asks for a recheck instead of silently leaving them at a dead end.
    - On current Xiaomi/MIUI builds, the guidance must explicitly warn that search can dead-end on `Accounts & sync` or `Android Auto` and instead route the user through `Google > All services > Autofill with Google`, with the older `Additional settings > Languages and input > Autofill service` path kept only as a legacy fallback note.
 

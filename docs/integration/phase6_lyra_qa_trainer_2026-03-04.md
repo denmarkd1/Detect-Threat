@@ -78,7 +78,7 @@ Exit code:
      `Files/Media`) in the manual guidance.
    - On Samsung/MIUI devices, confirm manual dialog warns that some native security/settings surfaces may hide overlays
      temporarily and verify manual exact-tap fallback remains usable.
-   - Confirm compact overlay mode displays one current target at a time and supports:
+   - Confirm compact overlay mode displays one current target at a time, supports an in-place `Hide` link that collapses the card while keeping the tap target readable, and uses `Show` to restore:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
    - Use `Back to scan results` and confirm return path is clean.

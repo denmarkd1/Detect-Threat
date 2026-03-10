@@ -596,10 +596,24 @@ class QaRunner:
                     "must_contain": [
                         "class IncidentGuideOverlayService",
                         "WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE",
+                        "applyCompactLayoutState",
+                        "IncidentGuideOverlayLayout",
                         "renderCompactStep",
+                        "incident_overlay_hide",
+                        "incident_overlay_show",
                         "incident_overlay_focus_label",
                         "incident_overlay_complete_step",
                         "incident_overlay_finish",
+                    ],
+                },
+                {
+                    "path": ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "IncidentGuideOverlayLayout.kt",
+                    "must_contain": [
+                        "class IncidentGuideCompactLayoutState",
+                        "object IncidentGuideOverlayLayout",
+                        "compactLayoutState",
+                        "incident_overlay_hide",
+                        "incident_overlay_show",
                     ],
                 },
                 {
@@ -623,6 +637,13 @@ class QaRunner:
                     ],
                 },
                 {
+                    "path": ANDROID_DIR / "app" / "src" / "test" / "java" / "com" / "realyn" / "watchdog" / "IncidentGuideOverlayLayoutTest.kt",
+                    "must_contain": [
+                        "expandedCompactStateKeepsControlsVisible",
+                        "collapsedCompactStateShrinksControlsButKeepsTargetVisible",
+                    ],
+                },
+                {
                     "path": ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "strings.xml",
                     "must_contain": [
                         "incident_assistant_skip_choice",
@@ -633,6 +654,8 @@ class QaRunner:
                         "incident_assistant_recommended_manual_title",
                         "incident_assistant_recommended_open_with_overlay",
                         "incident_assistant_recommended_tap_pack_template",
+                        "incident_overlay_hide",
+                        "incident_overlay_show",
                         "incident_overlay_focus_label",
                         "incident_overlay_complete_step",
                         "incident_overlay_finish",
@@ -1000,11 +1023,13 @@ class QaRunner:
                 "service actions stay locked behind Scan breaches",
                 "Accounts & sync",
                 "Google > All services > Autofill with Google",
+                "`Hide`",
                 "returning from Settings triggers a recheck prompt",
             ],
             LYRA_TRAINER_DOC_PATH: [
                 "Credential Defense breach-first UX",
                 "Confirm `Scan breaches` drives setup",
+                "`Hide`",
                 "Open with overlay guide",
                 "Google > All services > Autofill with Google",
                 "Confirm service actions stay locked behind Scan breaches",

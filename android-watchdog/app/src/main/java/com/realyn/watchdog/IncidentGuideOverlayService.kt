@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.graphics.Paint
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -102,10 +103,32 @@ class IncidentGuideOverlayService : Service() {
             textSize = 12f
         }
 
-        container.addView(titleView)
-        container.addView(counterView)
-
         if (compactMode) {
+            var isCollapsed = false
+            val titleColumn = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(titleView)
+                addView(counterView)
+            }
+            val toggleLink = TextView(this).apply {
+                setTextColor(0xFFEFC47C.toInt())
+                textSize = 12f
+                paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
+                setPadding(dpToPx(8), dpToPx(4), dpToPx(0), dpToPx(4))
+            }
+            val headerRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    titleColumn,
+                    LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                )
+                addView(toggleLink)
+            }
             val focusLabel = TextView(this).apply {
                 text = getString(R.string.incident_overlay_focus_label)
                 setTextColor(0xFFEFC47C.toInt())
@@ -192,9 +215,24 @@ class IncidentGuideOverlayService : Service() {
                     )
                 }
             }
-            targetButton.setOnClickListener { advanceStep() }
+            toggleLink.setOnClickListener {
+                isCollapsed = !isCollapsed
+                applyCompactLayoutState(
+                    isCollapsed = isCollapsed,
+                    toggleLink = toggleLink,
+                    focusLabel = focusLabel,
+                    targetButton = targetButton,
+                    controls = controls
+                )
+            }
+            targetButton.setOnClickListener {
+                if (!isCollapsed) {
+                    advanceStep()
+                }
+            }
             completeButton.setOnClickListener { advanceStep() }
 
+            container.addView(headerRow)
             container.addView(focusLabel)
             container.addView(targetButton)
             container.addView(controls)
@@ -207,7 +245,16 @@ class IncidentGuideOverlayService : Service() {
                 prevButton = prevButton,
                 completeButton = completeButton
             )
+            applyCompactLayoutState(
+                isCollapsed = isCollapsed,
+                toggleLink = toggleLink,
+                focusLabel = focusLabel,
+                targetButton = targetButton,
+                controls = controls
+            )
         } else {
+            container.addView(titleView)
+            container.addView(counterView)
             val stepView = TextView(this).apply {
                 setTextColor(0xFFFFF3E0.toInt())
                 textSize = 13f
@@ -308,6 +355,28 @@ class IncidentGuideOverlayService : Service() {
             stepIndex = stepIndex,
             total = total,
             steps = steps
+        )
+    }
+
+    private fun applyCompactLayoutState(
+        isCollapsed: Boolean,
+        toggleLink: TextView,
+        focusLabel: View,
+        targetButton: Button,
+        controls: View
+    ) {
+        val state = IncidentGuideOverlayLayout.compactLayoutState(isCollapsed = isCollapsed)
+        toggleLink.text = getString(state.toggleLabelRes)
+        focusLabel.visibility = state.focusLabelVisibility
+        controls.visibility = state.controlsVisibility
+        targetButton.maxLines = state.targetMaxLines
+        val horizontalPadding = dpToPx(16)
+        val verticalPadding = dpToPx(state.targetVerticalPaddingDp)
+        targetButton.setPadding(
+            horizontalPadding,
+            verticalPadding,
+            horizontalPadding,
+            verticalPadding
         )
     }
 

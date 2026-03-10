@@ -154,6 +154,8 @@
     <string name="incident_overlay_step_template">Paso %1$d de %2$d</string>
     <string name="incident_overlay_prev">Anterior</string>
     <string name="incident_overlay_next">Siguiente</string>
+    <string name="incident_overlay_hide">Ocultar</string>
+    <string name="incident_overlay_show">Mostrar</string>
     <string name="incident_overlay_focus_label">Objetivo de toque actual</string>
     <string name="incident_overlay_complete_step">Paso completado</string>
     <string name="incident_overlay_finish">Finalizar guia</string>

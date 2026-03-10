@@ -998,7 +998,7 @@
     <string name="home_tutorial_step_timeline_window_hint">Use export for non-secret evidence sharing. In remediation queue, expand only the sections you need (What happened, What to do now, Technical details, Recommended best settings) to reduce overload.</string>
     <string name="home_tutorial_step_incident_assistant_title">Incident assistant screen</string>
     <string name="home_tutorial_step_incident_assistant_body">Incident assistant opens as its own page and uses expandable sections so users can focus only on needed content: Work on this now, Why this needs attention, Choose one option below, and Recommended best settings. Manual flow now shows an OEM-specific path pack and exact tap targets.</string>
-    <string name="home_tutorial_step_incident_assistant_hint">Apply path can request Android permission before recommended auto actions and still offer uninstall for high-risk containment. Open with overlay guide provides a compact one-target-at-a-time helper (Previous/Done this step/Finish guide); after first-time overlay permission grant, the app re-opens manual guidance so users can start the overlay cleanly. Skip for now keeps flow in-place when more incidents exist. Use Back to scan results to return to the scan summary page.</string>
+    <string name="home_tutorial_step_incident_assistant_hint">Apply path can request Android permission before recommended auto actions and still offer uninstall for high-risk containment. Open with overlay guide provides a compact one-target-at-a-time helper with an in-place Hide link; when collapsed it keeps the current tap target readable, and Show restores Previous/Done this step/Finish guide. After first-time overlay permission grant, the app re-opens manual guidance so users can start the overlay cleanly. Skip for now keeps flow in-place when more incidents exist. Use Back to scan results to return to the scan summary page.</string>
     <string name="home_tutorial_step_lion_nav_title">Lion quick navigation</string>
     <string name="home_tutorial_step_lion_nav_body">The center lion opens quick links to critical security surfaces and this tutorial.</string>
     <string name="home_tutorial_step_lion_nav_hint">Long-press remains a fast path for Home Risk posture.</string>
@@ -1309,6 +1309,8 @@
     <string name="incident_overlay_step_template">Step %1$d of %2$d</string>
     <string name="incident_overlay_prev">Previous</string>
     <string name="incident_overlay_next">Next</string>
+    <string name="incident_overlay_hide">Hide</string>
+    <string name="incident_overlay_show">Show</string>
     <string name="incident_overlay_focus_label">Current tap target</string>
     <string name="incident_overlay_complete_step">Done this step</string>
     <string name="incident_overlay_finish">Finish guide</string>
