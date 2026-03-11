@@ -91,11 +91,18 @@
 
         <service
             android:name=".IncidentGuideOverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".AdaptiveGuideOverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".GuideFallbackNotificationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".AdaptiveGuideCaptureService"

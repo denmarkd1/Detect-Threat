@@ -37,12 +37,19 @@ object WatchdogConfig {
     const val EXTRA_OVERLAY_TARGET_URL = "com.realyn.watchdog.extra.OVERLAY_TARGET_URL"
     const val ACTION_SHOW_INCIDENT_OVERLAY = "com.realyn.watchdog.action.SHOW_INCIDENT_OVERLAY"
     const val ACTION_HIDE_INCIDENT_OVERLAY = "com.realyn.watchdog.action.HIDE_INCIDENT_OVERLAY"
+    const val ACTION_SHOW_GUIDE_FALLBACK = "com.realyn.watchdog.action.SHOW_GUIDE_FALLBACK"
+    const val ACTION_HIDE_GUIDE_FALLBACK = "com.realyn.watchdog.action.HIDE_GUIDE_FALLBACK"
     const val ACTION_ADAPTIVE_GUIDE_ANALYSIS_EVENT = "com.realyn.watchdog.action.ADAPTIVE_GUIDE_ANALYSIS_EVENT"
     const val EXTRA_INCIDENT_OVERLAY_TITLE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_TITLE"
     const val EXTRA_INCIDENT_OVERLAY_STEPS = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_STEPS"
     const val EXTRA_INCIDENT_OVERLAY_COMPACT_MODE = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_COMPACT_MODE"
     const val EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_RETURN_ACTIVITY"
     const val EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID = "com.realyn.watchdog.extra.INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID"
+    const val EXTRA_GUIDE_FALLBACK_NOTIFICATION_ID = "com.realyn.watchdog.extra.GUIDE_FALLBACK_NOTIFICATION_ID"
+    const val EXTRA_GUIDE_FALLBACK_TITLE = "com.realyn.watchdog.extra.GUIDE_FALLBACK_TITLE"
+    const val EXTRA_GUIDE_FALLBACK_CURRENT_TARGET = "com.realyn.watchdog.extra.GUIDE_FALLBACK_CURRENT_TARGET"
+    const val EXTRA_GUIDE_FALLBACK_RETURN_ACTIVITY = "com.realyn.watchdog.extra.GUIDE_FALLBACK_RETURN_ACTIVITY"
+    const val EXTRA_GUIDE_FALLBACK_SCREEN_MODE = "com.realyn.watchdog.extra.GUIDE_FALLBACK_SCREEN_MODE"
     const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_FLOW_ID"
     const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATE_ID = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_STATE_ID"
     const val EXTRA_ADAPTIVE_GUIDE_ANALYSIS_STATUS = "com.realyn.watchdog.extra.ADAPTIVE_GUIDE_ANALYSIS_STATUS"
@@ -53,12 +60,15 @@ object WatchdogConfig {
     const val FOREGROUND_CHANNEL_ID = "dt_scanner_foreground"
     const val ALERT_CHANNEL_ID = "dt_scanner_alerts"
     const val INCIDENT_GUIDE_CHANNEL_ID = "dt_incident_guide"
+    const val GUIDE_FALLBACK_CHANNEL_ID = "dt_guide_fallback"
     const val ADAPTIVE_GUIDE_CAPTURE_CHANNEL_ID = "dt_adaptive_guide_capture"
 
     const val FOREGROUND_NOTIFICATION_ID = 4101
     const val ALERT_NOTIFICATION_ID = 4102
     const val INCIDENT_GUIDE_NOTIFICATION_ID = 4103
     const val ADAPTIVE_GUIDE_CAPTURE_NOTIFICATION_ID = 4104
+    const val FOUNDATION_GUIDE_FALLBACK_NOTIFICATION_ID = 4105
+    const val INCIDENT_GUIDE_FALLBACK_NOTIFICATION_ID = 4106
 
     const val SCAN_INTERVAL_MS = 5 * 60 * 1000L
 }

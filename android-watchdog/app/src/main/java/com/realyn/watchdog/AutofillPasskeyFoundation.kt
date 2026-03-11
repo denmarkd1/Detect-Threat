@@ -6,7 +6,6 @@ import android.os.Build
 import android.provider.Settings
 import android.view.autofill.AutofillManager
 import androidx.credentials.CredentialManager
-import java.util.Locale
 
 data class AutofillPasskeyStatus(
     val autofillSupported: Boolean,
@@ -62,18 +61,14 @@ object AutofillPasskeyFoundation {
     }
 
     fun resolveOemPack(): OemPack {
-        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
-        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
-        return when {
-            manufacturer.contains("xiaomi") ||
-                manufacturer.contains("redmi") ||
-                manufacturer.contains("poco") ||
-                brand.contains("xiaomi") ||
-                brand.contains("redmi") ||
-                brand.contains("poco") -> OemPack.MIUI
-            manufacturer.contains("samsung") || brand.contains("samsung") -> OemPack.SAMSUNG
-            manufacturer.contains("google") || brand.contains("google") -> OemPack.PIXEL
-            else -> OemPack.GENERIC
+        return when (GuideRuntimePolicy.currentProfile().family) {
+            GuideDeviceFamily.MIUI -> OemPack.MIUI
+            GuideDeviceFamily.SAMSUNG -> OemPack.SAMSUNG
+            GuideDeviceFamily.PIXEL -> OemPack.PIXEL
+            GuideDeviceFamily.COLOR_OS,
+            GuideDeviceFamily.FUNTOUCH,
+            GuideDeviceFamily.MAGIC_OS,
+            GuideDeviceFamily.GENERIC -> OemPack.GENERIC
         }
     }
 

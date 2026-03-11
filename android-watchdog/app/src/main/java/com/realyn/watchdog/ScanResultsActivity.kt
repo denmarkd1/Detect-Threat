@@ -1213,18 +1213,20 @@ class ScanResultsActivity : AppCompatActivity() {
     ) {
         if (!Settings.canDrawOverlays(this)) {
             incidentOverlaySessionActive = false
+            GuideFallbackNotificationHelper.clearIncidentGuide(this)
             Toast.makeText(this, R.string.incident_overlay_permission_required, Toast.LENGTH_SHORT).show()
             return
         }
+        val oemPack = resolveOemStepPack()
         val steps = buildRecommendedTapTargets(
             incident = incident,
             guidance = guidance,
-            oemPack = resolveOemStepPack()
+            oemPack = oemPack
         )
             .ifEmpty { guidance.steps.take(5) }
         incidentOverlaySessionActive = true
-        startService(
-            Intent(this, IncidentGuideOverlayService::class.java).apply {
+        launchIncidentGuideService(
+            intent = Intent(this, IncidentGuideOverlayService::class.java).apply {
                 action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
                 putExtra(
                     WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
@@ -1234,12 +1236,29 @@ class ScanResultsActivity : AppCompatActivity() {
                     WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
                     true
                 )
+                putExtra(
+                    WatchdogConfig.EXTRA_GUIDE_FALLBACK_NOTIFICATION_ID,
+                    WatchdogConfig.INCIDENT_GUIDE_FALLBACK_NOTIFICATION_ID
+                )
+                putExtra(
+                    WatchdogConfig.EXTRA_GUIDE_FALLBACK_SCREEN_MODE,
+                    SCREEN_MODE_INCIDENT_ASSISTANT
+                )
                 putStringArrayListExtra(
                     WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
                     ArrayList(steps)
                 )
             }
         )
+        if (GuideRuntimePolicy.shouldShowFallbackGuideNotification()) {
+            GuideFallbackNotificationHelper.showIncidentGuide(
+                context = this,
+                title = getString(R.string.incident_overlay_title),
+                currentTarget = steps.firstOrNull().orEmpty()
+            )
+        } else {
+            GuideFallbackNotificationHelper.clearIncidentGuide(this)
+        }
         logIncidentAssistantEvent(
             incident = incident,
             action = "incident_assistant_overlay_started",
@@ -1248,8 +1267,15 @@ class ScanResultsActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.incident_overlay_started, Toast.LENGTH_SHORT).show()
     }
 
+    private fun launchIncidentGuideService(intent: Intent) {
+        // Launch from the visible activity and let the service promote itself if needed. This
+        // avoids Android 15 foreground-service startup timeouts before the overlay is attached.
+        startService(intent)
+    }
+
     private fun stopIncidentGuideOverlay() {
         incidentOverlaySessionActive = false
+        GuideFallbackNotificationHelper.clearIncidentGuide(this)
         startService(
             Intent(this, IncidentGuideOverlayService::class.java).apply {
                 action = WatchdogConfig.ACTION_HIDE_INCIDENT_OVERLAY
@@ -1391,18 +1417,14 @@ class ScanResultsActivity : AppCompatActivity() {
     }
 
     private fun resolveOemStepPack(): OemStepPack {
-        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase(Locale.US)
-        val brand = Build.BRAND.orEmpty().lowercase(Locale.US)
-        return when {
-            manufacturer.contains("xiaomi") ||
-                manufacturer.contains("redmi") ||
-                manufacturer.contains("poco") ||
-                brand.contains("xiaomi") ||
-                brand.contains("redmi") ||
-                brand.contains("poco") -> OemStepPack.MIUI
-            manufacturer.contains("samsung") || brand.contains("samsung") -> OemStepPack.SAMSUNG
-            manufacturer.contains("google") || brand.contains("google") -> OemStepPack.PIXEL
-            else -> OemStepPack.GENERIC
+        return when (GuideRuntimePolicy.currentProfile().family) {
+            GuideDeviceFamily.MIUI -> OemStepPack.MIUI
+            GuideDeviceFamily.SAMSUNG -> OemStepPack.SAMSUNG
+            GuideDeviceFamily.PIXEL -> OemStepPack.PIXEL
+            GuideDeviceFamily.COLOR_OS,
+            GuideDeviceFamily.FUNTOUCH,
+            GuideDeviceFamily.MAGIC_OS,
+            GuideDeviceFamily.GENERIC -> OemStepPack.GENERIC
         }
     }
 

@@ -1,7 +1,7 @@
 # Phase 6 - Lyra QA Trainer (Device-Backed)
 
 Date: 2026-03-04
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
 ## Purpose
 
@@ -78,7 +78,10 @@ Exit code:
      `Files/Media`) in the manual guidance.
    - On Samsung/MIUI devices, confirm manual dialog warns that some native security/settings surfaces may hide overlays
      temporarily and verify manual exact-tap fallback remains usable.
-   - On Samsung/MIUI devices, confirm `Open with overlay guide` keeps an ongoing guide notification active while the guide is open and survives the handoff into Settings.
+   - On Samsung/MIUI and other aggressive-background OEM profiles, confirm `Open with overlay guide` promotes the guide service immediately, keeps the guide alive during the handoff into Settings, and surfaces a visible current-step guide alert if the floating overlay is hidden.
+   - On Android 14+ emulator/generic descriptors (for example `sdk_gphone*` test profiles), confirm `Open with overlay guide` does not flash then disappear during Settings handoff; the floating card or pinned current-step guide alert must remain available.
+   - On Xiaomi/HyperOS API 35, confirm `Open with overlay guide` does not crash into `DT Guardian keeps stopping` or `ForegroundServiceDidNotStartInTimeException` during the Settings handoff.
+   - On Xiaomi/HyperOS API 35, confirm the guide does not immediately clear itself or reopen the return prompt before the user actually comes back from Settings.
    - Confirm compact overlay mode displays one current target at a time, supports an in-place `Hide` link that collapses the card while keeping the tap target readable, and uses `Show` to restore:
      `Previous`, `Done this step`, `Finish guide`.
    - Confirm high-risk containment still exposes uninstall in automatic flow after recommended settings.
@@ -88,12 +91,16 @@ Exit code:
    - Confirm the autofill/passkey card and lower controls stay above the system nav area.
    - Confirm `Scan breaches` drives setup in this order: identity, linked email, autofill/passkey foundation, then sweep.
    - Confirm the guided foundation dialog exposes `Open with overlay guide` and `Open settings now`.
+   - Confirm the guided foundation dialog keeps every action button visible without needing to scroll the footer/button area, including at enlarged font scale.
    - If overlay permission is off, confirm the app asks for `display over other apps`; after granting it, confirm the dialog returns and lets the tester tap `Open with overlay guide` again.
   - Confirm the adaptive foundation overlay stays retail-safe in this phase: deterministic local rule packs remain the controller, manual anchor confirmation remains available, `Analyze current screen` is user-triggered only, OCR runs on-device, there is no screenshot upload, no continuous capture, no Accessibility capture, and no autonomous taps.
   - Confirm the overlay asks `What do you see?`, exposes anchor buttons for the visible screen, and only updates after the tester chooses a matching anchor.
   - Confirm `Analyze current screen` hides the overlay, requests screen-capture consent, and returns either `Detected: ...`, `Possible matches: ...`, or `No reliable match found` while keeping manual anchor buttons available.
   - Confirm `Reset route` returns the adaptive overlay to the first state for the current OEM flow.
-  - On Samsung/MIUI, confirm the adaptive guide keeps an ongoing guide notification active while the guide is open and survives the handoff into Settings.
+  - On Samsung/MIUI and other aggressive-background OEM profiles, confirm the adaptive guide promotes the guide service immediately, keeps the guide alive during the handoff into Settings, and keeps the current step visible through the guide alert if the floating overlay is hidden.
+  - On Android 14+ emulator/generic descriptors (for example `sdk_gphone*` test profiles), confirm the adaptive foundation overlay does not flash then disappear during Settings handoff; the floating card or pinned current-step guide alert must remain available.
+  - On Xiaomi/HyperOS API 35, confirm the adaptive foundation guide survives the Settings handoff without a `DT Guardian keeps stopping` crash or `ForegroundServiceDidNotStartInTimeException`.
+  - On Xiaomi/HyperOS API 35, confirm the adaptive foundation guide does not immediately clear itself or reopen the return prompt before the user actually returns from Settings.
   - Confirm returning from Settings with saved adaptive progress shows the last guided step context and offers `Resume last guided step`, `Restart guided route`, and `Open Settings again`.
   - Confirm `Restart guided route` clears the saved adaptive session before reopening the flow.
   - Confirm successful foundation completion clears the saved adaptive session instead of leaving stale resume data behind.

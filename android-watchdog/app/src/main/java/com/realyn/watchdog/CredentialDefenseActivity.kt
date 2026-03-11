@@ -22,6 +22,7 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.ColorUtils
@@ -31,6 +32,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.realyn.watchdog.databinding.ActivityCredentialDefenseBinding
+import com.realyn.watchdog.databinding.DialogFoundationGuideBinding
 import com.realyn.watchdog.databinding.DialogIdentityProfileBinding
 import com.realyn.watchdog.databinding.DialogServiceActionBinding
 import com.google.android.material.textfield.TextInputEditText
@@ -99,11 +101,19 @@ class CredentialDefenseActivity : AppCompatActivity() {
         val highestPriorityCompromisedRecord: StoredCredential?
     )
 
+    private data class FoundationDialogAction(
+        @param:StringRes val labelRes: Int,
+        val onClick: () -> Unit = {}
+    )
+
     private lateinit var binding: ActivityCredentialDefenseBinding
     private lateinit var policy: WorkspacePolicy
 
     private var pendingEmailLink: String? = null
     private var pendingFoundationGuideTarget: FoundationGuideTarget? = null
+    private var foundationGuideReturnPromptArmed: Boolean = false
+    private var foundationGuideSettingsLaunchedAtMs: Long = 0L
+    private var foundationGuideReturnPromptRunnable: Runnable? = null
     private var pendingFoundationOverlayTarget: FoundationGuideTarget? = null
     private var serviceDraft = ServiceDraft()
     private var accessGateBootstrapped: Boolean = false
@@ -198,6 +208,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
         enforceAccessGateAndRefresh()
     }
 
+    override fun onPause() {
+        if (!isChangingConfigurations && pendingFoundationGuideTarget != null) {
+            foundationGuideReturnPromptArmed = true
+        }
+        super.onPause()
+    }
+
     override fun onStop() {
         super.onStop()
         if (!isChangingConfigurations) {
@@ -206,6 +223,7 @@ class CredentialDefenseActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelPendingFoundationReturnPromptCheck()
         cancelLionProcessingAnimations(resetToIdle = false)
         super.onDestroy()
     }
@@ -213,6 +231,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
     override fun onUserInteraction() {
         super.onUserInteraction()
         AppAccessGate.onUserInteraction()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && SessionUnlockState.isUnlocked()) {
+            schedulePendingFoundationReturnPromptCheck()
+        }
     }
 
     private fun enforceAccessGateAndRefresh() {
@@ -234,21 +259,40 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     pendingEmailLink = null
                     showEmailLinkCompletionPrompt(email)
                 }
-                pendingFoundationGuideTarget?.let { target ->
-                    pendingFoundationGuideTarget = null
-                    stopFoundationGuideOverlay()
-                    val sessionSnapshot = foundationGuideSessionSnapshot(target)
-                    if (sessionSnapshot == null) {
-                        showFoundationReturnPrompt(target)
-                    } else {
-                        showFoundationReturnPrompt(target, sessionSnapshot)
-                    }
-                }
+                schedulePendingFoundationReturnPromptCheck()
             },
             onDenied = {
                 finish()
             }
         )
+    }
+
+    private fun maybeShowPendingFoundationReturnPrompt() {
+        val target = pendingFoundationGuideTarget ?: return
+        val remainingDelayMs = FoundationGuideReturnPromptGate.remainingDelayMs(
+            isArmed = foundationGuideReturnPromptArmed,
+            hasPendingTarget = true,
+            hasWindowFocus = hasWindowFocus(),
+            isUnlocked = SessionUnlockState.isUnlocked(),
+            settingsLaunchedAtMs = foundationGuideSettingsLaunchedAtMs,
+            nowMs = SystemClock.elapsedRealtime()
+        ) ?: return
+        if (remainingDelayMs > 0L) {
+            schedulePendingFoundationReturnPromptCheck(remainingDelayMs)
+            return
+        }
+        cancelPendingFoundationReturnPromptCheck()
+        pendingFoundationGuideTarget = null
+        foundationGuideReturnPromptArmed = false
+        foundationGuideSettingsLaunchedAtMs = 0L
+        GuideFallbackNotificationHelper.clearFoundationGuide(this)
+        stopFoundationGuideOverlay()
+        val sessionSnapshot = foundationGuideSessionSnapshot(target)
+        if (sessionSnapshot == null) {
+            showFoundationReturnPrompt(target)
+        } else {
+            showFoundationReturnPrompt(target, sessionSnapshot)
+        }
     }
 
     private fun applySystemBarInsets() {
@@ -404,36 +448,44 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 appendLine(caveat)
             }
         }.trim()
-        val dialogBuilder = LionAlertDialogBuilder(this)
-            .setTitle(titleRes)
-            .setMessage(message)
         if (sessionSnapshot != null) {
-            dialogBuilder
-                .setPositiveButton(R.string.adaptive_guide_resume_with_overlay) { _, _ ->
+            showFoundationActionDialog(
+                titleRes = titleRes,
+                message = message,
+                primaryAction = FoundationDialogAction(R.string.adaptive_guide_resume_with_overlay) {
                     AdaptiveGuideAuditLog.append(
                         context = this,
                         event = "adaptive_guide_session_resume",
                         detail = "flow_id=${sessionSnapshot.record.flowId} origin=foundation_dialog"
                     )
                     startFoundationGuideOverlayFlow(target)
-                }
-                .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                },
+                secondaryAction = FoundationDialogAction(
+                    R.string.incident_assistant_recommended_open_settings_now
+                ) {
                     launchFoundationGuide(target, useOverlayGuide = false)
-                }
-                .setNegativeButton(R.string.adaptive_guide_restart_guided_route) { _, _ ->
+                },
+                tertiaryAction = FoundationDialogAction(R.string.adaptive_guide_restart_guided_route) {
                     restartFoundationGuideRoute(target, origin = "foundation_dialog")
                 }
+            )
         } else {
-            dialogBuilder
-                .setPositiveButton(R.string.incident_assistant_recommended_open_with_overlay) { _, _ ->
+            showFoundationActionDialog(
+                titleRes = titleRes,
+                message = message,
+                primaryAction = FoundationDialogAction(
+                    R.string.incident_assistant_recommended_open_with_overlay
+                ) {
                     startFoundationGuideOverlayFlow(target)
-                }
-                .setNeutralButton(R.string.incident_assistant_recommended_open_settings_now) { _, _ ->
+                },
+                secondaryAction = FoundationDialogAction(
+                    R.string.incident_assistant_recommended_open_settings_now
+                ) {
                     launchFoundationGuide(target, useOverlayGuide = false)
-                }
-                .setNegativeButton(android.R.string.cancel, null)
+                },
+                tertiaryAction = FoundationDialogAction(android.R.string.cancel)
+            )
         }
-        dialogBuilder.show()
     }
 
     private fun startFoundationGuideOverlayFlow(target: FoundationGuideTarget) {
@@ -455,17 +507,40 @@ class CredentialDefenseActivity : AppCompatActivity() {
         if (useOverlayGuide) {
             startFoundationGuideOverlay(target, oemPack)
         } else {
+            GuideFallbackNotificationHelper.clearFoundationGuide(this)
             stopFoundationGuideOverlay()
         }
         val opened = AutofillPasskeyFoundation.openDeviceSettingsRoot(this)
         if (!opened) {
             if (useOverlayGuide) {
+                GuideFallbackNotificationHelper.clearFoundationGuide(this)
                 stopFoundationGuideOverlay()
             }
+            cancelPendingFoundationReturnPromptCheck()
+            pendingFoundationGuideTarget = null
+            foundationGuideReturnPromptArmed = false
+            foundationGuideSettingsLaunchedAtMs = 0L
             Toast.makeText(this, R.string.autofill_passkey_open_failed, Toast.LENGTH_SHORT).show()
             return
         }
         pendingFoundationGuideTarget = target
+        foundationGuideReturnPromptArmed = false
+        foundationGuideSettingsLaunchedAtMs = SystemClock.elapsedRealtime()
+        if (useOverlayGuide && shouldShowFoundationGuideFallbackNotification()) {
+            GuideFallbackNotificationHelper.showFoundationGuide(
+                context = this,
+                title = getString(
+                    when (target) {
+                        FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+                        FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+                    }
+                ),
+                currentTarget = foundationGuideNotificationTarget(
+                    target = target,
+                    oemPack = oemPack
+                )
+            )
+        }
     }
 
     private fun startFoundationGuideOverlay(
@@ -489,8 +564,8 @@ class CredentialDefenseActivity : AppCompatActivity() {
             pack.flows.containsKey(adaptiveFlowId) &&
             !invalidFlowIds.contains(adaptiveFlowId)
         ) {
-            startService(
-                Intent(this, AdaptiveGuideOverlayService::class.java).apply {
+            launchFoundationGuideService(
+                intent = Intent(this, AdaptiveGuideOverlayService::class.java).apply {
                     action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
                     putExtra(
                         WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
@@ -501,14 +576,18 @@ class CredentialDefenseActivity : AppCompatActivity() {
                         CredentialDefenseActivity::class.java.name
                     )
                     putExtra(
+                        WatchdogConfig.EXTRA_GUIDE_FALLBACK_NOTIFICATION_ID,
+                        WatchdogConfig.FOUNDATION_GUIDE_FALLBACK_NOTIFICATION_ID
+                    )
+                    putExtra(
                         WatchdogConfig.EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID,
                         adaptiveFlowId
                     )
                 }
             )
         } else {
-            startService(
-                Intent(this, IncidentGuideOverlayService::class.java).apply {
+            launchFoundationGuideService(
+                intent = Intent(this, IncidentGuideOverlayService::class.java).apply {
                     action = WatchdogConfig.ACTION_SHOW_INCIDENT_OVERLAY
                     putExtra(
                         WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE,
@@ -522,6 +601,10 @@ class CredentialDefenseActivity : AppCompatActivity() {
                         WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY,
                         CredentialDefenseActivity::class.java.name
                     )
+                    putExtra(
+                        WatchdogConfig.EXTRA_GUIDE_FALLBACK_NOTIFICATION_ID,
+                        WatchdogConfig.FOUNDATION_GUIDE_FALLBACK_NOTIFICATION_ID
+                    )
                     putStringArrayListExtra(
                         WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS,
                         ArrayList(foundationGuideSteps(target, oemPack))
@@ -530,6 +613,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
             )
         }
         Toast.makeText(this, R.string.autofill_guide_overlay_started, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun launchFoundationGuideService(intent: Intent) {
+        // The guide overlay is launched while this activity is foregrounded, and the overlay
+        // service can still promote itself once it is alive. Starting it as a foreground service
+        // up front trips Android 15 / HyperOS timeout enforcement before the overlay is ready.
+        startService(intent)
     }
 
     private fun stopFoundationGuideOverlay() {
@@ -566,54 +656,48 @@ class CredentialDefenseActivity : AppCompatActivity() {
                 ).show()
                 return
             }
-            LionAlertDialogBuilder(this)
-                .setTitle(
-                    when (target) {
-                        FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
-                        FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
-                    }
-                )
-                .setMessage(
+            showFoundationActionDialog(
+                titleRes = when (target) {
+                    FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+                    FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+                },
+                message =
                     buildString {
                         appendLine(getString(R.string.adaptive_guide_return_prompt_resume_message))
                         appendLine()
                         append(buildFoundationGuideSessionSummary(sessionSnapshot))
-                    }.trim()
-                )
-                .setPositiveButton(R.string.adaptive_guide_resume_last_step) { _, _ ->
+                    }.trim(),
+                primaryAction = FoundationDialogAction(R.string.adaptive_guide_resume_last_step) {
                     AdaptiveGuideAuditLog.append(
                         context = this,
                         event = "adaptive_guide_session_resume",
                         detail = "flow_id=${sessionSnapshot.record.flowId} origin=return_prompt"
                     )
                     startFoundationGuideOverlayFlow(target)
-                }
-                .setNeutralButton(R.string.adaptive_guide_restart_guided_route) { _, _ ->
+                },
+                secondaryAction = FoundationDialogAction(R.string.adaptive_guide_open_settings_again) {
+                    launchFoundationGuide(target, useOverlayGuide = false)
+                },
+                tertiaryAction = FoundationDialogAction(R.string.adaptive_guide_restart_guided_route) {
                     restartFoundationGuideRoute(target, origin = "return_prompt")
                 }
-                .setNegativeButton(R.string.adaptive_guide_open_settings_again) { _, _ ->
-                    launchFoundationGuide(target, useOverlayGuide = false)
-                }
-                .show()
+            )
             return
         }
-        LionAlertDialogBuilder(this)
-            .setTitle(
-                when (target) {
-                    FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
-                    FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
-                }
-            )
-            .setMessage(
+        showFoundationActionDialog(
+            titleRes = when (target) {
+                FoundationGuideTarget.AUTOFILL -> R.string.autofill_guide_autofill_title
+                FoundationGuideTarget.PASSKEY -> R.string.autofill_guide_passkey_title
+            },
+            message =
                 getString(
                     R.string.autofill_guide_return_prompt_template,
                     when (target) {
                         FoundationGuideTarget.AUTOFILL -> getString(R.string.action_open_autofill_settings)
                         FoundationGuideTarget.PASSKEY -> getString(R.string.action_open_passkey_settings)
                     }
-                )
-            )
-            .setPositiveButton(R.string.autofill_guide_recheck) { _, _ ->
+                ),
+            primaryAction = FoundationDialogAction(R.string.autofill_guide_recheck) {
                 val status = AutofillPasskeyFoundation.evaluate(this)
                 refreshAutofillPasskeyPanel()
                 refreshGuidedActionState()
@@ -626,12 +710,106 @@ class CredentialDefenseActivity : AppCompatActivity() {
                     },
                     Toast.LENGTH_SHORT
                 ).show()
-            }
-            .setNeutralButton(R.string.autofill_guide_open_settings) { _, _ ->
+            },
+            secondaryAction = FoundationDialogAction(R.string.autofill_guide_open_settings) {
                 showFoundationGuideDialog(target)
+            },
+            tertiaryAction = FoundationDialogAction(android.R.string.cancel)
+        )
+    }
+
+    private fun showFoundationActionDialog(
+        @StringRes titleRes: Int,
+        message: CharSequence,
+        primaryAction: FoundationDialogAction,
+        secondaryAction: FoundationDialogAction,
+        tertiaryAction: FoundationDialogAction
+    ) {
+        val dialogBinding = DialogFoundationGuideBinding.inflate(layoutInflater)
+        dialogBinding.foundationGuideMessageLabel.text = message
+        dialogBinding.foundationGuidePrimaryButton.setText(primaryAction.labelRes)
+        dialogBinding.foundationGuideSecondaryButton.setText(secondaryAction.labelRes)
+        dialogBinding.foundationGuideTertiaryButton.setText(tertiaryAction.labelRes)
+
+        val dialog = LionAlertDialogBuilder(this)
+            .setTitle(titleRes)
+            .setView(dialogBinding.root)
+            .create()
+
+        dialogBinding.foundationGuidePrimaryButton.setOnClickListener {
+            dialog.dismiss()
+            primaryAction.onClick()
+        }
+        dialogBinding.foundationGuideSecondaryButton.setOnClickListener {
+            dialog.dismiss()
+            secondaryAction.onClick()
+        }
+        dialogBinding.foundationGuideTertiaryButton.setOnClickListener {
+            dialog.dismiss()
+            tertiaryAction.onClick()
+        }
+
+        dialog.show()
+        LionDialogStyler.applyForActivity(this, dialog)
+        fitFoundationDialogBody(dialog, dialogBinding)
+    }
+
+    private fun fitFoundationDialogBody(
+        dialog: AlertDialog,
+        dialogBinding: DialogFoundationGuideBinding
+    ) {
+        val decor = dialog.window?.decorView as? ViewGroup ?: return
+        decor.post {
+            val parentPanel = decor.findViewById<View>(androidx.appcompat.R.id.parentPanel) ?: return@post
+            val topPanel = decor.findViewById<View>(androidx.appcompat.R.id.topPanel)
+            val customPanel = decor.findViewById<ViewGroup>(androidx.appcompat.R.id.customPanel) ?: return@post
+            val root = dialogBinding.foundationGuideDialogRoot
+            val scrollView = dialogBinding.foundationGuideMessageScroll
+            val actions = dialogBinding.foundationGuideActionsContainer
+            val safeScreenMargin = foundationDialogPx(24)
+            val maxDialogHeight = (
+                resources.displayMetrics.heightPixels - (safeScreenMargin * 2)
+                ).coerceAtLeast(1)
+            val reservedPanelsHeight = (topPanel?.height ?: 0) + foundationDialogPx(20)
+            val maxCustomPanelHeight = (maxDialogHeight - reservedPanelsHeight).coerceAtLeast(1)
+
+            if (parentPanel.height > maxDialogHeight) {
+                parentPanel.layoutParams = parentPanel.layoutParams.apply {
+                    height = maxDialogHeight
+                }
+                parentPanel.requestLayout()
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            if (customPanel.height > maxCustomPanelHeight) {
+                customPanel.layoutParams = customPanel.layoutParams.apply {
+                    height = maxCustomPanelHeight
+                }
+                customPanel.requestLayout()
+            }
+
+            val scrollMargins = (scrollView.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+                it.topMargin + it.bottomMargin
+            } ?: 0
+            val actionsMargins = (actions.layoutParams as? ViewGroup.MarginLayoutParams)?.let {
+                it.topMargin + it.bottomMargin
+            } ?: 0
+            val availableScrollHeight = maxCustomPanelHeight -
+                root.paddingTop -
+                root.paddingBottom -
+                actions.height -
+                scrollMargins -
+                actionsMargins
+            val targetScrollHeight = availableScrollHeight.coerceAtLeast(foundationDialogPx(160))
+            if (scrollView.layoutParams.height != targetScrollHeight) {
+                scrollView.layoutParams = scrollView.layoutParams.apply {
+                    height = targetScrollHeight
+                }
+                scrollView.requestLayout()
+            }
+        }
+    }
+
+    private fun foundationDialogPx(valueDp: Int): Int {
+        return (valueDp * resources.displayMetrics.density).toInt()
     }
 
     private fun foundationGuideSteps(
@@ -715,6 +893,13 @@ class CredentialDefenseActivity : AppCompatActivity() {
         reason: String,
         origin: String
     ) {
+        cancelPendingFoundationReturnPromptCheck()
+        if (pendingFoundationGuideTarget == target) {
+            pendingFoundationGuideTarget = null
+        }
+        foundationGuideReturnPromptArmed = false
+        foundationGuideSettingsLaunchedAtMs = 0L
+        GuideFallbackNotificationHelper.clearFoundationGuide(this)
         val flowId = foundationAdaptiveFlowId(target, AutofillPasskeyFoundation.resolveOemPack())
         AdaptiveGuideSessionStore.clear(this)
         AdaptiveGuideAuditLog.append(
@@ -722,6 +907,49 @@ class CredentialDefenseActivity : AppCompatActivity() {
             event = "adaptive_guide_session_cleared",
             detail = "flow_id=$flowId reason=$reason origin=$origin"
         )
+    }
+
+    private fun shouldShowFoundationGuideFallbackNotification(): Boolean {
+        return GuideRuntimePolicy.shouldShowFallbackGuideNotification()
+    }
+
+    private fun foundationGuideNotificationTarget(
+        target: FoundationGuideTarget,
+        oemPack: AutofillPasskeyFoundation.OemPack
+    ): String {
+        val adaptiveTarget = foundationGuideSessionSnapshot(target)
+            ?.currentState
+            ?.currentTarget
+            .orEmpty()
+            .trim()
+        if (adaptiveTarget.isNotBlank()) {
+            return adaptiveTarget
+        }
+        return foundationGuideSteps(target, oemPack)
+            .firstOrNull()
+            .orEmpty()
+            .trim()
+            .ifBlank { getString(R.string.incident_overlay_default_step) }
+    }
+
+    private fun schedulePendingFoundationReturnPromptCheck(delayMs: Long = 0L) {
+        if (pendingFoundationGuideTarget == null || !foundationGuideReturnPromptArmed) {
+            return
+        }
+        cancelPendingFoundationReturnPromptCheck()
+        val runnable = Runnable {
+            foundationGuideReturnPromptRunnable = null
+            maybeShowPendingFoundationReturnPrompt()
+        }
+        foundationGuideReturnPromptRunnable = runnable
+        binding.root.postDelayed(runnable, delayMs.coerceAtLeast(0L))
+    }
+
+    private fun cancelPendingFoundationReturnPromptCheck() {
+        foundationGuideReturnPromptRunnable?.let { pending ->
+            binding.root.removeCallbacks(pending)
+        }
+        foundationGuideReturnPromptRunnable = null
     }
 
     private fun buildFoundationGuideSessionSummary(sessionSnapshot: AdaptiveGuideSessionSnapshot): String {

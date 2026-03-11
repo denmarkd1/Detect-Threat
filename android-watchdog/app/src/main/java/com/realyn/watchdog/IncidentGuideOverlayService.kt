@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Paint
 import android.os.Build
@@ -23,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.ServiceCompat
 
 class IncidentGuideOverlayService : Service() {
 
@@ -30,6 +32,8 @@ class IncidentGuideOverlayService : Service() {
     private var overlayView: View? = null
     private var overlayTitle: String = ""
     private var overlayReturnActivityClassName: String? = null
+    private var fallbackNotificationId: Int = 0
+    private var fallbackScreenMode: String = ""
     private var guideForegroundActive: Boolean = false
 
     override fun onCreate() {
@@ -44,19 +48,27 @@ class IncidentGuideOverlayService : Service() {
             return START_NOT_STICKY
         }
 
+        overlayTitle = intent?.getStringExtra(WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE)
+            .orEmpty()
+            .ifBlank { getString(R.string.incident_overlay_title) }
+        overlayReturnActivityClassName = intent?.getStringExtra(
+            WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY
+        )
+        fallbackNotificationId = intent?.getIntExtra(
+            WatchdogConfig.EXTRA_GUIDE_FALLBACK_NOTIFICATION_ID,
+            0
+        ) ?: 0
+        fallbackScreenMode = intent?.getStringExtra(
+            WatchdogConfig.EXTRA_GUIDE_FALLBACK_SCREEN_MODE
+        ).orEmpty()
+        startGuideForegroundPlaceholder()
+
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, R.string.incident_overlay_permission_required, Toast.LENGTH_SHORT).show()
             stopSelf()
             return START_NOT_STICKY
         }
 
-        val title = intent?.getStringExtra(WatchdogConfig.EXTRA_INCIDENT_OVERLAY_TITLE)
-            .orEmpty()
-            .ifBlank { getString(R.string.incident_overlay_title) }
-        overlayTitle = title
-        overlayReturnActivityClassName = intent?.getStringExtra(
-            WatchdogConfig.EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY
-        )
         val instructions = intent
             ?.getStringArrayListExtra(WatchdogConfig.EXTRA_INCIDENT_OVERLAY_STEPS)
             ?.map { it.trim() }
@@ -66,8 +78,8 @@ class IncidentGuideOverlayService : Service() {
             WatchdogConfig.EXTRA_INCIDENT_OVERLAY_COMPACT_MODE,
             false
         ) == true
-        showOverlay(title = title, instructions = instructions, compactMode = compactMode)
-        return START_NOT_STICKY
+        showOverlay(title = overlayTitle, instructions = instructions, compactMode = compactMode)
+        return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {
@@ -424,18 +436,23 @@ class IncidentGuideOverlayService : Service() {
         total: Int,
         steps: List<String>
     ) {
-        if (!shouldPinGuideNotification()) {
+        if (!GuideRuntimePolicy.shouldPinGuideNotification()) {
             return
         }
         val notification = buildGuideNotification(stepIndex = stepIndex, total = total, steps = steps)
-        if (shouldRunGuideAsForegroundService()) {
-            startForeground(WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID, notification)
-            guideForegroundActive = true
+        if (GuideRuntimePolicy.shouldRunGuideAsForegroundService()) {
+            startGuideForeground(notification)
+            syncFallbackGuideNotification(
+                steps.getOrNull(stepIndex).orEmpty().trim()
+            )
             return
         }
         if (!canPostGuideNotifications()) {
             return
         }
+        syncFallbackGuideNotification(
+            steps.getOrNull(stepIndex).orEmpty().trim()
+        )
         try {
             NotificationManagerCompat.from(this).notify(
                 WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
@@ -480,6 +497,28 @@ class IncidentGuideOverlayService : Service() {
             .build()
     }
 
+    private fun startGuideForegroundPlaceholder() {
+        if (!GuideRuntimePolicy.shouldRunGuideAsForegroundService()) {
+            return
+        }
+        val detail = buildString {
+            appendLine(getString(R.string.incident_overlay_default_step))
+            appendLine()
+            append(getString(R.string.incident_overlay_notification_hint))
+        }
+        val notification = NotificationCompat.Builder(this, WatchdogConfig.INCIDENT_GUIDE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(overlayTitle.ifBlank { getString(R.string.incident_overlay_title) })
+            .setContentText(getString(R.string.incident_overlay_notification_hint))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(buildGuidePendingIntent())
+            .build()
+        startGuideForeground(notification)
+    }
+
     private fun buildGuidePendingIntent(): PendingIntent {
         val targetActivity = overlayReturnActivityClassName
             ?.takeIf { it.isNotBlank() }
@@ -519,25 +558,39 @@ class IncidentGuideOverlayService : Service() {
         return NotificationManagerCompat.from(this).areNotificationsEnabled()
     }
 
-    private fun shouldPinGuideNotification(): Boolean {
-        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
-        val brand = Build.BRAND.orEmpty().lowercase()
-        return manufacturer.contains("samsung") ||
-            brand.contains("samsung") ||
-            manufacturer.contains("xiaomi") ||
-            manufacturer.contains("redmi") ||
-            manufacturer.contains("poco") ||
-            brand.contains("xiaomi") ||
-            brand.contains("redmi") ||
-            brand.contains("poco")
+    private fun startGuideForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(
+                this,
+                WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID, notification)
+        }
+        guideForegroundActive = true
     }
 
-    private fun shouldRunGuideAsForegroundService(): Boolean {
-        return shouldPinGuideNotification()
+    private fun syncFallbackGuideNotification(currentTarget: String) {
+        if (!GuideRuntimePolicy.shouldShowFallbackGuideNotification() || fallbackNotificationId == 0) {
+            return
+        }
+        GuideFallbackNotificationHelper.showGuideState(
+            context = this,
+            notificationId = fallbackNotificationId,
+            title = overlayTitle.ifBlank { getString(R.string.incident_overlay_title) },
+            currentTarget = currentTarget.ifBlank {
+                getString(R.string.incident_overlay_default_step)
+            },
+            returnActivityClassName = overlayReturnActivityClassName
+                ?: ScanResultsActivity::class.java.name,
+            screenMode = fallbackScreenMode
+        )
     }
 
     private fun createGuideChannel() {
-        if (!shouldPinGuideNotification() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        if (!GuideRuntimePolicy.shouldPinGuideNotification() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
         }
         val manager = getSystemService(NotificationManager::class.java)

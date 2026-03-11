@@ -85,6 +85,7 @@ STRINGS_PATH = ANDROID_DIR / "app" / "src" / "main" / "res" / "values" / "string
 TUTORIAL_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_tutorial_overlay_2026-03-04.md"
 LYRA_TRAINER_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_lyra_qa_trainer_2026-03-04.md"
 ANDROID_GUIDE_RULES_PATH = ROOT_DIR / "config" / "android_guide_rules.json"
+GUIDE_RUNTIME_POLICY_PATH = ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "GuideRuntimePolicy.kt"
 POLICY_DISCLOSURE_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_policy_play_disclosure_review_2026-03-04.md"
 PRICING_PACKAGING_DOC_PATH = ROOT_DIR / "docs" / "integration" / "phase6_pricing_packaging_update_2026-03-04.md"
 ZEN_WORKSPACE_ROOT = ROOT_DIR.parent / "D_T_Zen_MCP_Workspace"
@@ -590,6 +591,8 @@ class QaRunner:
                         "incident_guidance_why_template",
                         "incident_guidance_signal_map_title",
                         "incident_assistant_section_recommended",
+                        "private fun launchIncidentGuideService(intent: Intent)",
+                        "foreground-service startup timeouts",
                     ],
                 },
                 {
@@ -629,6 +632,15 @@ class QaRunner:
                     "path": ANDROID_DIR / "app" / "src" / "main" / "AndroidManifest.xml",
                     "must_contain": [
                         ".IncidentGuideOverlayService",
+                    ],
+                },
+                {
+                    "path": GUIDE_RUNTIME_POLICY_PATH,
+                    "must_contain": [
+                        "isLikelyEmulator",
+                        "aggressiveGenericProfile",
+                        "eagerForegroundGuideLaunch = true",
+                        "fallbackGuideNotification = true",
                     ],
                 },
                 {
@@ -1013,6 +1025,8 @@ class QaRunner:
                 "incident_assistant_recommended_open_with_overlay",
                 "EXTRA_INCIDENT_OVERLAY_RETURN_ACTIVITY",
                 "EXTRA_INCIDENT_OVERLAY_ADAPTIVE_FLOW_ID",
+                "private fun launchFoundationGuideService(intent: Intent)",
+                "foreground-service startup timeouts",
             ],
             layout_path: [
                 "autofillPasskeyCard",
@@ -1044,6 +1058,11 @@ class QaRunner:
                 "autofill_guide_step_select_provider_miui",
                 "autofill_guide_step_return",
             ],
+            ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "FoundationGuideReturnPromptGate.kt": [
+                "object FoundationGuideReturnPromptGate",
+                "remainingDelayMs(",
+                "MIN_RETURN_DELAY_MS",
+            ],
             ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "AdaptiveGuideOverlayService.kt": [
                 "class AdaptiveGuideOverlayService",
                 "AdaptiveGuideSessionStore.read",
@@ -1062,6 +1081,13 @@ class QaRunner:
                 "guideForegroundActive",
                 "startForeground(WatchdogConfig.INCIDENT_GUIDE_NOTIFICATION_ID, notification)",
                 "stopForeground(STOP_FOREGROUND_REMOVE)",
+            ],
+            GUIDE_RUNTIME_POLICY_PATH: [
+                "object GuideRuntimePolicy",
+                "isLikelyEmulator",
+                "aggressiveGenericProfile",
+                "eagerForegroundGuideLaunch = true",
+                "fallbackGuideNotification = true",
             ],
             ANDROID_DIR / "app" / "src" / "main" / "java" / "com" / "realyn" / "watchdog" / "AdaptiveGuideSessionStore.kt": [
                 "data class AdaptiveGuideSessionRecord",
@@ -1099,6 +1125,10 @@ class QaRunner:
                 "resolve rejects stale or mismatched sessions",
                 "clear values removes the stored session keys",
             ],
+            ANDROID_DIR / "app" / "src" / "test" / "java" / "com" / "realyn" / "watchdog" / "FoundationGuideReturnPromptGateTest.kt": [
+                "holds prompt during initial settings handoff window",
+                "allows prompt once launch grace period has elapsed",
+            ],
             TUTORIAL_DOC_PATH: [
                 "Credential Defense breach-first flow",
                 "service actions stay locked behind Scan breaches",
@@ -1113,8 +1143,11 @@ class QaRunner:
                 "user-triggered only",
                 "on-device",
                 "no screenshot upload",
-                "ongoing guide notification active while the guide is open",
+                "visible current-step guide alert",
+                "aggressive-background OEM profiles",
+                "Android 14+ emulator/generic descriptors",
                 "survives the handoff into Settings",
+                "immediately clear itself or reopen the return prompt",
                 "`Resume last guided step`",
                 "`Restart guided route`",
                 "structured metadata only",
@@ -1124,6 +1157,7 @@ class QaRunner:
                 "Confirm `Scan breaches` drives setup",
                 "`Hide`",
                 "Open with overlay guide",
+                "without needing to scroll the footer/button area",
                 "Passwords & accounts > Autofill service > Google",
                 "Google Password Manager",
                 "Recheck now",
@@ -1133,8 +1167,12 @@ class QaRunner:
                 "user-triggered only",
                 "on-device",
                 "no screenshot upload",
-                "ongoing guide notification active while the guide is open",
+                "visible current-step guide alert",
+                "aggressive-background OEM profiles",
+                "Android 14+ emulator/generic descriptors",
                 "survives the handoff into Settings",
+                "ForegroundServiceDidNotStartInTimeException",
+                "immediately clear itself or reopen the return prompt",
                 "`Resume last guided step`",
                 "`Restart guided route`",
                 "saved adaptive progress",

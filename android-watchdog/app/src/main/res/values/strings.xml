@@ -441,9 +441,9 @@
     <string name="incident_assistant_recommended_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep instructions visible in Android Settings.</string>
     <string name="incident_assistant_recommended_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="incident_assistant_recommended_overlay_permission_denied">Overlay guide permission was not granted. Opening settings without overlay guidance.</string>
-    <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. DT Guardian keeps an ongoing guide notification active while this guide is open so you can reopen the current step if the overlay disappears.</string>
+    <string name="incident_assistant_recommended_overlay_visibility_caveat">Note: Some %1$s security screens temporarily hide overlays. DT Guardian also keeps the current step in a visible guide alert while this guide is open so you can pull down notifications or reopen the guide if the overlay disappears.</string>
     <string name="incident_assistant_samsung_overlay_warning_title">Samsung overlay warning</string>
-    <string name="incident_assistant_samsung_overlay_warning_message">Samsung One UI often hides the floating guide on App info and Permissions screens. If that happens, keep following the exact tap list manually. The app will also keep the current tap target in an ongoing notification when Android allows notifications.\n\nNext tap target:\n%1$s</string>
+    <string name="incident_assistant_samsung_overlay_warning_message">Samsung One UI often hides the floating guide on App info and Permissions screens. If that happens, keep following the exact tap list manually. The app will also keep the current tap target in a visible guide alert when Android allows notifications.\n\nNext tap target:\n%1$s</string>
     <string name="incident_assistant_samsung_overlay_warning_continue">Continue with guide</string>
     <string name="incident_assistant_recommended_manual_continue">After this, continue with the full incident step-by-step guide.</string>
     <string name="incident_assistant_tip_auto_template">Tip: %1$d quick action(s) can be opened by the app.</string>
@@ -1112,7 +1112,7 @@
     <string name="autofill_guide_overlay_hint_permission">Tip: Open with overlay guide to allow display over other apps and keep the adaptive helper visible in Android Settings.</string>
     <string name="autofill_guide_overlay_permission_granted">Overlay permission enabled. Tap Open with overlay guide again to continue with guided taps.</string>
     <string name="autofill_guide_overlay_permission_denied">Overlay permission was not granted. You can still open Settings without the floating guide.</string>
-    <string name="autofill_guide_overlay_visibility_caveat">Note: Some %1$s settings screens temporarily hide overlays. DT Guardian keeps an ongoing guide notification active while this guide is open so you can reopen the current step if the overlay disappears.</string>
+    <string name="autofill_guide_overlay_visibility_caveat">Note: Some %1$s settings screens temporarily hide overlays. DT Guardian also keeps the current step in a visible guide alert while this guide is open so you can pull down notifications or reopen the guide if the overlay disappears.</string>
     <string name="autofill_guide_overlay_started">Settings overlay guide started.</string>
     <string name="adaptive_guide_match_label">What do you see?</string>
     <string name="adaptive_guide_hint_default">Tap the button that matches what you see on screen. The guide only changes after your confirmation.</string>
@@ -1350,8 +1350,13 @@
     <string name="incident_overlay_started">Incident overlay guide started.</string>
     <string name="incident_overlay_default_step">Follow the on-screen security guidance and verify each change before marking fixed.</string>
     <string name="incident_overlay_notification_title">Incident guide: %1$s</string>
-    <string name="incident_overlay_notification_hint">If MIUI or Samsung hides the overlay on protected settings screens, pull down notifications to keep your place.</string>
+    <string name="incident_overlay_notification_hint">If your device hides the overlay on protected settings screens, pull down notifications to keep your place.</string>
     <string name="notification_channel_incident_guide">Incident guide</string>
+    <string name="notification_channel_guide_fallback">Guide step alerts</string>
+    <string name="notification_channel_guide_fallback_description">Visible current-step alerts when Android or the device skin hides the floating guide.</string>
+    <string name="guide_fallback_notification_summary">Current guided step</string>
+    <string name="guide_fallback_notification_hint">Tap this alert to return to DT Guardian, or pull down notifications to keep the current step visible while Settings is open.</string>
+    <string name="guide_fallback_notification_action_open">Open guide</string>
     <string name="profile_overlay_restricted">Overlay assistant is disabled for child profile.</string>
     <string name="profile_copy_stored_restricted">Copying stored passwords is disabled for child profile.</string>
 
